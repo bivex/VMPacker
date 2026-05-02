@@ -87,7 +87,9 @@ static inline void sys_munmap(void *addr, unsigned long size) {
  * vm_entry — VM 解释器入口
  *
  * 参数:
- *   args    : 指向保存的 X0-X7, callerFP, callerLR (共10个u64)
+ *   args    : 指向保存的 X0-X7, callerFP, callerLR, V0-V7, X19-X28
+ *             (共36个u64: args[0..7]=X0-X7, args[8..9]=FP/LR,
+ *              args[10..25]=V0-V7, args[26..35]=X19-X28)
  *   enc_bc  : XOR 加密的字节码
  *   bc_len  : 字节码长度
  *   xor_key : XOR 解密密钥
@@ -153,11 +155,12 @@ vm_entry_token_inner(u64 *args, u32 token) {
 }
 
 /* Naked 汇编入口: 保存调用方寄存器, 调用 C 内部函数 */
+/* 栈帧 304B: FP/LR(16) + X0-X7(64) + callerFP/LR(16) + V0-V7(128) + X19-X28(80) */
 __attribute__((naked, section(".text.entry"), used)) void vm_entry_token(void) {
   __asm__ volatile(
       "mov x9, x29\n"               /* 暂存 caller FP */
       "mov x10, x30\n"              /* 暂存 caller LR */
-      "stp x29, x30, [sp, #-256]!\n" /* 保存 FP/LR + 分配 256B 栈帧 */
+      "stp x29, x30, [sp, #-304]!\n" /* 保存 FP/LR + 分配 304B 栈帧 */
       "mov x29, sp\n"               /* 建立栈帧 */
       "stp x0, x1, [sp, #16]\n"     /* args[0..1] = X0, X1 */
       "stp x2, x3, [sp, #32]\n"     /* args[2..3] = X2, X3 */
@@ -168,11 +171,21 @@ __attribute__((naked, section(".text.entry"), used)) void vm_entry_token(void) {
       "stp q2, q3, [sp, #128]\n"    /* args[14..17] = V2, V3 */
       "stp q4, q5, [sp, #160]\n"    /* args[18..21] = V4, V5 */
       "stp q6, q7, [sp, #192]\n"    /* args[22..25] = V6, V7 */
+      "stp x19, x20, [sp, #224]\n"  /* args[26..27] = X19, X20 */
+      "stp x21, x22, [sp, #240]\n"  /* args[28..29] = X21, X22 */
+      "stp x23, x24, [sp, #256]\n"  /* args[30..31] = X23, X24 */
+      "stp x25, x26, [sp, #272]\n"  /* args[32..33] = X25, X26 */
+      "stp x27, x28, [sp, #288]\n"  /* args[34..35] = X27, X28 */
       "add x0, sp, #16\n"           /* X0 = args 指针 */
       "mov w1, w16\n"               /* X1 = token (从 X16/IP0 传入) */
-      "bl vm_entry_token_inner\n"   /* 调用 C 内部函数 */
-      "ldp x29, x30, [sp], #256\n"  /* 恢复 FP/LR + 释放栈帧 */
-      "ret\n"                       /* 返回 (结果在 X0) */
+      "bl vm_entry_token_inner\n"   /* 调用 C 内部函数, 返回值在 X0 */
+      "ldp x19, x20, [sp, #224]\n"  /* 恢复 callee-saved X19, X20 */
+      "ldp x21, x22, [sp, #240]\n"  /* 恢复 X21, X22 */
+      "ldp x23, x24, [sp, #256]\n"  /* 恢复 X23, X24 */
+      "ldp x25, x26, [sp, #272]\n"  /* 恢复 X25, X26 */
+      "ldp x27, x28, [sp, #288]\n"  /* 恢复 X27, X28 */
+      "ldp x29, x30, [sp], #304\n"  /* 恢复 FP/LR + 释放栈帧 */
+      "ret\n"                       /* 返回 (结果在 X0, 未被覆写) */
   );
 }
 
@@ -331,7 +344,7 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
 
     /* -- OpcodeCryptor 解密 -- */
     u8 _raw_op = vm->bc[vm->pc];
-    u8 _dec_op = _raw_op ^ OC_DECRYPT(vm->pc, vm->oc_key);
+    u8 _dec_op = vm->oc_key ? (_raw_op ^ OC_DECRYPT(vm->pc, vm->oc_key)) : _raw_op;
 
     /* -- 指令大小校验 -- */
     u8 _isz = vm_insn_size(_dec_op);
@@ -484,6 +497,53 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
   /* MRS */
   dtab[OP_MRS] = &&L_MRS;
 
+  /* ---- 栈机器操作码 ---- */
+  dtab[OP_S_VLOAD] = &&L_S_VLOAD;
+  dtab[OP_S_VSTORE] = &&L_S_VSTORE;
+  dtab[OP_S_PUSH_IMM32] = &&L_S_PUSH32;
+  dtab[OP_S_PUSH_IMM64] = &&L_S_PUSH64;
+  dtab[OP_S_DUP] = &&L_S_DUP;
+  dtab[OP_S_SWAP] = &&L_S_SWAP;
+  dtab[OP_S_DROP] = &&L_S_DROP;
+  dtab[OP_S_ADD] = &&L_S_ADD;
+  dtab[OP_S_SUB] = &&L_S_SUB;
+  dtab[OP_S_MUL] = &&L_S_MUL;
+  dtab[OP_S_XOR] = &&L_S_XOR;
+  dtab[OP_S_AND] = &&L_S_AND;
+  dtab[OP_S_OR] = &&L_S_OR;
+  dtab[OP_S_SHL] = &&L_S_SHL;
+  dtab[OP_S_SHR] = &&L_S_SHR;
+  dtab[OP_S_ASR] = &&L_S_ASR;
+  dtab[OP_S_NOT] = &&L_S_NOT;
+  dtab[OP_S_NEG] = &&L_S_NEG;
+  dtab[OP_S_ROR] = &&L_S_ROR;
+  dtab[OP_S_UMULH] = &&L_S_UMULH;
+  dtab[OP_S_SMULH] = &&L_S_SMULH;
+  dtab[OP_S_UDIV] = &&L_S_UDIV;
+  dtab[OP_S_SDIV] = &&L_S_SDIV;
+  dtab[OP_S_ADC] = &&L_S_ADC;
+  dtab[OP_S_SBC] = &&L_S_SBC;
+  dtab[OP_S_CLZ] = &&L_S_CLZ;
+  dtab[OP_S_CLS] = &&L_S_CLS;
+  dtab[OP_S_RBIT] = &&L_S_RBIT;
+  dtab[OP_S_REV] = &&L_S_REV;
+  dtab[OP_S_REV16] = &&L_S_REV16;
+  dtab[OP_S_REV32] = &&L_S_REV32;
+  dtab[OP_S_TRUNC32] = &&L_S_TRUNC32;
+  dtab[OP_S_SEXT32] = &&L_S_SEXT32;
+  dtab[OP_S_CMP] = &&L_S_CMP;
+  dtab[OP_S_LD8] = &&L_S_LD8;
+  dtab[OP_S_LD16] = &&L_S_LD16;
+  dtab[OP_S_LD32] = &&L_S_LD32;
+  dtab[OP_S_LD64] = &&L_S_LD64;
+  dtab[OP_S_ST8] = &&L_S_ST8;
+  dtab[OP_S_ST16] = &&L_S_ST16;
+  dtab[OP_S_ST32] = &&L_S_ST32;
+  dtab[OP_S_ST64] = &&L_S_ST64;
+  dtab[OP_S_LOAD_SLIDE] = &&L_S_LDSIDE;
+  dtab[OP_SVLD] = &&L_SVLD;
+  dtab[OP_SVST] = &&L_SVST;
+
 /* 反向模式: pc 指向指令末尾的 size 标记之后
  * 步骤: pc--; size = bc[pc]; pc -= size; 现在 pc 指向指令起始 */
 #define DISPATCH()                                                             \
@@ -503,7 +563,7 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
         goto cleanup;                                                          \
     }                                                                          \
     u8 _raw_op = vm->bc[vm->pc];                                               \
-    u8 _dec_op = _raw_op ^ OC_DECRYPT(vm->pc, vm->oc_key);                     \
+    u8 _dec_op = vm->oc_key ? (_raw_op ^ OC_DECRYPT(vm->pc, vm->oc_key)) : _raw_op;\
     u8 _isz = vm_insn_size(_dec_op);                                           \
     if (__builtin_expect(_isz == 0 || vm->pc + _isz > vm->bc_len, 0))          \
       goto cleanup;                                                            \
@@ -803,6 +863,38 @@ L_SVLD:
   NEXT(h_s_vld(vm));
 L_SVST:
   NEXT(h_s_vst(vm));
+L_S_ROR:
+  NEXT(h_s_ror(vm));
+L_S_UMULH:
+  NEXT(h_s_umulh(vm));
+L_S_SMULH:
+  NEXT(h_s_smulh(vm));
+L_S_UDIV:
+  NEXT(h_s_udiv(vm));
+L_S_SDIV:
+  NEXT(h_s_sdiv(vm));
+L_S_ADC:
+  NEXT(h_s_adc(vm));
+L_S_SBC:
+  NEXT(h_s_sbc(vm));
+L_S_CLZ:
+  NEXT(h_s_clz(vm));
+L_S_CLS:
+  NEXT(h_s_cls(vm));
+L_S_RBIT:
+  NEXT(h_s_rbit(vm));
+L_S_REV:
+  NEXT(h_s_rev(vm));
+L_S_REV16:
+  NEXT(h_s_rev16(vm));
+L_S_REV32:
+  NEXT(h_s_rev32(vm));
+L_S_TRUNC32:
+  NEXT(h_s_trunc32(vm));
+L_S_SEXT32:
+  NEXT(h_s_sext32(vm));
+L_S_CMP:
+  NEXT(h_s_cmp(vm));
 
 /* ---- 未知指令 ---- */
 L_UNKNOWN:

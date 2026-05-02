@@ -55,7 +55,10 @@ adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64"
 
 ## 3. Future Work
 
-1.  **ABI Compliance**: Fix the register saving/restoration logic in `vm_entry_token` to ensure `X19-X28` are preserved and `X0` is never overwritten by cleanup code (like `munmap`).
+1.  ~~**ABI Compliance**: Fix the register saving/restoration logic in `vm_entry_token` to ensure `X19-X28` are preserved and `X0` is never overwritten by cleanup code (like `munmap`).~~ **Done.**
+    - `vm_entry_token` stack frame expanded from 256B to 304B to save/restore callee-saved X19-X28.
+    - `vm_ctx_init` now initializes `R[19]-R[28]` from `args[26..35]` so VM virtual registers reflect caller values.
+    - X0 return value preserved through cleanup (X19-X28 restores don't touch X0; `munmap` calls remain commented out).
 2.  **RTLR for ARM32**: Port the Runtime Relocation logic to the 32-bit interpreter for legacy Android support.
 3.  **Section Header Recovery**: Optionally implement a "re-construct section headers" feature for better compatibility with static analysis tools.
 

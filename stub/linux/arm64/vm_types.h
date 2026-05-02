@@ -116,6 +116,10 @@ static inline void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
     vm->V[i][1] = args[10 + i * 2 + 1];
   }
 
+  /* 从 args[26..35] 恢复 callee-saved X19-X28 */
+  for (int i = 0; i < 10; i++)
+    vm->R[19 + i] = args[26 + i];
+
   /* 设置初始 SP */
 
   vm->R[31] = (u64)&vm->vm_stk[VM_MEM_STACK];

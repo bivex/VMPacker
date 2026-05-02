@@ -735,6 +735,17 @@ func (p *Packer) Process() error {
 				ocKey, result.CodeLen, mapCount, reverseOffset, ocKeyOffset)
 		}
 
+		// Remap RTLR relocation offsets through the reversal offsetMap
+		for i := range result.Relocations {
+			if newOff, ok := offsetMap[result.Relocations[i].BcOffset]; ok {
+				if p.verbose {
+					fmt.Printf("    [RELOC] remap BcOffset %d -> %d\n",
+						result.Relocations[i].BcOffset, newOff)
+				}
+				result.Relocations[i].BcOffset = newOff
+			}
+		}
+
 		// ---- XOR chain 加密 (整段字节码) ----
 		xorKey := byte(0xA5)
 		encrypted := make([]byte, len(result.Bytecode))
@@ -1013,9 +1024,12 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 	tokenTableVAOff := binary.LittleEndian.Uint64(p.interpBlob[16:24])
 	interpCode := p.interpBlob[24:]
 
-	// 1. 构造 payload: [interpCode][bc0][pad][bc1][pad][...]
+	// 1. 构造 payload: [interpCode][8B RTLr gap][bc0][pad][bc1][pad][...]
 	payload := make([]byte, 0, len(interpCode)+1024)
 	payload = append(payload, interpCode...)
+	// Reserve 8 bytes after code for RTLr offset patch (_token_table_va + 16)
+	// so it doesn't overlap with the first bytecode
+	payload = append(payload, make([]byte, 8)...)
 	for len(payload)%4 != 0 {
 		payload = append(payload, 0x00)
 	}
