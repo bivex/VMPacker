@@ -154,6 +154,28 @@ var opTable = map[byte]opInfo{
 	OpSSt16:      {"S_ST16", 1},
 	OpSSt32:      {"S_ST32", 1},
 	OpSSt64:      {"S_ST64", 1},
+
+	// SIMD 内存访问
+	OpSVLd: {"VLOAD_SIMD", 3}, // op + reg + type
+	OpSVSt: {"VSTORE_SIMD", 3},
+
+	// FP ALU
+	OpSFAdd:   {"FADD", 5}, // op + d + n + m + type
+	OpSFSub:   {"FSUB", 5},
+	OpSFMul:   {"FMUL", 5},
+	OpSFDiv:   {"FDIV", 5},
+	OpSFMax:   {"FMAX", 5},
+	OpSFMin:   {"FMIN", 5},
+	OpSFMov:   {"FMOV", 4}, // op + d + n + type
+	OpSFCmp:   {"FCMP", 4}, // op + n + m + type
+	OpSFNeg:   {"FNEG", 4},
+	OpSFAbs:   {"FABS", 4},
+	OpSFSqrt:  {"FSQRT", 4},
+	OpSFCvtIF: {"FCVTIF", 4},
+	OpSFCvtFI: {"FCVTFI", 4},
+	OpSFMovRV: {"FMOV_RV", 4},
+	OpSFMovVR: {"FMOV_VR", 4},
+	OpSFCvt:   {"FCVT", 4},
 }
 
 // InstructionSize 返回指定 opcode 的指令总字节数 (0 = 未知)

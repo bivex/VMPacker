@@ -31,45 +31,24 @@ var ldstPatterns = []InstrPattern{
 		},
 		Post: postPair,
 	},
-	{
-		Name: "LDP", Mask: 0x1C400000, Value: 0x08400000, Op: LDP,
-		Fields: []FieldDef{
-			{Name: "sf", Hi: 31, Lo: 31},
-			{Name: "wb", Hi: 25, Lo: 23},
-			{Name: "imm7", Hi: 21, Lo: 15, Signed: true},
-			{Name: "Rm", Hi: 14, Lo: 10},
-			fRn, fRd,
-		},
-		Post: postPair,
-	},
-
 	// ================================================================
 	// LDP/STP (SIMD/FP)
-	// 编码: opc:101:1:cat:L:imm7:Rt2:Rn:Rt  (V=1 at bit 26)
-	//   opc: 00=32b, 01=64b, 10=128b
+	// 编码: opc:101:V:cat:L:imm7:Rt2:Rn:Rt
+	//   V=1 (bit 26)
+	//   bits[29:27] = 101
+	//   Mask: 0x3E400000, Value: 0x2C400000 for LDP, 0x2C000000 for STP
 	// ================================================================
 	{
-		Name: "STP_SIMD", Mask: 0x1C400000, Value: 0x0C000000, Op: STP,
-		Fields: []FieldDef{
-			{Name: "opc", Hi: 31, Lo: 30},
-			{Name: "wb", Hi: 25, Lo: 23},
-			{Name: "imm7", Hi: 21, Lo: 15, Signed: true},
-			{Name: "Rm", Hi: 14, Lo: 10},
-			fRn, fRd,
-		},
-		Post: postPairSIMD,
+		Name: "STP_SIMD", Mask: 0x3E400000, Value: 0x2C000000, Op: STP,
+		Fields: []FieldDef{{Name: "opc", Hi: 31, Lo: 30}, {Name: "wb", Hi: 25, Lo: 23}, {Name: "imm7", Hi: 21, Lo: 15, Signed: true}, {Name: "Rm", Hi: 14, Lo: 10}, fRn, fRd},
+		Post:   postPairSIMD,
 	},
 	{
-		Name: "LDP_SIMD", Mask: 0x1C400000, Value: 0x0C400000, Op: LDP,
-		Fields: []FieldDef{
-			{Name: "opc", Hi: 31, Lo: 30},
-			{Name: "wb", Hi: 25, Lo: 23},
-			{Name: "imm7", Hi: 21, Lo: 15, Signed: true},
-			{Name: "Rm", Hi: 14, Lo: 10},
-			fRn, fRd,
-		},
-		Post: postPairSIMD,
+		Name: "LDP_SIMD", Mask: 0x3E400000, Value: 0x2C400000, Op: LDP,
+		Fields: []FieldDef{{Name: "opc", Hi: 31, Lo: 30}, {Name: "wb", Hi: 25, Lo: 23}, {Name: "imm7", Hi: 21, Lo: 15, Signed: true}, {Name: "Rm", Hi: 14, Lo: 10}, fRn, fRd},
+		Post:   postPairSIMD,
 	},
+
 
 	// ================================================================
 	// LDPSW (load pair signed word): opc=01, V=0, L=1
@@ -389,15 +368,18 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// LDR/STR (SIMD/FP) - Unsigned immediate
-	// 编码: size:111:1:01:opc:imm12:Rn:Rt  (V=1 at bit 26)
+	// 编码: size:111:V:01:opc:imm12:Rn:Rt
+	//   V=1, bits[29:27]=111, bits[25:24]=01
+	//   Mask: 0x3BC00000 (Exclude size bits [31:30] and opc bits [23:22] from fixed match)
+	//   Value: 0x39400000
 	// ================================================================
 	{
-		Name: "LDR_SIMD_UIMM", Mask: 0x3FC00000, Value: 0x3DC00000, Op: LDR_IMM,
+		Name: "LDR_SIMD_UIMM", Mask: 0x3BC00000, Value: 0x39400000, Op: LDR_IMM,
 		Fields: []FieldDef{{Name: "size", Hi: 31, Lo: 30}, {Name: "opc", Hi: 23, Lo: 22}, {Name: "imm12", Hi: 21, Lo: 10}, fRn, fRd},
 		Post:   postLdrStrSIMD(true),
 	},
 	{
-		Name: "STR_SIMD_UIMM", Mask: 0x3FC00000, Value: 0x3D800000, Op: STR_IMM,
+		Name: "STR_SIMD_UIMM", Mask: 0x3BC00000, Value: 0x39000000, Op: STR_IMM,
 		Fields: []FieldDef{{Name: "size", Hi: 31, Lo: 30}, {Name: "opc", Hi: 23, Lo: 22}, {Name: "imm12", Hi: 21, Lo: 10}, fRn, fRd},
 		Post:   postLdrStrSIMD(false),
 	},
@@ -520,14 +502,14 @@ func postPairSIMD(f map[string]int64, inst *vm.Instruction) {
 	case 2: // 128-bit (Q)
 		scale = 16
 		szType = 4
-		inst.SF = true // 标记为宽访问
+		inst.SF = true
 	default:
 		inst.Op = int(UNSUPPORTED)
 		return
 	}
 
 	inst.Imm = f["imm7"] * int64(scale)
-	inst.Shift = szType // 存储大小类型
+	inst.Shift = szType // szType stored in Shift for translator
 	// Mark as SIMD registers
 	inst.Rd += vm.REG_V_BASE
 	inst.Rm += vm.REG_V_BASE
@@ -539,24 +521,28 @@ func postLdrStrSIMD(isLoad bool) PostFunc {
 		sz := f["size"]
 		opc := f["opc"]
 		// Combine size:opc to get real size
-		// bits[31:30]:size, bits[23:22]:opc
-		// 00:00=B(8b), 01:00=H(16b), 10:00=S(32b), 11:00=D(64b), 00:01=Q(128b)
+		// Manual: [size][opc]
+		// 00 00/01 -> 8b (B)
+		// 01 00/01 -> 16b (H)
+		// 10 00/01 -> 32b (S)
+		// 11 00/01 -> 64b (D)
+		// 00 10/11 -> 128b (Q)
 		typeScale := 1
 		szType := 0
 		switch {
-		case sz == 0 && opc == 0:
+		case sz == 0 && (opc == 0 || opc == 1):
 			typeScale = 1
 			szType = 0
-		case sz == 1 && opc == 0:
+		case sz == 1 && (opc == 0 || opc == 1):
 			typeScale = 2
 			szType = 1
-		case sz == 2 && opc == 0:
+		case sz == 2 && (opc == 0 || opc == 1):
 			typeScale = 4
 			szType = 2
-		case sz == 3 && opc == 0:
+		case sz == 3 && (opc == 0 || opc == 1):
 			typeScale = 8
 			szType = 3
-		case sz == 0 && opc == 1:
+		case sz == 0 && (opc == 2 || opc == 3):
 			typeScale = 16
 			szType = 4
 		default:

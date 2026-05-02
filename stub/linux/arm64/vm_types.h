@@ -16,7 +16,7 @@ typedef long long i64;
 typedef short i16;
 
 /* ---- VM 配置常量 ---- */
-#define VM_REG_COUNT 32        /* X0-X30, X31=SP */
+#define VM_REG_COUNT 33        /* X0-X30, X31=SP, X32=XZR */
 #define VM_STACK_SIZE 32       /* PUSH/POP 操作栈深度 */
 #define VM_EVAL_STACK_SIZE 256 /* 栈机器操作栈深度 */
 #define VM_MEM_STACK 16384     /* 内存栈 (SP 指向的空间, 16KB) */
@@ -109,7 +109,14 @@ static inline void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
   vm->R[29] = args[8]; /* X29 = caller FP */
   vm->R[30] = args[9]; /* X30 = caller LR */
 
-  /* SP 指向内存栈顶 */
+  /* 从 args[10..25] 恢复 V0-V7 (每个 128-bit = 2x u64) */
+  for (int i = 0; i < 8; i++) {
+    vm->V[i][0] = args[10 + i * 2];
+    vm->V[i][1] = args[10 + i * 2 + 1];
+  }
+
+  /* 设置初始 SP */
+
   vm->R[31] = (u64)&vm->vm_stk[VM_MEM_STACK];
 
   /* 字节码 */

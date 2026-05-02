@@ -39,6 +39,10 @@ typedef u32 (*vm_handler_fn)(vm_ctx_t *vm);
  * ================================================================ */
 
 /* ---- 系统 ---- */
+__attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_nop(vm_ctx_t *vm) {
+  return h_nop(vm);
+}
+
 __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_halt(vm_ctx_t *vm) {
   (void)vm;
   return VM_STEP_HALT;
@@ -80,6 +84,36 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmov(vm_ctx_t *vm) {
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fcmp(vm_ctx_t *vm) {
   return h_fcmp(vm);
 }
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fneg(vm_ctx_t *vm) {
+  return h_fneg(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fabs(vm_ctx_t *vm) {
+  return h_fabs(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fsqrt(vm_ctx_t *vm) {
+  return h_fsqrt(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fcvt_if(vm_ctx_t *vm) {
+  return h_fcvt_if(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fcvt_fi(vm_ctx_t *vm) {
+  return h_fcvt_fi(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmax(vm_ctx_t *vm) {
+  return h_fmax(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmin(vm_ctx_t *vm) {
+  return h_fmin(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fcvt(vm_ctx_t *vm) {
+  return h_fcvt(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmov_rv(vm_ctx_t *vm) {
+  return h_fmov_rv(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmov_vr(vm_ctx_t *vm) {
+  return h_fmov_vr(vm);
+}
 
 /* ---- 栈机器 ---- */
 
@@ -115,8 +149,8 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_store64(vm_ctx_t *vm) {
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_load16(vm_ctx_t *vm) {
   return h_load16(vm);
 }
-__attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_st64(vm_ctx_t *vm) {
-  return h_s_st64(vm);
+__attribute__((noinline)) VM_SECTION_MEM static u32 hw_store16(vm_ctx_t *vm) {
+  return h_store16(vm);
 }
 
 /* ---- SIMD 内存 ---- */
@@ -313,11 +347,6 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_udiv(vm_ctx_t *vm) {
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_sdiv(vm_ctx_t *vm) {
   return h_sdiv(vm);
-}
-
-/* ---- MRS ---- */
-__attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_mrs(vm_ctx_t *vm) {
-  return h_mrs(vm);
 }
 
 /* ---- SMULH/CLZ/CLS/RBIT/REV ---- */
@@ -670,6 +699,16 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_SFDIV] = hw_fdiv;
   tbl[OP_SFMOV] = hw_fmov;
   tbl[OP_SFCMP] = hw_fcmp;
+  tbl[OP_SFNEG] = hw_fneg;
+  tbl[OP_SFABS] = hw_fabs;
+  tbl[OP_SFSQRT] = hw_fsqrt;
+  tbl[OP_SFMAX] = hw_fmax;
+  tbl[OP_SFMIN] = hw_fmin;
+  tbl[OP_SFCVTIF] = hw_fcvt_if;
+  tbl[OP_SFCVTFI] = hw_fcvt_fi;
+  tbl[OP_SFMOVRV] = hw_fmov_rv;
+  tbl[OP_SFMOVVR] = hw_fmov_vr;
+  tbl[OP_SFCVT] = hw_fcvt;
 }
 
 #endif /* VM_INDIRECT_DISPATCH */

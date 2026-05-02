@@ -36,7 +36,7 @@ static inline u32 h_call_nat(vm_ctx_t *vm) {
 /* CALL_REG: BLR Xn (寄存器间接调用) [2B: op | rn] */
 static inline u32 h_call_reg(vm_ctx_t *vm) {
   u8 rn = vm->bc[vm->pc + 1];
-  u64 addr = vm->R[rn & 31];
+  u64 addr = vm->R[rn & 63];
 #ifdef __aarch64__
   native_fn_t fn = (native_fn_t)addr;
   vm->R[0] = fn(vm->R[0], vm->R[1], vm->R[2], vm->R[3], vm->R[4], vm->R[5],
@@ -56,7 +56,7 @@ static inline u32 h_call_reg(vm_ctx_t *vm) {
  * 返回 0 表示已直接设置 vm->pc (内部跳转) */
 static inline u32 h_br_reg(vm_ctx_t *vm) {
   u8 rn = vm->bc[vm->pc + 1];
-  u64 addr = vm->R[rn & 31];
+  u64 addr = vm->R[rn & 63];
 
   /* 检查目标是否在被保护函数的地址范围内 */
   if (vm->map_count > 0 && addr >= vm->func_addr &&
@@ -97,7 +97,7 @@ static inline u32 h_br_reg(vm_ctx_t *vm) {
 static inline u32 h_vld16(vm_ctx_t *vm) {
   u8 rn = vm->bc[vm->pc + 1];
   u8 len = vm->bc[vm->pc + 2];
-  const u8 *src = (const u8 *)vm->R[rn & 31];
+  const u8 *src = (const u8 *)vm->R[rn & 63];
   for (int i = 0; i < len && i < VM_SIMD_BUF; i++)
     vm->vtmp[i] = src[i];
   return 3;
@@ -107,7 +107,7 @@ static inline u32 h_vld16(vm_ctx_t *vm) {
 static inline u32 h_vst16(vm_ctx_t *vm) {
   u8 rn = vm->bc[vm->pc + 1];
   u8 len = vm->bc[vm->pc + 2];
-  u8 *dst = (u8 *)vm->R[rn & 31];
+  u8 *dst = (u8 *)vm->R[rn & 63];
   for (int i = 0; i < len && i < VM_SIMD_BUF; i++)
     dst[i] = vm->vtmp[i];
   return 3;
@@ -161,7 +161,7 @@ static inline u32 h_mrs(vm_ctx_t *vm) {
   /* ARM32: cntvct_el0/cntfrq_el0 不存在，返回 0 */
   (void)sysreg;
 #endif
-  vm->R[d & 31] = val;
+  vm->R[d & 63] = val;
   return 4;
 }
 

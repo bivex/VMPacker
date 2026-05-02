@@ -19,7 +19,7 @@ static inline u32 h_push(vm_ctx_t *vm) {
     vm->FL |= FL_CARRY; /* 栈溢出标志 */
     return 2;
   }
-  vm->stk[vm->sp++] = vm->R[r & 31];
+  vm->stk[vm->sp++] = vm->R[r & 63];
   return 2;
 }
 
@@ -30,7 +30,7 @@ static inline u32 h_pop(vm_ctx_t *vm) {
     vm->FL |= FL_CARRY; /* 栈下溢标志 */
     return 2;
   }
-  vm->R[r & 31] = vm->stk[--vm->sp];
+  vm->R[r & 63] = vm->stk[--vm->sp];
   return 2;
 }
 

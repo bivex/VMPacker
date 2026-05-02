@@ -27,6 +27,7 @@
 #include "vm_handlers/h_stack.h"  /* PUSH, POP */
 #include "vm_handlers/h_stack_ops.h" /* 栈机器操作 handler (VLOAD/VSTORE/VADD...) */
 #include "vm_handlers/h_system.h" /* NOP, CALL_NAT, BR_REG, VLD16, VST16 */
+#include "vm_handlers/h_fpu.h"    /* FADD, FMUL, FCVT, ... */
 
 
 /* ---- 间接 Dispatch 跳转表 (条件编译) ---- */
@@ -37,6 +38,16 @@
 /* ---- Token 化入口 (条件编译) ---- */
 /* TOKEN_ONLY: Token 入口始终编译 */
 #include "vm_token.h"
+
+/* ---- Utils (no libc) ---- */
+__attribute__((section(".text.entry")))
+void *memcpy(void *dest, const void *src, unsigned long n) {
+  unsigned char *d = (unsigned char *)dest;
+  const unsigned char *s = (const unsigned char *)src;
+  for (unsigned long i = 0; i < n; i++)
+    d[i] = s[i];
+  return dest;
+}
 
 /* ---- syscall: mmap (无 libc 依赖) ---- */
 static inline void *sys_mmap(unsigned long size) {
@@ -131,17 +142,21 @@ __attribute__((naked, section(".text.entry"), used)) void vm_entry_token(void) {
   __asm__ volatile(
       "mov x9, x29\n"               /* 暂存 caller FP */
       "mov x10, x30\n"              /* 暂存 caller LR */
-      "stp x29, x30, [sp, #-96]!\n" /* 保存 FP/LR + 分配 96B 栈帧 */
+      "stp x29, x30, [sp, #-256]!\n" /* 保存 FP/LR + 分配 256B 栈帧 */
       "mov x29, sp\n"               /* 建立栈帧 */
-      "stp x0, x1, [sp, #16]\n"     /* args[0..1] */
-      "stp x2, x3, [sp, #32]\n"     /* args[2..3] */
-      "stp x4, x5, [sp, #48]\n"     /* args[4..5] */
-      "stp x6, x7, [sp, #64]\n"     /* args[6..7] */
-      "stp x9, x10, [sp, #80]\n"    /* args[8]=callerFP, args[9]=callerLR */
-      "add x0, sp, #16\n"           /* X0 = args 指针 (10 个 u64) */
+      "stp x0, x1, [sp, #16]\n"     /* args[0..1] = X0, X1 */
+      "stp x2, x3, [sp, #32]\n"     /* args[2..3] = X2, X3 */
+      "stp x4, x5, [sp, #48]\n"     /* args[4..5] = X4, X5 */
+      "stp x6, x7, [sp, #64]\n"     /* args[6..7] = X6, X7 */
+      "stp x9, x10, [sp, #80]\n"    /* args[8..9] = callerFP, callerLR */
+      "stp q0, q1, [sp, #96]\n"     /* args[10..13] = V0, V1 (128-bit each) */
+      "stp q2, q3, [sp, #128]\n"    /* args[14..17] = V2, V3 */
+      "stp q4, q5, [sp, #160]\n"    /* args[18..21] = V4, V5 */
+      "stp q6, q7, [sp, #192]\n"    /* args[22..25] = V6, V7 */
+      "add x0, sp, #16\n"           /* X0 = args 指针 */
       "mov w1, w16\n"               /* X1 = token (从 X16/IP0 传入) */
       "bl vm_entry_token_inner\n"   /* 调用 C 内部函数 */
-      "ldp x29, x30, [sp], #96\n"   /* 恢复 FP/LR + 释放栈帧 */
+      "ldp x29, x30, [sp], #256\n"  /* 恢复 FP/LR + 释放栈帧 */
       "ret\n"                       /* 返回 (结果在 X0) */
   );
 }
@@ -212,7 +227,7 @@ __attribute__((section(".text.entry"))) u64 vm_entry(u64 *args, u8 *enc_bc,
 
     if (trail_func_addr != 0 && trail_map_count > 0 &&
         map_data_size <= bc_len) {
-      vm->func_addr = trail_func_addr;
+      vm->func_addr = trail_func_addr + vm->slide;
       vm->func_size = trail_func_size;
       vm->map_count = trail_map_count;
       vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size];
@@ -658,6 +673,100 @@ L_SDIV:
 /* ---- MRS ---- */
 L_MRS:
   NEXT(h_mrs(vm));
+
+/* ---- FP ALU ---- */
+L_SFADD:
+  NEXT(h_fadd(vm));
+L_SFSUB:
+  NEXT(h_fsub(vm));
+L_SFMUL:
+  NEXT(h_fmul(vm));
+L_SFDIV:
+  NEXT(h_fdiv(vm));
+L_SFMOV:
+  NEXT(h_fmov(vm));
+L_SFCMP:
+  NEXT(h_fcmp(vm));
+L_SFNEG:
+  NEXT(h_fneg(vm));
+L_SFABS:
+  NEXT(h_fabs(vm));
+L_SFSQRT:
+  NEXT(h_fsqrt(vm));
+L_SFMAX:
+  NEXT(h_fmax(vm));
+L_SFMIN:
+  NEXT(h_fmin(vm));
+L_SFCVTIF:
+  NEXT(h_fcvt_if(vm));
+L_SFCVTFI:
+  NEXT(h_fcvt_fi(vm));
+L_SFMOVRV:
+  NEXT(h_fmov_rv(vm));
+L_SFMOVVR:
+  NEXT(h_fmov_vr(vm));
+L_SFCVT:
+  NEXT(h_fcvt(vm));
+
+/* ---- 栈机器 ---- */
+L_S_PUSH32:
+  NEXT(h_s_push_imm32(vm));
+L_S_PUSH64:
+  NEXT(h_s_push_imm64(vm));
+L_S_VLOAD:
+  NEXT(h_s_vload(vm));
+L_S_VSTORE:
+  NEXT(h_s_vstore(vm));
+L_S_ADD:
+  NEXT(h_s_add(vm));
+L_S_SUB:
+  NEXT(h_s_sub(vm));
+L_S_MUL:
+  NEXT(h_s_mul(vm));
+L_S_XOR:
+  NEXT(h_s_xor(vm));
+L_S_AND:
+  NEXT(h_s_and(vm));
+L_S_OR:
+  NEXT(h_s_or(vm));
+L_S_SHL:
+  NEXT(h_s_shl(vm));
+L_S_SHR:
+  NEXT(h_s_shr(vm));
+L_S_ASR:
+  NEXT(h_s_asr(vm));
+L_S_NOT:
+  NEXT(h_s_not(vm));
+L_S_NEG:
+  NEXT(h_s_neg(vm));
+L_S_DUP:
+  NEXT(h_s_dup(vm));
+L_S_SWAP:
+  NEXT(h_s_swap(vm));
+L_S_DROP:
+  NEXT(h_s_drop(vm));
+L_S_LDSIDE:
+  NEXT(h_s_load_slide(vm));
+L_S_LD8:
+  NEXT(h_s_ld8(vm));
+L_S_LD16:
+  NEXT(h_s_ld16(vm));
+L_S_LD32:
+  NEXT(h_s_ld32(vm));
+L_S_LD64:
+  NEXT(h_s_ld64(vm));
+L_S_ST8:
+  NEXT(h_s_st8(vm));
+L_S_ST16:
+  NEXT(h_s_st16(vm));
+L_S_ST32:
+  NEXT(h_s_st32(vm));
+L_S_ST64:
+  NEXT(h_s_st64(vm));
+L_SVLD:
+  NEXT(h_s_vld(vm));
+L_SVST:
+  NEXT(h_s_vst(vm));
 
 /* ---- 未知指令 ---- */
 L_UNKNOWN:

@@ -8,7 +8,7 @@ import "github.com/vmpacker/pkg/vm"
 
 var fpuPatterns = []InstrPattern{
 	// ---- FP Data Processing (2-source) ----
-	// 编码: M:0:S:11110:type:1:Rm:0010:opcode:Rn:Rd
+	// 编码: 0:0:S:11110:type:1:Rm:0010:opcode:Rn:Rd
 	{
 		Name: "FADD", Mask: 0x5F20FC00, Value: 0x1E202800, Op: FADD,
 		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRm16, fRn, fRd},
@@ -29,27 +29,62 @@ var fpuPatterns = []InstrPattern{
 		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRm16, fRn, fRd},
 		Post:   postFP3,
 	},
+	{
+		Name: "FMAX", Mask: 0x5F20FC00, Value: 0x1E204800, Op: FMAX,
+		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRm16, fRn, fRd},
+		Post:   postFP3,
+	},
+	{
+		Name: "FMIN", Mask: 0x5F20FC00, Value: 0x1E205800, Op: FMIN,
+		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRm16, fRn, fRd},
+		Post:   postFP3,
+	},
 
 	// ---- FP Data Processing (1-source) ----
+	// 编码: 0:0:S:11110:type:1:00000:opcode:Rn:Rd
+	// bits[20:16] = 00000
 	{
-		Name: "FMOV", Mask: 0x5F20FC00, Value: 0x1E204000, Op: FMOV,
+		Name: "FMOV", Mask: 0x5F3F0C00, Value: 0x1E204000, Op: FMOV,
 		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
 		Post:   postFP2,
 	},
 	{
-		Name: "FABS", Mask: 0x5F20FC00, Value: 0x1E202000, Op: FABS,
+		Name: "FABS", Mask: 0x5F3F0C00, Value: 0x1E202000, Op: FABS,
 		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
 		Post:   postFP2,
 	},
 	{
-		Name: "FNEG", Mask: 0x5F20FC00, Value: 0x1E201000, Op: FNEG,
+		Name: "FNEG", Mask: 0x5F3F0C00, Value: 0x1E201000, Op: FNEG,
 		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
 		Post:   postFP2,
 	},
 	{
-		Name: "FSQRT", Mask: 0x5F20FC00, Value: 0x1E206000, Op: FSQRT,
+		Name: "FSQRT", Mask: 0x5F3F0C00, Value: 0x1E206000, Op: FSQRT,
 		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
 		Post:   postFP2,
+	},
+	{
+		Name: "FCVT", Mask: 0x5F3F0C00, Value: 0x1E220000, Op: FCVT,
+		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post:   postFP2,
+	},
+
+	// ---- FP <-> Integer conversion (scalar) ----
+	// 编码: sf:0:0:11110:type:1:opcode:Rn:Rd
+	// bits[20:16] varies
+	{
+		Name: "FCVTZS_GENERIC", Mask: 0x5F200C00, Value: 0x1E380000, Op: FCVTZS,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rn += vm.REG_V_BASE
+		},
+	},
+	{
+		Name: "FCVTZU_GENERIC", Mask: 0x5F200C00, Value: 0x1E390000, Op: FCVTZU,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rn += vm.REG_V_BASE
+		},
 	},
 
 	// ---- FP Compare ----
@@ -57,6 +92,74 @@ var fpuPatterns = []InstrPattern{
 		Name: "FCMP", Mask: 0x5F20FC1F, Value: 0x1E202000, Op: FCMP,
 		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRm16, fRn},
 		Post:   postFPComp,
+	},
+	{
+		Name: "FCMP_ZERO", Mask: 0x5F20FC1F, Value: 0x1E202008, Op: FCMP,
+		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRn},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rn += vm.REG_V_BASE
+			inst.Rm = vm.REG_XZR
+			inst.SF = (f["type"] == 1)
+		},
+	},
+
+	// ---- SIMD Copy (DUP) ----
+	{
+		Name: "DUP_SCALAR", Mask: 0xFFE0F000, Value: 0x5EE00000, Op: FMOV,
+		Fields: []FieldDef{fRn, fRd},
+		Post:   postFP2,
+	},
+
+	// ---- Specific patterns for Clang variants ----
+	{
+		Name: "FNEG_VAR", Mask: 0x5FFFFC00, Value: 0x1E6F1000, Op: FNEG,
+		Fields: []FieldDef{fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd += vm.REG_V_BASE
+			inst.Rn += vm.REG_V_BASE
+			inst.SF = true
+		},
+	},
+	{
+		Name: "FCVTZU_VAR", Mask: 0x5FFFFC00, Value: 0x1E609000, Op: FCVTZU,
+		Fields: []FieldDef{fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rn += vm.REG_V_BASE
+			inst.SF = true
+		},
+	},
+	{
+		Name: "FCMP_VAR", Mask: 0x5FFFFC00, Value: 0x1E7E0C00, Op: FCMP,
+		Fields: []FieldDef{fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rn += vm.REG_V_BASE
+			inst.Rm = vm.REG_XZR
+			inst.SF = true
+		},
+	},
+	{
+		Name: "FCVT_VAR", Mask: 0x5FFFFC00, Value: 0x1E639000, Op: FCVT,
+		Fields: []FieldDef{fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd += vm.REG_V_BASE
+			inst.Rn += vm.REG_V_BASE
+			inst.SF = true
+		},
+	},
+	{
+		Name: "FCVTZS_VAR2", Mask: 0x5FFFFC00, Value: 0x1E619000, Op: FCVTZS,
+		Fields: []FieldDef{fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rn += vm.REG_V_BASE
+			inst.SF = true
+		},
+	},
+	{
+		Name: "DUP_VAR", Mask: 0xFFFFFFFF, Value: 0x7EE1BBFE, Op: FMOV,
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd = 30 + vm.REG_V_BASE
+			inst.Rn = 30
+		},
 	},
 }
 

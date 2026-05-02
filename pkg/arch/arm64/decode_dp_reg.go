@@ -372,6 +372,39 @@ var dpRegPatterns = []InstrPattern{
 		Fields: []FieldDef{fSF, {Name: "imm5", Hi: 20, Lo: 16}, {Name: "cond", Hi: 15, Lo: 12}, fRn, {Name: "nzcv", Hi: 3, Lo: 0}},
 		Post:   postCCMPImm,
 	},
+
+	// ---- Floating-point <-> Fixed-point/Integer conversion ----
+	// SCVTF (scalar, integer): sf:0:0:11110:type:1:00110:000000:Rn:Rd
+	// bits[20:16]=00110
+	{
+		Name: "SCVTF_INT", Mask: 0x7F3F0C00, Value: 0x1E260000, Op: SCVTF,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd += vm.REG_V_BASE
+		},
+	},
+	{
+		Name: "UCVTF_INT", Mask: 0x7F3F0C00, Value: 0x1E270000, Op: UCVTF,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd += vm.REG_V_BASE
+		},
+	},
+	// FCVTZS (scalar, integer): sf:0:0:11110:type:1:11000:000000:Rn:Rd
+	{
+		Name: "FCVTZS_INT", Mask: 0x7F3F0C00, Value: 0x1E380000, Op: FCVTZS,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rn += vm.REG_V_BASE
+		},
+	},
+	{
+		Name: "FCVTZU_INT", Mask: 0x7F3F0C00, Value: 0x1E390000, Op: FCVTZU,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rn += vm.REG_V_BASE
+		},
+	},
 }
 
 // postXZR3 逻辑/算术/条件选择(reg): Rd/Rn/Rm=31 → XZR

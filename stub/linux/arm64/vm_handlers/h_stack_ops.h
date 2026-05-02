@@ -35,14 +35,14 @@
 /* VLOAD r: push R[r] → 操作栈 */
 static inline u32 h_s_vload(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
-  SPUSH(vm, vm->R[r & 31]);
+  SPUSH(vm, vm->R[r & 63]);
   return 2;
 }
 
 /* VSTORE r: pop → R[r] */
 static inline u32 h_s_vstore(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
-  vm->R[r & 31] = SPOP(vm);
+  vm->R[r & 63] = SPOP(vm);
   return 2;
 }
 
@@ -206,6 +206,11 @@ static inline u32 h_s_not(vm_ctx_t *vm) {
   return 1;
 }
 
+static inline u32 h_s_neg(vm_ctx_t *vm) {
+  SPUSH(vm, (u64)(-(i64)SPOP(vm)));
+  return 1;
+}
+
 static inline u32 h_s_clz(vm_ctx_t *vm) {
   u64 v = SPOP(vm);
   SPUSH(vm, v == 0 ? 64 : (u64)__builtin_clzll(v));
@@ -362,7 +367,7 @@ static inline u32 h_s_vld(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
   u8 sz_type = vm->bc[vm->pc + 2];
   u64 addr = SPOP(vm);
-  u8 *dst = (u8 *)&vm->V[r & 31][0];
+  u8 *dst = (u8 *)&vm->V[r & 63][0];
 
   u32 width = 0;
   if (sz_type == 0) width = 1;      // B
@@ -383,7 +388,7 @@ static inline u32 h_s_vst(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
   u8 sz_type = vm->bc[vm->pc + 2];
   u64 addr = SPOP(vm);
-  u8 *src = (u8 *)&vm->V[r & 31][0];
+  u8 *src = (u8 *)&vm->V[r & 63][0];
 
   u32 width = 0;
   if (sz_type == 0) width = 1;      // B

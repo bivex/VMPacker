@@ -153,6 +153,27 @@ static inline u8 vm_insn_size(u8 op) {
     return 5;
   case OP_S_PUSH_IMM64:
     return 9;
+  case OP_SVLD:
+  case OP_SVST:
+    return 3;
+  case OP_SFADD:
+  case OP_SFSUB:
+  case OP_SFMUL:
+  case OP_SFDIV:
+  case OP_SFMAX:
+  case OP_SFMIN:
+    return 5;
+  case OP_SFMOV:
+  case OP_SFCMP:
+  case OP_SFNEG:
+  case OP_SFABS:
+  case OP_SFSQRT:
+  case OP_SFCVTIF:
+  case OP_SFCVTFI:
+  case OP_SFMOVRV:
+  case OP_SFMOVVR:
+  case OP_SFCVT:
+    return 4;
   default:
     return 0;
   }

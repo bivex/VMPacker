@@ -197,15 +197,25 @@
 #define OP_S_ST64 0x97 /* pop val,addr → *(u64*)addr=val  1B */
 
 /* ---- SIMD 内存访问 ---- */
-#define OP_SVLD 0xA0 /* LD SIMD: [op][reg][size_type] (8/16/32/64/128b) */
-#define OP_SVST 0xA1 /* ST SIMD: [op][reg][size_type] */
+#define OP_SVLD 0x30 /* LD SIMD: [op][reg][size_type] (8/16/32/64/128b) */
+#define OP_SVST 0x31 /* ST SIMD: [op][reg][size_type] */
 
 /* ---- FP ALU ---- */
-#define OP_SFADD 0xB0 /* FP ADD: [op][d][n][m][type] */
-#define OP_SFSUB 0xB1 /* FP SUB: [op][d][n][m][type] */
-#define OP_SFMUL 0xB2 /* FP MUL: [op][d][n][m][type] */
-#define OP_SFDIV 0xB3 /* FP DIV: [op][d][n][m][type] */
-#define OP_SFMOV 0xB4 /* FP MOV: [op][d][n][type] */
-#define OP_SFCMP 0xB5 /* FP CMP: [op][n][m][type] */
+#define OP_SFADD 0x32 /* FP ADD: [op][d][n][m][type] */
+#define OP_SFSUB 0x33 /* FP SUB: [op][d][n][m][type] */
+#define OP_SFMUL 0x34 /* FP MUL: [op][d][n][m][type] */
+#define OP_SFDIV 0x35 /* FP DIV: [op][d][n][m][type] */
+#define OP_SFMOV 0x38 /* FP MOV: [op][d][n][type] */
+#define OP_SFCMP 0x39 /* FP CMP: [op][n][m][type] */
+#define OP_SFNEG 0x3A /* FP NEG: [op][d][n][type] */
+#define OP_SFABS 0x3B /* FP ABS: [op][d][n][type] */
+#define OP_SFSQRT 0x3E /* FP SQRT: [op][d][n][type] */
+#define OP_SFMAX 0x3F  /* FP MAX: [op][d][n][m][type] */
+#define OP_SFMIN 0x40  /* FP MIN: [op][d][n][m][type] */
+#define OP_SFCVTIF 0x41 /* Int -> FP: [op][d][n][type] */
+#define OP_SFCVTFI 0x42 /* FP -> Int: [op][d][n][type] */
+#define OP_SFMOVRV 0x43 /* R[n] -> V[d]: [op][d][n][type] */
+#define OP_SFMOVVR 0x45 /* V[n] -> R[d]: [op][d][n][type] */
+#define OP_SFCVT   0x46 /* FP FCVT: [op][d][n][type] */
 
 #endif /* VM_OPCODES_H */

@@ -6,31 +6,43 @@ CC       = $(CROSS)gcc
 PACKER   = ../build/vmpacker
 
 TARGET   = demo_simple
+TARGET_C = demo_complex
 SRC      = demo_simple.c
+SRC_C    = demo_complex.c
 PROTECTED = $(TARGET).vmp
+PROTECTED_C = $(TARGET_C).vmp
 
 # Docker configuration
 DOCKER_IMAGE = debian:latest
 DOCKER_RUN   = docker run --rm --platform linux/arm64 -v "$(shell pwd)":/app -w /app
 
-.PHONY: all clean protect run-docker
+.PHONY: all clean protect run-docker run-complex
 
-all: $(TARGET)
+all: $(TARGET) $(TARGET_C)
 
 $(TARGET): $(SRC)
 	$(CC) -static -O1 -nostdlib -march=armv8-a $< -o $@
 	@echo "[+] Built target: $@"
 
-# Protect the 'check_simple' function
-protect: $(TARGET)
+$(TARGET_C): $(SRC_C)
+	$(CC) -static -O1 -nostdlib -march=armv8-a $< -o $@
+	@echo "[+] Built complex target: $@"
+
+# Protect both functions
+protect: $(TARGET) $(TARGET_C)
 	@if [ ! -f $(PACKER) ]; then echo "Error: vmpacker not found. Run 'make packer' in the root directory first."; exit 1; fi
 	$(PACKER) -func check_simple -v -o $(PROTECTED) $(TARGET)
-	@echo "[+] Protected binary created: $(PROTECTED)"
+	$(PACKER) -func check_complex -v -o $(PROTECTED_C) $(TARGET_C)
+	@echo "[+] Protected binaries created."
 
-# Run using Docker (requires Docker Desktop on Mac)
+# Run using Docker
 run-docker: $(PROTECTED)
-	@echo "Running protected binary in Docker..."
+	@echo "Running simple demo in Docker..."
 	@$(DOCKER_RUN) $(DOCKER_IMAGE) bash -c "chmod +x ./$(PROTECTED) && ./$(PROTECTED); echo 'Exit code (expected 37): $$?'"
 
+run-complex: $(PROTECTED_C)
+	@echo "Running complex patterns demo (FPU/SIMD/JumpTable) in Docker..."
+	@$(DOCKER_RUN) $(DOCKER_IMAGE) bash -c "chmod +x ./$(PROTECTED_C) && ./$(PROTECTED_C); echo 'Exit code (expected 97): $$?'"
+
 clean:
-	rm -f $(TARGET) $(PROTECTED)
+	rm -f $(TARGET) $(TARGET_C) $(PROTECTED) $(PROTECTED_C)

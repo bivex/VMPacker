@@ -1463,55 +1463,39 @@ func branchTargetOffset(op byte) int {
 	return 0
 }
 
-// reverseInstructions 反转指令顺序并追加 size 标记
-//
-// 输入: bytecode[0:codeLen] 为纯指令区 (不含 trailer)
-// 输出: 反转后的字节码 + old_offset→new_offset 映射
-//
-// 反转后每条指令后追加 1 字节 size 标记:
-//
-//	[inst_N bytes][size_N(1B)][inst_N-1 bytes][size_N-1(1B)]...
-//
-// stub 解释器反向遍历: pc--; size=bc[pc]; pc-=size; → 定位到指令起始
+// reverseInstructions reverses the instruction order and appends a size marker.
 func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int) {
-	// 1. 解析所有指令的 (offset, size)
 	type instInfo struct {
 		offset int
 		size   int
 	}
 	var insts []instInfo
 	pc := 0
-	totalOrigBytes := 0
 	for pc < codeLen {
 		op := bytecode[pc]
 		sz := vm.InstructionSize(op)
 		if sz == 0 {
-			sz = 1 // 未知 opcode fallback
+			sz = 1
 		}
 		if pc+sz > codeLen {
 			break
 		}
 		insts = append(insts, instInfo{offset: pc, size: sz})
-		totalOrigBytes += sz
 		pc += sz
 	}
 
-	// 2. 反转顺序，追加 size 标记，构建 offset 映射
-	offsetMap := make(map[int]int) // old_offset → new_offset
-	var reversed []byte
+	offsetMap := make(map[int]int)
+	var output []byte
 	for i := len(insts) - 1; i >= 0; i-- {
 		inst := insts[i]
-		newOffset := len(reversed)
-		// 复制指令字节
-		reversed = append(reversed, bytecode[inst.offset:inst.offset+inst.size]...)
-		// 追加 1 字节 size 标记
-		reversed = append(reversed, byte(inst.size))
-		// offsetMap 指向 size_marker 之后的位置 (DISPATCH 期望 pc 在此处)
-		// DISPATCH: pc-- → size_marker, size=bc[pc], pc-=size → 指令起始
-		offsetMap[inst.offset] = newOffset + inst.size + 1
+		output = append(output, bytecode[inst.offset:inst.offset+inst.size]...)
+		output = append(output, byte(inst.size))
+		// offsetMap points to where this instruction ends (after size marker)
+		// because the reverse DISPATCH will start here to locate the instruction.
+		offsetMap[inst.offset] = len(output)
 	}
 
-	return reversed, offsetMap
+	return output, offsetMap
 }
 
 // remapBranchTargets 重映射反转后字节码中的分支目标

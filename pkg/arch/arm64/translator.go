@@ -128,7 +128,7 @@ func (t *Translator) sext32(rd byte) {
 // mapReg ARM64寄存器 → VM寄存器
 func (t *Translator) mapReg(arm64Reg int) (byte, error) {
 	if arm64Reg == vm.REG_XZR {
-		return 16, nil // XZR → R16 (临时零寄存器)
+		return 32, nil // XZR → R32 (Permanent Zero)
 	}
 	// SIMD registers V0-V31 are encoded as REG_V_BASE + 0..31
 	if arm64Reg >= vm.REG_V_BASE && arm64Reg < vm.REG_V_BASE+32 {
@@ -413,7 +413,8 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		return 0, t.trStackBitLogicalNot(inst, vm.OpSOr, false)
 
 	// ========== FP / SIMD ==========
-	case FADD, FSUB, FMUL, FDIV, FMOV, FCMP:
+	case FADD, FSUB, FMUL, FDIV, FMOV, FCMP, FNEG, FABS, FSQRT,
+		FMAX, FMIN, FCVTZS, FCVTZU, SCVTF, UCVTF, FCVT:
 		return t.translateFP(inst)
 
 	// ========== 位域操作 ==========

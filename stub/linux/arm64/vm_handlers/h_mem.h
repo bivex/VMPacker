@@ -24,10 +24,10 @@
 static inline u32 h_load8(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[n & 31] + off;
-  if ((n & 31) == 31 && !VM_STK_CHECK(vm, addr, 1))
+  u64 addr = vm->R[n & 63] + off;
+  if ((n & 63) == 31 && !VM_STK_CHECK(vm, addr, 1))
     return 5; /* SP 越界, 静默跳过 */
-  vm->R[d & 31] = *(u8 *)addr;
+  vm->R[d & 63] = *(u8 *)addr;
   return 5;
 }
 
@@ -35,10 +35,10 @@ static inline u32 h_load8(vm_ctx_t *vm) {
 static inline u32 h_load32(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[n & 31] + off;
-  if ((n & 31) == 31 && !VM_STK_CHECK(vm, addr, 4))
+  u64 addr = vm->R[n & 63] + off;
+  if ((n & 63) == 31 && !VM_STK_CHECK(vm, addr, 4))
     return 5;
-  vm->R[d & 31] = *(u32 *)addr;
+  vm->R[d & 63] = *(u32 *)addr;
   return 5;
 }
 
@@ -46,10 +46,10 @@ static inline u32 h_load32(vm_ctx_t *vm) {
 static inline u32 h_load64(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[n & 31] + off;
-  if ((n & 31) == 31 && !VM_STK_CHECK(vm, addr, 8))
+  u64 addr = vm->R[n & 63] + off;
+  if ((n & 63) == 31 && !VM_STK_CHECK(vm, addr, 8))
     return 5;
-  vm->R[d & 31] = *(u64 *)addr;
+  vm->R[d & 63] = *(u64 *)addr;
   return 5;
 }
 
@@ -57,10 +57,10 @@ static inline u32 h_load64(vm_ctx_t *vm) {
 static inline u32 h_load16(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[n & 31] + off;
-  if ((n & 31) == 31 && !VM_STK_CHECK(vm, addr, 2))
+  u64 addr = vm->R[n & 63] + off;
+  if ((n & 63) == 31 && !VM_STK_CHECK(vm, addr, 2))
     return 5; /* SP 越界, 静默跳过 */
-  vm->R[d & 31] = *(u16 *)addr;
+  vm->R[d & 63] = *(u16 *)addr;
   return 5;
 }
 
@@ -70,10 +70,10 @@ static inline u32 h_load16(vm_ctx_t *vm) {
 static inline u32 h_store8(vm_ctx_t *vm) {
   u8 b = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[b & 31] + off;
-  if ((b & 31) == 31 && !VM_STK_CHECK(vm, addr, 1))
+  u64 addr = vm->R[b & 63] + off;
+  if ((b & 63) == 31 && !VM_STK_CHECK(vm, addr, 1))
     return 5;
-  *(u8 *)addr = (u8)vm->R[n & 31];
+  *(u8 *)addr = (u8)vm->R[n & 63];
   return 5;
 }
 
@@ -81,10 +81,10 @@ static inline u32 h_store8(vm_ctx_t *vm) {
 static inline u32 h_store16(vm_ctx_t *vm) {
   u8 b = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[b & 31] + off;
-  if ((b & 31) == 31 && !VM_STK_CHECK(vm, addr, 2))
+  u64 addr = vm->R[b & 63] + off;
+  if ((b & 63) == 31 && !VM_STK_CHECK(vm, addr, 2))
     return 5;
-  *(u16 *)addr = (u16)vm->R[n & 31];
+  *(u16 *)addr = (u16)vm->R[n & 63];
   return 5;
 }
 
@@ -92,10 +92,10 @@ static inline u32 h_store16(vm_ctx_t *vm) {
 static inline u32 h_store32(vm_ctx_t *vm) {
   u8 b = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[b & 31] + off;
-  if ((b & 31) == 31 && !VM_STK_CHECK(vm, addr, 4))
+  u64 addr = vm->R[b & 63] + off;
+  if ((b & 63) == 31 && !VM_STK_CHECK(vm, addr, 4))
     return 5;
-  *(u32 *)addr = (u32)vm->R[n & 31];
+  *(u32 *)addr = (u32)vm->R[n & 63];
   return 5;
 }
 
@@ -103,10 +103,10 @@ static inline u32 h_store32(vm_ctx_t *vm) {
 static inline u32 h_store64(vm_ctx_t *vm) {
   u8 b = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[b & 31] + off;
-  if ((b & 31) == 31 && !VM_STK_CHECK(vm, addr, 8))
+  u64 addr = vm->R[b & 63] + off;
+  if ((b & 63) == 31 && !VM_STK_CHECK(vm, addr, 8))
     return 5;
-  *(u64 *)addr = vm->R[n & 31];
+  *(u64 *)addr = vm->R[n & 63];
   return 5;
 }
 

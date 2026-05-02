@@ -163,6 +163,12 @@ const (
 	FABS
 	FSQRT
 	FCVT
+	FMAX
+	FMIN
+	FCVTZS
+	FCVTZU
+	SCVTF
+	UCVTF
 
 	UNSUPPORTED
 )
@@ -207,18 +213,19 @@ func (d *Decoder) Decode(raw uint32, offset int) vm.Instruction {
 	op0 := (raw >> 25) & 0xF
 
 	var matched bool
-	switch {
-	case op0>>1 == 0b100:
+	switch op0 {
+	case 8, 9: // 100x: Data processing - immediate
 		matched = matchAndDecode(raw, dpImmPatterns, &inst)
-	case op0>>1 == 0b101:
+	case 10, 11: // 101x: Branches, exceptions and system instructions
 		matched = matchAndDecode(raw, branchPatterns, &inst)
-	case op0&0b0101 == 0b0100:
-		matched = matchAndDecode(raw, ldstPatterns, &inst)
-	case op0&0b0111 == 0b0101, op0 == 0b1101:
-		matched = matchAndDecode(raw, dpRegPatterns, &inst)
-	case op0 == 0b0111, op0 == 0b1111:
-		// SIMD / Floating-point
-		matched = matchAndDecode(raw, fpuPatterns, &inst)
+	case 7, 15, 6, 14: // SIMD and Floating Point often here
+		matched = matchAndDecode(raw, fpuPatterns, &inst) ||
+			matchAndDecode(raw, ldstPatterns, &inst) ||
+			matchAndDecode(raw, dpRegPatterns, &inst)
+	case 4, 12: // Loads and Stores
+		matched = matchAndDecode(raw, ldstPatterns, &inst) || matchAndDecode(raw, fpuPatterns, &inst)
+	case 5, 13: // Data processing - register
+		matched = matchAndDecode(raw, dpRegPatterns, &inst) || matchAndDecode(raw, fpuPatterns, &inst)
 	}
 
 	if !matched {
@@ -336,7 +343,9 @@ func OpName(op Op) string {
 		LDPSW: "LDPSW", LDADD: "LDADD", CAS: "CAS",
 		FADD: "FADD", FSUB: "FSUB", FMUL: "FMUL", FDIV: "FDIV",
 		FMOV: "FMOV", FCMP: "FCMP", FNEG: "FNEG", FABS: "FABS",
-		FSQRT: "FSQRT", FCVT: "FCVT",
+		FSQRT: "FSQRT", FCVT: "FCVT", FMAX: "FMAX", FMIN: "FMIN",
+		FCVTZS: "FCVTZS", FCVTZU: "FCVTZU", SCVTF: "SCVTF", UCVTF: "UCVTF",
+		UNSUPPORTED: "UNSUPPORTED",
 	}
 	if n, ok := names[op]; ok {
 		return n

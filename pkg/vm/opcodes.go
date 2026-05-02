@@ -186,16 +186,26 @@ const (
 	OpSSt64 byte = 0x97 // pop val,addr → st64       1B
 
 	// SIMD 内存访问
-	OpSVLd byte = 0xA0 // LD SIMD: [op][reg][size_type] (8/16/32/64/128b)
-	OpSVSt byte = 0xA1 // ST SIMD: [op][reg][size_type]
+	OpSVLd byte = 0x30 // LD SIMD: [op][reg][size_type] (8/16/32/64/128b)
+	OpSVSt byte = 0x31 // ST SIMD: [op][reg][size_type]
 
 	// FP ALU
-	OpSFAdd byte = 0xB0 // FP ADD: [op][d][n][m][type]
-	OpSFSub byte = 0xB1 // FP SUB: [op][d][n][m][type]
-	OpSFMul byte = 0xB2 // FP MUL: [op][d][n][m][type]
-	OpSFDiv byte = 0xB3 // FP DIV: [op][d][n][m][type]
-	OpSFMov byte = 0xB4 // FP MOV: [op][d][n][type]
-	OpSFCmp byte = 0xB5 // FP CMP: [op][n][m][type]
+	OpSFAdd   byte = 0x32 // FP ADD: [op][d][n][m][type]
+	OpSFSub   byte = 0x33 // FP SUB: [op][d][n][m][type]
+	OpSFMul   byte = 0x34 // FP MUL: [op][d][n][m][type]
+	OpSFDiv   byte = 0x35 // FP DIV: [op][d][n][m][type]
+	OpSFMov   byte = 0x38 // FP MOV: [op][d][n][type]
+	OpSFCmp   byte = 0x39 // FP CMP: [op][n][m][type]
+	OpSFNeg   byte = 0x3A // FP NEG: [op][d][n][type]
+	OpSFAbs   byte = 0x3B // FP ABS: [op][d][n][type]
+	OpSFSqrt  byte = 0x3E // FP SQRT: [op][d][n][type]
+	OpSFMax   byte = 0x3F // FP MAX: [op][d][n][m][type]
+	OpSFMin   byte = 0x40 // FP MIN: [op][d][n][m][type]
+	OpSFCvtIF byte = 0x41 // Int -> FP: [op][d][n][type]
+	OpSFCvtFI byte = 0x42 // FP -> Int: [op][d][n][type]
+	OpSFMovRV byte = 0x43 // R[n] -> V[d]: [op][d][n][type]
+	OpSFMovVR byte = 0x45 // V[n] -> R[d]: [op][d][n][type]
+	OpSFCvt   byte = 0x46 // FP FCVT: [op][d][n][type]
 	)
 
 // 标志位
