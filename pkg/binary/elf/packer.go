@@ -884,30 +884,43 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 		payload = append(payload, []byte(soName)...)
 		payload = append(payload, 0x00) // null terminator for safety
 
-		// Add runtime relocation table if any
-		if len(p.relocations) > 0 {
-			fmt.Printf("    [RELOC] Processing %d relocations...\n", len(p.relocations))
+	// Add runtime relocation table if any
+	if len(p.relocations) > 0 {
+		fmt.Printf("    [RELOC] Processing %d relocations...\n", len(p.relocations))
 
-			var runtimeRelocs []RuntimeReloc
-
-			for i, fb := range funcs {
-				funcRelocs := p.getRelocationsForFunc(fb.FI.Name)
-				for _, reloc := range funcRelocs {
-					reOff := uint64(fb.reverseOffsetMap[int(reloc.BcOffset)])
-					writePos := reOff - 9 // pointing to the 8-byte operand
-					runtimeRelocs = append(runtimeRelocs, RuntimeReloc{
-						WritePos: writePos,
-						Offset:   reloc.TargetAddr,
-						FuncId:   uint64(i),
-					})
-				}
+		// Find ELF base address (minimum Vaddr of PT_LOAD)
+		var elfBase uint64 = 0xFFFFFFFFFFFFFFFF
+		for i := 0; i < int(ehdr.Phnum); i++ {
+			phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
+			ph := readPhdr64(p.data, phOff)
+			if ph.Type == uint32(elf.PT_LOAD) && ph.Vaddr < elfBase {
+				elfBase = ph.Vaddr
 			}
-
-			table := p.appendRuntimeRelocTable(runtimeRelocs)
-			payload = append(payload, table...)
-
-			fmt.Printf("\nRelocation table total size: %d bytes (at offset 0x%X)\n", len(table), len(payload)-len(table))
 		}
+		if elfBase == 0xFFFFFFFFFFFFFFFF {
+			elfBase = 0
+		}
+
+		var runtimeRelocs []RuntimeReloc
+
+		for i, fb := range funcs {
+			funcRelocs := p.getRelocationsForFunc(fb.FI.Name)
+			for _, reloc := range funcRelocs {
+				reOff := uint64(fb.reverseOffsetMap[int(reloc.BcOffset)])
+				writePos := reOff - 9 // pointing to the 8-byte operand
+				runtimeRelocs = append(runtimeRelocs, RuntimeReloc{
+					WritePos: writePos,
+					Offset:   reloc.TargetAddr - elfBase, // Use relative offset
+					FuncId:   uint64(i),
+				})
+			}
+		}
+
+		table := p.appendRuntimeRelocTable(runtimeRelocs)
+		payload = append(payload, table...)
+
+		fmt.Printf("\nRelocation table total size: %d bytes (at offset 0x%X, base=0x%X)\n", len(table), len(payload)-len(table), elfBase)
+	}
 
 		// Update PT_LOAD segment size (payload grown)
 		newPhdr.Filesz = uint64(len(payload))
