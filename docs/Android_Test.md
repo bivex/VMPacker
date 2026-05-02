@@ -31,6 +31,25 @@ The library was built with NDK, protected with `vmpacker`, and executed via a na
 |---------------|----------------|----------------------|--------|
 | Logic Correctness | 11/11 PASS | 11/11 PASS | **SUCCESS** |
 
+## Static Analysis & Hardening Verification
+
+We used `objdump` and `capstone`-based analysis to verify the effectiveness of the protection on the `libnative_test_protected_arm64.so` file.
+
+### 1. Code Destruction
+The original ARM64 instructions were successfully removed. The space previously occupied by the function logic was filled with random "garbage" bytes to thwart static analysis and pattern matching.
+
+### 2. Trampoline Analysis
+Analysis of the entry point for `vmp_get_process_name` (at offset `0x5C1C`) shows the 12-byte **Tokenized Trampoline**:
+
+```arm64
+5c1c:  52800070  mov   w16, #0x3             // Load Function ID (3)
+5c20:  72b4a010  movk  w16, #0xa500, lsl #16 // Load XOR Key (0xA5)
+5c24:  140029f2  b     103ec                 // Branch to VM Interpreter
+```
+
+### 3. Verification of Hidden Logic
+Any instructions following the trampoline (offset `0x5C28` and beyond) appeared as `undefined` or invalid random instructions. This confirms that the original logic is entirely absent from the `.text` section and exists only as encrypted bytecode in a separate data segment.
+
 ## Deployment & Execution Steps
 
 Follow these steps to reproduce the test on an ARM64 Android device or emulator:
