@@ -1012,12 +1012,6 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 	tokenEntryOff := binary.LittleEndian.Uint64(p.interpBlob[8:16])
 	tokenTableVAOff := binary.LittleEndian.Uint64(p.interpBlob[16:24])
 	interpCode := p.interpBlob[24:]
-	if tokenEntryOff == 0 {
-		return fmt.Errorf("vm_entry_token not found in blob (compile with -DVM_TOKEN_ENTRY)")
-	}
-	if tokenTableVAOff == 0 {
-		return fmt.Errorf("_token_table_va not found in blob (compile with -DVM_TOKEN_ENTRY)")
-	}
 
 	// 1. 构造 payload: [interpCode][bc0][pad][bc1][pad][...]
 	payload := make([]byte, 0, len(interpCode)+1024)
@@ -1267,12 +1261,6 @@ func (p *Packer) injectVMPBatch32(funcs []FuncBytecode) error {
 	tokenEntryOff := uint64(binary.LittleEndian.Uint32(blob[4:8]))
 	tokenTableVAOff := uint64(binary.LittleEndian.Uint32(blob[8:12]))
 	interpCode := blob[12:]
-	if tokenEntryOff == 0 {
-		return fmt.Errorf("vm_entry_token not found in ARM32 blob")
-	}
-	if tokenTableVAOff == 0 {
-		return fmt.Errorf("_token_table_va not found in ARM32 blob")
-	}
 	_ = entryOff
 
 	// 1. payload
