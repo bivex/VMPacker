@@ -13,6 +13,23 @@ This document records the successful verification of VMPacker-protected binaries
 - [x] **ASLR Support:** Successfully handles memory randomization using the `OP_S_LOAD_SLIDE` logic.
 - [x] **Linux Syscall Compatibility:** Native `write` and `exit` syscalls work correctly within the Android environment.
 - [x] **Tokenized Entry:** The 3-instruction trampoline successfully jumps into the VM.
+- [x] **JNI Library Support:** Successfully virtualized complex logic within an Android `.so` file.
+
+## JNI Library Test (Verification 2)
+
+We tested a full JNI library (`libnative_test.so`) containing 4 protected functions:
+1. `vmp_compute`: Complex arithmetic and string hashing.
+2. `vmp_verify_key`: String pattern matching logic.
+3. `vmp_md5_hex`: Full MD5 implementation virtualized.
+4. `vmp_get_process_name`: Reading from `/proc/self/cmdline`.
+
+### Execution
+The library was built with NDK, protected with `vmpacker`, and executed via a native `test_runner` on the Android emulator.
+
+### Results
+| Test Category | Original (.so) | Protected (.vmp.so) | Status |
+|---------------|----------------|----------------------|--------|
+| Logic Correctness | 11/11 PASS | 11/11 PASS | **SUCCESS** |
 
 ## Deployment & Execution Steps
 
