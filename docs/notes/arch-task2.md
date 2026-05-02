@@ -26,8 +26,12 @@ This document details the improvements made to support Android Shared Libraries 
 ## 2. Testing Status (Android Emulator)
 
 *   **Logic Execution**: ✅ VM successfully executes complex logic including jumps and math.
-*   **Relocations**: ✅ Verified. Calls to `libc` via PLT work correctly without crashing.
-*   **ABI / Return Values**: ⚠️ Current results return address-like constants. Investigation suggests a mismatch in the calling convention during the VM-to-Native transition (specifically the restoration of callee-saved registers or `X0` corruption).
+*   **Relocations**: ✅ Verified. Calls to `libc` via PLT (open, read, etc.) work correctly without crashing.
+*   **Observed Bugs & Failures**:
+    *   **ABI / Return Values**: ⚠️ Functions return address-like constants (e.g., `-1548203841`) instead of logical results (e.g., `97`). This occurs even in pure computation functions like `vmp_compute`.
+    *   **NULL Pointer Handling**: ❌ `vmp_compute(NULL)` failed to return `-1`, returning `0` instead.
+    *   **Libc Integration**: ❌ `vmp_md5_hex` and `vmp_get_process_name` return incorrect data/lengths.
+    *   **Diagnosis**: The core VM logic is stable, but the interface between Native and VM context has a bug. Specifically, the cleanup code in the interpreter stub or the register restoration in `vm_entry_token` is likely corrupting `X0` or failing to preserve callee-saved registers (`X19-X28`) required by the Android runtime.
 
 ## 3. Future Work
 
