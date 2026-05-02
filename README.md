@@ -236,27 +236,30 @@ make all
 
 A sample target is provided in the `demo/` directory to demonstrate the full protection workflow.
 
-### Using Docker (Recommended for macOS/Windows)
+### 🐳 Quick Start with Docker (macOS / Windows / Linux)
 
-If you are on a non-Linux or non-ARM64 host, you can use Docker to compile and run the demo:
+This is the recommended way to test VMPacker on your Mac or Windows machine.
 
-1. **Build and Protect the demo:**
-   ```bash
-   cd demo
-   # Build the native binary and protect the 'check_simple' function
-   make -f Makefile-demo all protect
-   ```
+1.  **Build and Protect the demo:**
+    This step compiles the C source code into a native ARM64 Linux binary and then uses `vmpacker` to virtualize it.
+    ```bash
+    cd demo
+    make -f Makefile-demo all protect
+    ```
 
-2. **Run the protected binary in Docker:**
-   ```bash
-   make -f Makefile-demo run-docker
-   ```
+2.  **Run the protected binary:**
+    This command uses a Docker container to provide a Linux ARM64 environment compatible with the binary.
+    ```bash
+    make -f Makefile-demo run-docker
+    ```
 
-The output should show:
-- The result printed by the program (`7`).
-- The exit code of the program (`37`), which is the actual calculation result (`10 * 3 + 7 = 37`) executed inside the VM.
+**What to expect:**
+- The program will output `7` (the last digit of the result).
+- The Makefile will print `Exit code (expected 37): 37`.
+- **Note:** The calculation `10 * 3 + 7 = 37` was executed entirely inside the custom VM.
 
-### Manual Steps (Linux ARM64)
+### 🐧 Manual Steps (Native Linux ARM64)
+...
 
 1. **Compile:**
    ```bash

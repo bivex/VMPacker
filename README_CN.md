@@ -237,27 +237,30 @@ make all
 
 `demo/` 目录下提供了一个简单的示例程序，用于演示完整的保护流程。
 
-### 使用 Docker (推荐 macOS/Windows 用户)
+### 🐳 使用 Docker 快速开始 (macOS / Windows / Linux)
 
-如果您使用的不是 Linux ARM64 环境，可以使用 Docker 来编译和运行 Demo：
+这是在 Mac 或 Windows 机器上测试 VMPacker 的推荐方式。
 
-1. **编译并保护 Demo:**
-   ```bash
-   cd demo
-   # 编译原生二进制文件并保护 'check_simple' 函数
-   make -f Makefile-demo all protect
-   ```
+1.  **编译并保护 Demo:**
+    此步骤将 C 源码编译为原生 ARM64 Linux 二进制文件，然后使用 `vmpacker` 进行虚拟化处理。
+    ```bash
+    cd demo
+    make -f Makefile-demo all protect
+    ```
 
-2. **在 Docker 中运行保护后的二进制文件:**
-   ```bash
-   make -f Makefile-demo run-docker
-   ```
+2.  **在 Docker 中运行保护后的二进制文件:**
+    此命令使用 Docker 容器提供一个与二进制文件兼容的 Linux ARM64 环境。
+    ```bash
+    make -f Makefile-demo run-docker
+    ```
 
-输出应包含：
-- 程序打印的结果 (`7`)。
-- 程序的退出代码 (`37`)，这是在虚拟机内部执行的实际计算结果 (`10 * 3 + 7 = 37`)。
+**预期输出:**
+- 程序将打印 `7`（结果的最后一位数字）。
+- Makefile 将打印 `Exit code (expected 37): 37`。
+- **说明:** 计算过程 `10 * 3 + 7 = 37` 完全是在自定义虚拟机内部安全执行的。
 
-### 手动步骤 (Linux ARM64 环境)
+### 🐧 手动步骤 (原生 Linux ARM64 环境)
+...
 
 1. **编译:**
    ```bash
