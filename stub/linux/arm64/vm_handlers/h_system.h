@@ -153,7 +153,9 @@ static inline u32 h_mrs(vm_ctx_t *vm) {
   u64 val = 0;
 #ifdef __aarch64__
   switch (sysreg) {
+  case 0x3E02: /* cntvct_el0 (op1=3, CRn=14, CRm=0, op2=2) */
   case 0x5F02: __asm__ volatile("mrs %0, cntvct_el0" : "=r"(val)); break;
+  case 0x3E00: /* cntfrq_el0 (op1=3, CRn=14, CRm=0, op2=0) */
   case 0x5F00: __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(val)); break;
   default: break;
   }

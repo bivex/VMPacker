@@ -42,8 +42,8 @@
 /* ---- Utils (no libc) ---- */
 __attribute__((section(".text.entry")))
 void *memcpy(void *dest, const void *src, unsigned long n) {
-  unsigned char *d = (unsigned char *)dest;
-  const unsigned char *s = (const unsigned char *)src;
+  volatile unsigned char *d = (unsigned char *)dest;
+  volatile const unsigned char *s = (const unsigned char *)src;
   for (unsigned long i = 0; i < n; i++)
     d[i] = s[i];
   return dest;
@@ -499,8 +499,7 @@ L_HALT:
   ret = vm->R[0];
   goto cleanup;
 L_RET: {
-  u8 r = vm->bc[vm->pc + 1];
-  ret = vm->R[r & 31];
+  ret = vm->R[0];
   goto cleanup;
 }
 

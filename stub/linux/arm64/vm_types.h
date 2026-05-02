@@ -16,10 +16,10 @@ typedef long long i64;
 typedef short i16;
 
 /* ---- VM 配置常量 ---- */
-#define VM_REG_COUNT 33        /* X0-X30, X31=SP, X32=XZR */
-#define VM_STACK_SIZE 32       /* PUSH/POP 操作栈深度 */
-#define VM_EVAL_STACK_SIZE 256 /* 栈机器操作栈深度 */
-#define VM_MEM_STACK 16384     /* 内存栈 (SP 指向的空间, 16KB) */
+#define VM_REG_COUNT 64        /* X0-X30, X31=SP, 32+=XZR/Temp */
+#define VM_STACK_SIZE 64       /* PUSH/POP 操作栈深度 */
+#define VM_EVAL_STACK_SIZE 2048 /* 栈机器操作栈深度 */
+#define VM_MEM_STACK 262144    /* 内存栈 (SP 指向的空间, 256KB) */
 #define VM_BYTECODE_MAX 65536  /* 最大字节码长度 (64KB, 含映射表) */
 #define VM_SIMD_BUF 64         /* SIMD 临时缓冲大小 */
 
@@ -43,7 +43,7 @@ typedef struct {
   u64 R[VM_REG_COUNT];
 
   /* SIMD/FP 寄存器: V[0]-V[31], 每个 128-bit (2 x u64) */
-  u64 V[32][2];
+  u64 V[32][2] __attribute__((aligned(16)));
 
   /* 条件标志 */
   u32 FL;
@@ -60,14 +60,15 @@ typedef struct {
   int sp;
 
   /* 栈机器操作栈 (Stack Machine eval stack) */
-  u64 eval_stk[VM_EVAL_STACK_SIZE];
-  int eval_sp; /* 栈顶指针, -1 = 空 */
+  u64 eval_stk[VM_EVAL_STACK_SIZE] __attribute__((aligned(16)));
+  int eval_sp; /* 栈顶指针, 0 = 空 */
 
   /* 内存栈 (R[31] 指向这里的末尾) */
-  u8 vm_stk[VM_MEM_STACK];
+  u8 vm_stk[VM_MEM_STACK] __attribute__((aligned(16)));
 
   /* SIMD 临时缓冲 */
-  u8 vtmp[VM_SIMD_BUF];
+  u8 vtmp[VM_SIMD_BUF] __attribute__((aligned(16)));
+
 
   /* BR 间接跳转支持 */
   u64 func_addr;              /* 被保护函数的原始起始地址 */
@@ -127,7 +128,7 @@ static inline void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
   vm->FL = 0;
   vm->pc = 0;
   vm->sp = 0;
-  vm->eval_sp = -1; /* 栈机器操作栈初始为空 */
+  vm->eval_sp = 0; /* 栈机器操作栈初始为空 */
 
   /* BR 间接跳转映射表：默认无 */
   vm->func_addr = 0;

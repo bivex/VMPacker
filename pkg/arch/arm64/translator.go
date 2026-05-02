@@ -128,7 +128,7 @@ func (t *Translator) sext32(rd byte) {
 // mapReg ARM64寄存器 → VM寄存器
 func (t *Translator) mapReg(arm64Reg int) (byte, error) {
 	if arm64Reg == vm.REG_XZR {
-		return 32, nil // XZR → R32 (Permanent Zero)
+		return 63, nil // XZR → R63 (Permanent Zero)
 	}
 	// SIMD registers V0-V31 are encoded as REG_V_BASE + 0..31
 	if arm64Reg >= vm.REG_V_BASE && arm64Reg < vm.REG_V_BASE+32 {

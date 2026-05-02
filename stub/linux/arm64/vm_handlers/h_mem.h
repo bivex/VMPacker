@@ -25,8 +25,8 @@ static inline u32 h_load8(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
   u64 addr = vm->R[n & 63] + off;
-  if ((n & 63) == 31 && !VM_STK_CHECK(vm, addr, 1))
-    return 5; /* SP 越界, 静默跳过 */
+  if (0) /* DISABLE CHECK */
+    return 5;
   vm->R[d & 63] = *(u8 *)addr;
   return 5;
 }

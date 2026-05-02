@@ -37,6 +37,11 @@ func (t *Translator) trADRP(instructions []vm.Instruction, idx int) (int, error)
 			t.emitAddrWithSlide(rd, finalAddr)
 			return 1, nil
 		}
+		if (Op(next.Op) == LDR_IMM || Op(next.Op) == LDR_REG) && next.Rn == inst.Rd {
+			// ADRP + LDR: often used for loading constants
+			// We can't easily merge the LDR into a single VM op yet, 
+			// but we can ensure ADRP result is correct.
+		}
 	}
 
 	t.emitAddrWithSlide(rd, adrpResult)
