@@ -23,22 +23,35 @@ This document details the improvements made to support Android Shared Libraries 
     *   **Pointer Safety**: Added checks to prevent dereferencing `0` or the `XZR` sentinel in load/store handlers.
 *   **Return Logic**: Fixed a bug where the VM would continue execution after a `RET` instruction. It now correctly returns `R[0]` to the native caller.
 
+### VM_INDIRECT_DISPATCH Mode (Obfuscation)
+*   **Indirect Dispatch Table**: Implemented an alternative execution path using a runtime-initialized function pointer table (`vm_jump_table`) instead of GCC computed-goto. This adds a layer of obfuscation that static analysis tools (IDA Pro) cannot easily trace.
+*   **Stack Opcode Support**: Added all stack machine opcodes (`OP_S_VLOAD`, `OP_S_VSTORE`, `OP_S_ADD`, `OP_S_SUB`, ..., `OP_S_CMP`, `OP_S_LD8/16/32/64`, `OP_S_ST8/16/32/64`, `OP_SVLD`, `OP_SVST`) to both the `vm_init_jump_table` and the `dtab` arrays for both dispatch modes.
+*   **Bytecode Reversal Optimization**:
+    *   Implemented optional bytecode reversal (reverse PC iteration) to further confuse decompilers.
+    *   The Packer now reverses the bytecode stream and builds an `offsetMap` to remap all metadata (BR jump maps, RTLR relocation offsets) to the new ordering.
+    *   Fixed a critical **RTLR offset overlap bug** where the `_token_table_va + 16` patch was overwriting the first bytecode instruction. The fix reserves an 8-byte gap immediately after the interpreter code in the payload.
+    *   Ensured all relocation entries have their `BcOffset` remapped through the `offsetMap` after reversal so `CALL_NAT` and other external references patch the correct offsets.
+
+### Instruction Decoder Completeness
+*   **Missing Opcode**: Added `OP_S_NEG` (0x4B) to `vm_insn_size()` which was previously absent, causing size-0 decode failures.
+
 ## 2. Testing Status (Android Emulator)
 
-*   **Logic Execution**: ✅ VM successfully executes complex logic including jumps and math.
-*   **Relocations**: ✅ Verified. Calls to `libc` via PLT (open, read, etc.) work correctly without crashing.
-*   **Observed Bugs & Failures**:
-    *   **ABI / Return Values**: ⚠️ Functions return address-like constants (e.g., `-1548203841`) instead of logical results (e.g., `97`). This occurs even in pure computation functions like `vmp_compute`.
-    *   **NULL Pointer Handling**: ❌ `vmp_compute(NULL)` failed to return `-1`, returning `0` instead.
-    *   **Libc Integration**: ❌ `vmp_md5_hex` and `vmp_get_process_name` return incorrect data/lengths.
-    *   **Diagnosis**: The core VM logic is stable, but the interface between Native and VM context has a bug. Specifically, the cleanup code in the interpreter stub or the register restoration in `vm_entry_token` is likely corrupting `X0` or failing to preserve callee-saved registers (`X19-X28`) required by the Android runtime.
+*   **Full Function Coverage**: ✅ All 4 test functions pass:
+    *   `vmp_compute` — pure arithmetic/bitwise logic (mode 0/1/2)
+    *   `vmp_verify_key` — license-key checksum verifier
+    *   `vmp_md5_hex` — MD5 digest with libc PLT calls (`strlen`, `memcpy`, `memset`, `snprintf`)
+    *   `vmp_get_process_name` — reads `/proc/self/comm` via `open`/`read`/`close`
+*   **VM Execution**: ✅ Verified. Complex control-flow (loops, branches) and stack-machine ALU execute correctly.
+*   **Relocations**: ✅ Verified. PLT calls to libc functions resolve correctly under ASLR with both normal and reversed bytecode orders.
+*   **Observability**: Debug trace (`-debug` flag) confirms correct opcode stream, relocation patching, and stack machine evaluation.
 
 ### Verification Commands used:
 ```bash
 # 1. Rebuild the tool and the stub
 make clean && make stub CROSS= && make packer
 
-# 2. Protect the Android test library
+# 2. Protect the Android test library (all 4 functions)
 ./build/vmpacker -func vmp_compute,vmp_verify_key,vmp_md5_hex,vmp_get_process_name \
     -o test/android/build/libnative_test_protected_arm64.so \
     test/android/build/libnative_test_arm64.so
@@ -61,6 +74,7 @@ adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64"
     - X0 return value preserved through cleanup (X19-X28 restores don't touch X0; `munmap` calls remain commented out).
 2.  **RTLR for ARM32**: Port the Runtime Relocation logic to the 32-bit interpreter for legacy Android support.
 3.  **Section Header Recovery**: Optionally implement a "re-construct section headers" feature for better compatibility with static analysis tools.
-
+4.  **Extended Obfuscation**: Explore additional obfuscation transformations (control-flow flattening, bogus branches, VM_INDIRECT_DISPATCH as default).
 ---
-*Status: Issue #7 Closed. Android basic support implemented.*
+
+*Status: Issue #7 Closed. Android .so support fully functional with all tests passing. VM_INDIRECT_DISPATCH mode and bytecode reversal obfuscation validated.*
