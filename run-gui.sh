@@ -14,8 +14,12 @@ if [[ $(uname -m) == "arm64" && $(uname -s) == "Darwin" ]]; then
     if command -v aarch64-linux-gnu-gcc &> /dev/null; then
         make stub
     elif command -v docker &> /dev/null; then
+        echo -e "${BLUE}[*] Ensuring Docker build environment...${NC}"
+        if [[ "$(docker images -q vmp-builder 2> /dev/null)" == "" ]]; then
+            docker build -t vmp-builder .
+        fi
         echo -e "${BLUE}[*] Using Docker to build Linux ARM64 stub...${NC}"
-        docker run --rm -v "$(pwd)":/work -w /work debian:latest bash -c "apt-get update && apt-get install -y gcc make python3 && make stub CROSS="
+        docker run --rm -v "$(pwd)":/work vmp-builder make stub CROSS=
     else
         echo -e "\033[0;31m[!] Error: No cross-compiler or Docker found. Cannot build Linux ARM64 stub.${NC}"
         exit 1
