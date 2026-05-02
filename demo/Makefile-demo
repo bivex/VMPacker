@@ -1,0 +1,37 @@
+# Sample Target Makefile
+# This Makefile demonstrates how to compile a target for ARM64 and protect it.
+
+CROSS   ?= aarch64-linux-gnu-
+CC       = $(CROSS)gcc
+PACKER   = ../build/vmpacker
+
+TARGET   = demo_simple
+SRC      = demo_simple.c
+PROTECTED = $(TARGET).vmp
+
+.PHONY: all clean protect run-qemu
+
+all: $(TARGET)
+
+$(TARGET): $(SRC)
+	$(CC) -static -O1 -nostdlib -march=armv8-a $< -o $@
+	@echo "[+] Built target: $@"
+
+# Protect the 'check_simple' function
+protect: $(TARGET)
+	@if [ ! -f $(PACKER) ]; then echo "Error: vmpacker not found. Run 'make packer' in the root directory first."; exit 1; fi
+	$(PACKER) -func check_simple -v -o $(PROTECTED) $(TARGET)
+	@echo "[+] Protected binary created: $(PROTECTED)"
+
+# Run using QEMU user-mode (requires qemu-aarch64)
+run-qemu: $(PROTECTED)
+	@if command -v qemu-aarch64 &> /dev/null; then \
+		echo "Running protected binary in QEMU..."; \
+		qemu-aarch64 ./$(PROTECTED); \
+		echo "Exit code (expected 37): $$?"; \
+	else \
+		echo "Error: qemu-aarch64 not found. Please install it to run ARM64 binaries on this host."; \
+	fi
+
+clean:
+	rm -f $(TARGET) $(PROTECTED)
