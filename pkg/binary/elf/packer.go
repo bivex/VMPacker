@@ -17,62 +17,62 @@ import (
 )
 
 // ============================================================
-// ELF 解析器 + 修改器 v3
+// ELF Parser + Modifier v3
 //
-// 注入策略: PT_NOTE → PT_LOAD 劫持
-//   1. 将 VM 解释器 blob + 加密字节码追加到文件末尾
-//   2. 将 PT_NOTE 段转换为 PT_LOAD (RX)，映射追加的数据
-//   3. 新 LOAD 段使用独立的虚拟地址 (0x800000 起)
-//   4. 原函数改写为跳板 → BL 到新段中的 VM 解释器
+// Injection Strategy: PT_NOTE → PT_LOAD Hijacking
+//   1. Append VM interpreter blob + encrypted bytecode to the end of file
+//   2. Convert PT_NOTE segment to PT_LOAD (RX), mapping the appended data
+//   3. New LOAD segment uses independent virtual address (starting from 0x800000)
+//   4. Rewrite original function as a trampoline → BL to the VM interpreter in the new segment
 //
-// 优点: 不移动任何现有数据，不破坏段对齐
+// Advantages: No existing data is moved, preserving segment alignment.
 // ============================================================
 
-// AddrSpec 按地址指定函数
+// AddrSpec specifies a function by address
 type AddrSpec struct {
 	Addr uint64
-	End  uint64 // 0 = 自动检测
-	Name string // 可选名称
+	End  uint64 // 0 = auto-detect
+	Name string // optional name
 }
 
-// RuntimeReloc 用于运行时重定位条目
+// RuntimeReloc for runtime relocation entries
 type RuntimeReloc struct {
-	WritePos uint64 // 相对于 bc 的偏移（待重定位数据的地址在最终字节码中的偏移）
-	Offset   uint64 // 相对偏移（需要运行时加上基址完成重定位）
-	FuncId   uint64 // 标记此重定位信息属于哪个函数的（函数 id）
+	WritePos uint64 // Offset relative to bc (position of data to be relocated in final bytecode)
+	Offset   uint64 // Relative offset (runtime base must be added to complete relocation)
+	FuncId   uint64 // Links this relocation to a specific function ID
 }
 
-// ParseAddrSpec 解析地址规格: "0xADDR", "0xSTART-0xEND", "0xSTART-0xEND:name"
+// ParseAddrSpec parses address specification: "0xADDR", "0xSTART-0xEND", "0xSTART-0xEND:name"
 func ParseAddrSpec(s string) (AddrSpec, error) {
 	var spec AddrSpec
-	// 分离可选名称 (最后一个冒号后面)
+	// Separate optional name (after the last colon)
 	if idx := strings.LastIndex(s, ":"); idx > 2 {
 		candidate := s[idx+1:]
-		// 如果不像十六进制数则是名称
+		// If it doesn't look like a hex number, it's a name
 		if _, err := strconv.ParseUint(candidate, 0, 64); err != nil {
 			spec.Name = candidate
 			s = s[:idx]
 		}
 	}
-	// 解析地址范围
+	// Parse address range
 	if parts := strings.Split(s, "-"); len(parts) == 2 {
 		start, err := strconv.ParseUint(parts[0], 0, 64)
 		if err != nil {
-			return spec, fmt.Errorf("起始地址无效: %s", parts[0])
+			return spec, fmt.Errorf("invalid start address: %s", parts[0])
 		}
 		end, err := strconv.ParseUint(parts[1], 0, 64)
 		if err != nil {
-			return spec, fmt.Errorf("结束地址无效: %s", parts[1])
+			return spec, fmt.Errorf("invalid end address: %s", parts[1])
 		}
 		if end <= start {
-			return spec, fmt.Errorf("结束地址必须大于起始地址")
+			return spec, fmt.Errorf("end address must be greater than start address")
 		}
 		spec.Addr = start
 		spec.End = end
 	} else {
 		addr, err := strconv.ParseUint(s, 0, 64)
 		if err != nil {
-			return spec, fmt.Errorf("地址无效: %s", s)
+			return spec, fmt.Errorf("invalid address: %s", s)
 		}
 		spec.Addr = addr
 	}
@@ -82,7 +82,7 @@ func ParseAddrSpec(s string) (AddrSpec, error) {
 	return spec, nil
 }
 
-// Packer ELF VMP 打包器
+// Packer ELF VMP Packer
 type Packer struct {
 	inputPath    string
 	outputPath   string
@@ -92,21 +92,21 @@ type Packer struct {
 	verbose      bool
 	stripSymbols bool
 	debug        bool
-	tokenEntry   bool // Token 化入口模式
+	tokenEntry   bool // Tokenized entry mode
 	data         []byte
 	interpBlob   []byte
-	relocations  []arm64.Relocation // 收集所有重定位
+	relocations  []arm64.Relocation // Collected relocations
 }
 
-// FuncBytecode 保存单个函数的加密字节码和元信息
+// FuncBytecode stores encrypted bytecode and metadata for a single function
 type FuncBytecode struct {
 	FI               *vm.FuncInfo
 	Encrypted        []byte
 	XorKey           byte
-	reverseOffsetMap map[int]int // 反转后 offset 映射 (原 offset → 新 offset)
+	reverseOffsetMap map[int]int // Mapping after reversal (original offset → new offset)
 }
 
-// NewPacker 创建 ELF 打包器
+// NewPacker creates a new ELF packer
 func NewPacker(input, output string, funcs []string, addrSpecs []AddrSpec, verbose, strip, debug, tokenEntry bool, interpBlob []byte) *Packer {
 	return &Packer{
 		inputPath:    input,
@@ -121,11 +121,11 @@ func NewPacker(input, output string, funcs []string, addrSpecs []AddrSpec, verbo
 	}
 }
 
-// FindFunction 在 ELF 中查找函数
+// FindFunction locates a function in the ELF
 func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 	syms, err := f.Symbols()
 	if err != nil {
-		// 尝试动态符号表（针对 .so）
+		// Try dynamic symbol table (for .so)
 		syms, err = f.DynamicSymbols()
 	}
 	if err != nil {
@@ -316,7 +316,7 @@ func (p *Packer) Process() error {
 
 	dec := arm64.NewDecoder()
 
-	// 第一阶段: 收集所有函数的字节码
+	// Phase 1: Collect bytecode for all functions
 	type funcEntry struct {
 		name   string
 		finder func() (*vm.FuncInfo, error)
@@ -385,20 +385,20 @@ func (p *Packer) Process() error {
 				fmt.Printf("        %s\n", u)
 			}
 
-			// 生成翻译失败 debug 文件
+			// Generate translation failure debug file
 			debugPath := p.outputPath + ".debug.txt"
 			df, derr := os.Create(debugPath)
 			if derr != nil {
-				fmt.Printf("    [!] debug 文件创建失败: %v\n", derr)
+				fmt.Printf("    [!] debug file creation failed: %v\n", derr)
 			} else {
 				fmt.Fprintf(df, "================================================================\n")
-				fmt.Fprintf(df, "翻译失败报告 — %s @ 0x%X\n", entry.name, fi.Addr)
-				fmt.Fprintf(df, "函数大小: %d bytes, 总指令数: %d, 已翻译: %d\n",
+				fmt.Fprintf(df, "Translation Failure Report — %s @ 0x%X\n", entry.name, fi.Addr)
+				fmt.Fprintf(df, "Function Size: %d bytes, Total Instructions: %d, Translated: %d\n",
 					fi.Size, result.TotalInsts, result.TransInsts)
 				fmt.Fprintf(df, "================================================================\n\n")
-				fmt.Fprintf(df, "不支持的指令 (%d):\n\n", len(result.Unsupported))
+				fmt.Fprintf(df, "Unsupported Instructions (%d):\n\n", len(result.Unsupported))
 
-				// 构建 offset→Instruction 索引，用于提取原始字节
+				// Build offset→Instruction index to extract raw bytes
 				instMap := make(map[int]vm.Instruction)
 				for _, inst := range insts {
 					instMap[inst.Offset] = inst
@@ -407,40 +407,40 @@ func (p *Packer) Process() error {
 				for idx, u := range result.Unsupported {
 					fmt.Fprintf(df, "[%d] %s\n", idx+1, u)
 
-					// 尝试从 unsupported 字符串解析偏移 (格式: "偏移 0xNNNN: ...")
+					// Parse offset from unsupported string (format: "偏移 0x%X:")
 					var off int
 					if _, err := fmt.Sscanf(u, "偏移 0x%X:", &off); err == nil {
 						if inst, ok := instMap[off]; ok {
 							raw := inst.Raw
-							fmt.Fprintf(df, "    原始字节: %02X %02X %02X %02X\n",
+							fmt.Fprintf(df, "    Raw Bytes: %02X %02X %02X %02X\n",
 								byte(raw), byte(raw>>8), byte(raw>>16), byte(raw>>24))
-							fmt.Fprintf(df, "    绝对地址: 0x%X\n", fi.Addr+uint64(off))
+							fmt.Fprintf(df, "    Absolute Address: 0x%X\n", fi.Addr+uint64(off))
 						}
 					}
 					fmt.Fprintln(df)
 				}
 
 				fmt.Fprintf(df, "================================================================\n")
-				fmt.Fprintf(df, "修复建议:\n")
-				fmt.Fprintf(df, "- 为每条不支持的指令编写 demo 测试用例 (参考 demo/ 目录)\n")
-				fmt.Fprintf(df, "- 在 pkg/arch/arm64/translator.go translateOne() 中添加对应 case\n")
-				fmt.Fprintf(df, "- 使用 -v 标志查看完整反汇编上下文\n")
+				fmt.Fprintf(df, "Fix Suggestions:\n")
+				fmt.Fprintf(df, "- Write demo test cases for each unsupported instruction (see demo/ directory)\n")
+				fmt.Fprintf(df, "- Add corresponding cases in pkg/arch/arm64/translator.go translateOne()\n")
+				fmt.Fprintf(df, "- Use -v flag to view full disassembly context\n")
 				fmt.Fprintf(df, "================================================================\n")
 
 				df.Close()
-				fmt.Printf("    [+] 翻译失败 debug 文件: %s\n", debugPath)
+				fmt.Printf("    [+] Failed translation debug file: %s\n", debugPath)
 			}
 
 			return fmt.Errorf("translation aborted: %d unsupported instruction(s) in %s — cannot produce safe output",
 				len(result.Unsupported), entry.name)
 		}
 
-		// debug: 生成对照文件 (必须在反转/加密之前, 使用原始正向字节码)
+		// debug: generate mapping file (pre-reverse, pre-encrypt)
 		if p.debug {
 			debugPath := p.outputPath + ".debug.txt"
 			df, derr := os.OpenFile(debugPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 			if derr != nil {
-				fmt.Printf("    [!] debug file create failed: %v\n", derr)
+				fmt.Printf("    [!] debug file creation failed: %v\n", derr)
 			} else {
 				fmt.Fprintf(df, "================================================================\n")
 				fmt.Fprintf(df, "Function: %s @ 0x%X (size: %d)\n", entry.name, fi.Addr, fi.Size)
@@ -462,16 +462,16 @@ func (p *Packer) Process() error {
 			}
 		}
 
-		// ---- PC 反向遍历: 反转指令顺序 ----
-		// 必须在 OpcodeCryptor 之前执行 (加密使用最终 pc 位置)
+		// ---- Reverse instructions order ----
+		// Must be done before OpcodeCryptor (encryption uses final PC)
 		reversed, offsetMap := reverseInstructions(result.Bytecode, result.CodeLen)
 
-		// 重映射分支目标 (使用反转后的偏移)
+		// Remap branch targets using reversed offsets
 		newCodeLen := len(reversed)
 		remapBranchTargets(reversed, newCodeLen, offsetMap, p.verbose)
 
-		// 重映射 addr_map 中的 vm_off (BR 间接跳转)
-		// trailer 在 result.Bytecode[result.CodeLen:] 中，每个 entry 8B: [arm64_off:u32][vm_off:u32]
+		// Remap vm_off in addr_map (indirect BR jump)
+		// trailer is in result.Bytecode[result.CodeLen:], each entry 8B: [arm64_off:u32][vm_off:u32]
 		mapCount := binary.LittleEndian.Uint32(result.Bytecode[len(result.Bytecode)-16:])
 		trailerStart := result.CodeLen
 		for j := 0; j < int(mapCount); j++ {
@@ -482,7 +482,7 @@ func (p *Packer) Process() error {
 			}
 		}
 
-		// 用反转后的字节码替换原始指令区，保留 trailer
+		// Replace original instruction area with reversed bytecode, keep trailer
 		trailer := result.Bytecode[result.CodeLen:]
 		finalBytecode := make([]byte, 0, newCodeLen+len(trailer))
 		finalBytecode = append(finalBytecode, reversed...)
@@ -495,24 +495,24 @@ func (p *Packer) Process() error {
 				len(offsetMap), newCodeLen, result.CodeLen, len(offsetMap))
 		}
 
-		// ---- OpcodeCryptor: 逐指令 opcode 加密 ----
-		// 生成随机 oc_key (4 字节)
+		// ---- OpcodeCryptor: Per-instruction opcode encryption ----
+		// Generate random 4-byte oc_key
 		var ocKeyBuf [4]byte
 		if _, err := rand.Read(ocKeyBuf[:]); err != nil {
 			return fmt.Errorf("generating oc_key failed: %v", err)
 		}
 		ocKey := binary.LittleEndian.Uint32(ocKeyBuf[:])
 
-		// 加密字节码中每条指令的 opcode 字节 (仅 [0:CodeLen] 范围)
-		// reversed=true: 每条指令后有 1B size 标记
+		// Encrypt opcode byte for each instruction in the bytecode (only in [0:CodeLen] range)
+		// reversed=true: each instruction is followed by a 1B size marker
 		encryptOpcodes(result.Bytecode, result.CodeLen, ocKey, true)
 
-		// 将 reverse 标志 + oc_key 写入 trailer 占位位置
+		// Write reverse flag + oc_key into trailer placeholders
 		// trailer: [BR map entries][reverse(1B)][oc_key(4B)][map_count][func_addr][func_size]
-		// reverse 位于 BR map 之后
-		reverseOffset := result.CodeLen + int(mapCount)*8 // BR map 之后
+		// reverse is located after the BR map
+		reverseOffset := result.CodeLen + int(mapCount)*8 // After BR map
 		result.Bytecode[reverseOffset] = 1                // reverse = 1
-		ocKeyOffset := reverseOffset + 1                  // reverse(1B) 之后
+		ocKeyOffset := reverseOffset + 1                  // After reverse(1B)
 		binary.LittleEndian.PutUint32(result.Bytecode[ocKeyOffset:], ocKey)
 
 		if p.verbose {
@@ -520,7 +520,7 @@ func (p *Packer) Process() error {
 				ocKey, result.CodeLen, mapCount, reverseOffset, ocKeyOffset)
 		}
 
-		// ---- XOR chain 加密 (整段字节码) ----
+		// ---- XOR chain encryption (entire bytecode) ----
 		xorKey := byte(0xA5)
 		encrypted := make([]byte, len(result.Bytecode))
 		for i, b := range result.Bytecode {
@@ -535,7 +535,7 @@ func (p *Packer) Process() error {
 		})
 	}
 
-	// 第二阶段: 批量注入 (一次 PT_NOTE 劫持)
+	// Phase 2: Batch Injection (PT_NOTE hijack)
 	fmt.Printf("\n[*] Injecting %d functions...\n", len(funcs))
 	err = p.injectVMPBatch(funcs)
 	if err != nil {
@@ -546,7 +546,7 @@ func (p *Packer) Process() error {
 		fmt.Printf("    [+] %s VMP protected\n", fb.FI.Name)
 	}
 
-	// 第三阶段: 清除符号表 (可选)
+	// Phase 3: Strip Symbols (Optional)
 	if p.stripSymbols {
 		p.stripSections()
 		fmt.Println("[*] Symbols stripped")
@@ -663,11 +663,11 @@ func (p *Packer) stripSections() {
 	}
 }
 
-// injectVMPBatch — 批量 PT_NOTE hijack 注入
+// Phase 2: Batch Injection (PT_NOTE hijack)
 func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 	ehdr := readEhdr64(p.data)
 
-	// 从 blob 头部读取偏移信息
+	// Read offset info from blob header
 	if len(p.interpBlob) < 8 {
 		return fmt.Errorf("interp blob too small: %d bytes", len(p.interpBlob))
 	}
@@ -675,8 +675,8 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 	var entryOff, tokenEntryOff, tokenTableVAOff uint64
 	var interpCode []byte
 
-	if true { /* TOKEN_ONLY: 始终使用 Token 模式 */
-		// Token 模式: 24 字节扩展头
+	if true { /* TOKEN_ONLY: Always use Token mode */
+		// Token mode: 24-byte extended header
 		if len(p.interpBlob) < 24 {
 			return fmt.Errorf("token mode requires extended blob header (24 bytes), got %d", len(p.interpBlob))
 		}
@@ -705,7 +705,7 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 	}
 	STANDARD_MODE_DISABLED */
 
-	// 1. 构造 payload: [interpCode][pad][bc0][pad][bc1][pad][...]
+	// 1. Construct payload: [interpCode][pad][bc0][pad][bc1][pad][...]
 	payload := make([]byte, 0, len(interpCode)+1024)
 	payload = append(payload, interpCode...)
 	for len(payload)%4 != 0 {
@@ -727,15 +727,15 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 		}
 	}
 
-	// 2. 追加到文件末尾 (页对齐，兼容 QEMU 用户态)
-	// 先将文件填充到页边界
+	// 2. Append to end of file (page-aligned, QEMU user-mode compatible)
+	// Pad file to page boundary first
 	appendOff := uint64(len(p.data))
 	padLen := (0x1000 - (appendOff % 0x1000)) % 0x1000
 	for i := uint64(0); i < padLen; i++ {
 		p.data = append(p.data, 0x00)
 	}
-	payloadFileOff := uint64(len(p.data)) // 现在是页对齐的
-	// 动态计算 payloadVA: 扫描所有 LOAD 段，取最高 Vaddr+Memsz，向上对齐到 64KB
+	payloadFileOff := uint64(len(p.data)) // Now page-aligned
+	// Dynamically calculate payloadVA: scan all LOAD segments, take highest Vaddr+Memsz, align up to 64KB
 	var maxVA uint64
 	for i := 0; i < int(ehdr.Phnum); i++ {
 		phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
@@ -747,11 +747,11 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 			}
 		}
 	}
-	payloadVA := (maxVA + 0xFFFF) &^ 0xFFFF // 向上对齐到 64KB 边界
+	payloadVA := (maxVA + 0xFFFF) &^ 0xFFFF // Align up to 64KB boundary
 
 	p.data = append(p.data, payload...)
 
-	interpVA := payloadVA + entryOff // vm_entry 偏移由 Makefile 自动注入到 blob 头部
+	interpVA := payloadVA + entryOff // vm_entry offset is injected into blob header by Makefile
 
 	fmt.Printf("    Payload at file offset: 0x%X, VA: 0x%X, size: %d\n",
 		payloadFileOff, payloadVA, len(payload))
@@ -763,7 +763,7 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 			fb.FI.Name, bcVA, records[i].bcLen)
 	}
 
-	// 3. 找到 PT_NOTE 段并劫持为 PT_LOAD
+	// 3. Find PT_NOTE segment and hijack as PT_LOAD
 	noteIdx := -1
 	for i := 0; i < int(ehdr.Phnum); i++ {
 		phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
@@ -794,7 +794,7 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 	fmt.Printf("    PT_NOTE[%d] -> PT_LOAD RX: off=0x%X va=0x%X sz=0x%X\n",
 		noteIdx, payloadFileOff, payloadVA, len(payload))
 
-	// 4b. 按 Vaddr 升序重排所有 PT_LOAD 段，防止内核映射 BSS 失败
+	// 4b. Reorder all PT_LOAD segments by Vaddr ascending to prevent kernel BSS mapping failure
 	{
 		type phdrSlot struct {
 			idx  int
@@ -808,7 +808,7 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 				loads = append(loads, phdrSlot{idx: i, phdr: ph})
 			}
 		}
-		// 检查是否需要重排
+		// Check if sorting is needed
 		needSort := false
 		for k := 1; k < len(loads); k++ {
 			if loads[k].phdr.Vaddr < loads[k-1].phdr.Vaddr {
@@ -817,23 +817,23 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 			}
 		}
 		if needSort {
-			// 按 Vaddr 排序 PHDR 内容
+			// Sort PHDR entries by Vaddr
 			sort.Slice(loads, func(a, b int) bool {
 				return loads[a].phdr.Vaddr < loads[b].phdr.Vaddr
 			})
-			// 收集原始 PHDR 槽位索引（按在 PHDR 表中出现的顺序）
+			// Collect original PHDR slot indices
 			slotIndices := make([]int, len(loads))
 			for k := range loads {
 				slotIndices[k] = loads[k].idx
 			}
 			sort.Ints(slotIndices)
-			// 将排序后的 PHDR 内容写回原始槽位
+			// Write sorted PHDR content back to original slots
 			for k, si := range slotIndices {
 				off := ehdr.Phoff + uint64(si)*uint64(ehdr.Phentsize)
 				writePhdr64(p.data, off, loads[k].phdr)
 			}
 			fmt.Printf("    [PHDR] Reordered %d PT_LOAD segments by Vaddr ascending\n", len(loads))
-			// 更新 notePhdrOff — 找到 payload 段的新位置
+			// Update notePhdrOff — find payload segment's new position
 			for i := 0; i < int(ehdr.Phnum); i++ {
 				off := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
 				ph := readPhdr64(p.data, off)
@@ -845,12 +845,12 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 		}
 	}
 
-	// 5. 为每个函数写跳板 + 销毁原始代码
-	if true { /* TOKEN_ONLY: 始终使用 Token 跳板 */
-		// ---- Token 模式 ----
+	// 5. Write trampolines and destroy original code for each function
+	if true { /* TOKEN_ONLY: Always use Token trampoline */
+		// ---- Token Mode ----
 
-		// 5a. 构建 token_desc_t 描述符表
-		// 8-byte 对齐
+		// 5a. Build token_desc_t descriptor table
+		// 8-byte aligned
 		for len(payload)%8 != 0 {
 			payload = append(payload, 0x00)
 		}
@@ -863,15 +863,15 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 		tokenTableOff := len(payload)
 		tokenTableVA := payloadVA + uint64(tokenTableOff)
 
-		// 每个函数一个 token_desc_t (16 bytes): bc_off(u64) + bc_len(u32) + reserved(u32)
-		// bc_off = 相对于 _token_table_va 自身地址的偏移 (PIE 兼容)
-		selfVA := payloadVA + tokenTableVAOff // _token_table_va 的 VA
+		// One token_desc_t (16 bytes) per function: bc_off(u64) + bc_len(u32) + reserved(u32)
+		// bc_off = relative offset from _token_table_va's own address (PIE compatible)
+		selfVA := payloadVA + tokenTableVAOff // VA of _token_table_va
 		for i := range funcs {
 			bcVA := payloadVA + uint64(records[i].payloadOff)
 			bcLen := uint32(records[i].bcLen)
 
 			var desc [16]byte
-			binary.LittleEndian.PutUint64(desc[0:], bcVA-selfVA) // 相对偏移
+			binary.LittleEndian.PutUint64(desc[0:], bcVA-selfVA) // Relative offset
 			binary.LittleEndian.PutUint32(desc[8:], bcLen)
 			binary.LittleEndian.PutUint32(desc[12:], 0) // reserved
 			payload = append(payload, desc[:]...)
@@ -906,20 +906,20 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 			table := p.appendRuntimeRelocTable(runtimeRelocs)
 			payload = append(payload, table...)
 
-			fmt.Printf("\n重定位表总大小: %d 字节 (at offset 0x%X)\n", len(table), len(payload)-len(table))
+			fmt.Printf("\nRelocation table total size: %d bytes (at offset 0x%X)\n", len(table), len(payload)-len(table))
 		}
 
-		// 更新 PT_LOAD 段大小 (payload 增长了)
+		// Update PT_LOAD segment size (payload grown)
 		newPhdr.Filesz = uint64(len(payload))
 		newPhdr.Memsz = uint64(len(payload))
 		writePhdr64(p.data, notePhdrOff, newPhdr)
 
-		// 重新追加 payload 到文件 (覆盖之前的)
+		// Re-append payload to data (overwrite previous)
 		p.data = p.data[:payloadFileOff]
 		p.data = append(p.data, payload...)
 
-		// 5b. Patch _token_table_va: 存储相对于自身地址的偏移 (PIE 兼容)
-		// selfVA = payloadVA + tokenTableVAOff (已在上面计算)
+		// 5b. Patch _token_table_va: store offset relative to its own address (PIE compatible)
+		// selfVA = payloadVA + tokenTableVAOff (already calculated)
 		tblRelOff := tokenTableVA - selfVA
 		binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff:], tblRelOff)
 
@@ -927,12 +927,12 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 		fmt.Printf("    [TOKEN] so_name: %s (at offset 0x%X)\n", soName, soNameStart)
 		fmt.Printf("    [TOKEN] _token_table_va patched at blob offset 0x%X → relative offset 0x%X (PIE)\n", tokenTableVAOff, tblRelOff)
 
-		// 5c. 为每个函数生成 Token trampoline
+		// 5c. Generate Token trampoline for each function
 		vmEntryTokenVA := payloadVA + tokenEntryOff
 		fmt.Printf("    [TOKEN] vm_entry_token VA: 0x%X\n", vmEntryTokenVA)
 
 		for i, fb := range funcs {
-			funcID := uint32(i) // func_id = 序号 (0-based)
+			funcID := uint32(i) // func_id = index (0-based)
 			token := (uint32(fb.XorKey) << 24) | (0 << 12) | (funcID & 0xFFF)
 
 			trampoline := BuildTokenTrampoline(fb.FI.Addr, vmEntryTokenVA, token)
@@ -941,12 +941,12 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 					fb.FI.Name, len(trampoline), fb.FI.Size)
 			}
 
-			// 写入跳板
+			// Write trampoline
 			for j := 0; j < len(trampoline); j++ {
 				p.data[fb.FI.Offset+uint64(j)] = trampoline[j]
 			}
 
-			// 销毁剩余原始代码
+			// Destroy remaining original code
 			garbageLen := int(fb.FI.Size) - len(trampoline)
 			if garbageLen > 0 {
 				garbage := make([]byte, garbageLen)

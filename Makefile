@@ -116,6 +116,19 @@ $(BUILD_DIR)/demo_simple: $(DEMO_DIR)/demo_simple.c | $(BUILD_DIR)
 	$(CC) -static -O1 -nostdlib -march=armv8-a $< -o $@
 	@echo "[+] demo: $@"
 
+# ------ GUI (Wails) ------
+GUI_DIR = vmp-gui
+
+gui: stub
+ifdef IS_WINDOWS
+	@copy /Y "$(subst /,\,$(STUB_BIN))" "$(subst /,\,$(GUI_DIR))\backend\api\vm_interp.bin" > nul
+	@cd $(GUI_DIR) && wails build
+else
+	@cp $(STUB_BIN) $(GUI_DIR)/backend/api/vm_interp.bin
+	@cd $(GUI_DIR) && wails build
+endif
+	@echo "[+] GUI build complete"
+
 # ------ Clean ------
 clean:
 ifdef IS_WINDOWS

@@ -62,7 +62,7 @@ func (e *VMPEngine) SelectFile() (string, error) {
 // SelectSaveFile prompts user to select a save path
 func (e *VMPEngine) SelectSaveFile(defaultFilename string) (string, error) {
 	selection, err := runtime.SaveFileDialog(e.ctx, runtime.SaveDialogOptions{
-		Title:           "选择保存路径",
+		Title:           "Select Save Path",
 		DefaultFilename: defaultFilename,
 	})
 	if err != nil {
@@ -94,7 +94,7 @@ func (e *VMPEngine) AnalyzeELF(filePath string) (map[string]interface{}, error) 
 		// Fallback to dynamic symbols for stripped binaries
 		syms, err = f.DynamicSymbols()
 		if err != nil {
-			return nil, fmt.Errorf("无法读取符号表或动态符号表: %v。可能不支持被完全抹除符号的程序", err)
+			return nil, fmt.Errorf("failed to read symbol table or dynamic symbol table: %v. Fully stripped binaries may not be supported", err)
 		}
 	}
 
@@ -146,7 +146,7 @@ func (e *VMPEngine) Protect(options map[string]interface{}) error {
 		e.mu.Unlock()
 	}()
 
-	runtime.EventsEmit(e.ctx, "vmp-log", "[*] 启动 Core Engine...")
+	runtime.EventsEmit(e.ctx, "vmp-log", "[*] Starting Core Engine...")
 
 	targetFile, ok := options["file"].(string)
 	if !ok {
@@ -169,7 +169,7 @@ func (e *VMPEngine) Protect(options map[string]interface{}) error {
 	tokenEntry, _ := opts["tokenEntry"].(bool)
 	verbose := true
 
-	runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[+] 目标程序: %s", targetFile))
+	runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[+] Target program: %s", targetFile))
 
 	var funcs []string
 	var addrSpecs []elfpacker.AddrSpec
@@ -180,7 +180,7 @@ func (e *VMPEngine) Protect(options map[string]interface{}) error {
 		}
 		isCustom, _ := fMap["isCustom"].(bool)
 		if isCustom {
-			// 手动添加的函数: 通过地址范围保护
+			// Manually added function: protect by address range
 			name, _ := fMap["name"].(string)
 			addrStr, _ := fMap["address"].(string)
 			sizeFloat, _ := fMap["size"].(float64) // JSON number → float64
@@ -188,7 +188,7 @@ func (e *VMPEngine) Protect(options map[string]interface{}) error {
 			addrStr = strings.TrimPrefix(addrStr, "0X")
 			addr, err := strconv.ParseUint(addrStr, 16, 64)
 			if err != nil {
-				runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[!] 地址解析失败: %s — %v", addrStr, err))
+				runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[!] Address parsing failed: %s — %v", addrStr, err))
 				continue
 			}
 			spec := elfpacker.AddrSpec{
@@ -197,7 +197,7 @@ func (e *VMPEngine) Protect(options map[string]interface{}) error {
 				Name: name,
 			}
 			addrSpecs = append(addrSpecs, spec)
-			runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[+] 手动函数: %s @ 0x%X-0x%X", name, spec.Addr, spec.End))
+			runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[+] Manual function: %s @ 0x%X-0x%X", name, spec.Addr, spec.End))
 		} else {
 			name, _ := fMap["name"].(string)
 			if name != "" {
@@ -207,7 +207,7 @@ func (e *VMPEngine) Protect(options map[string]interface{}) error {
 	}
 
 	totalCount := len(funcs) + len(addrSpecs)
-	runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[+] 开始提取并编译 %d 个目标函数节点 (符号: %d, 地址: %d)...", totalCount, len(funcs), len(addrSpecs)))
+	runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[+] Extracting and compiling %d target function nodes (Symbols: %d, Addresses: %d)...", totalCount, len(funcs), len(addrSpecs)))
 
 	packer := elfpacker.NewPacker(targetFile, outPath, funcs, addrSpecs, verbose, stripSymbols, enableDebug, tokenEntry, interpBlob)
 
@@ -216,11 +216,11 @@ func (e *VMPEngine) Protect(options map[string]interface{}) error {
 	// We'll trust that the quick process will just throw out outputs and we emit main events.
 
 	if err := packer.Process(); err != nil {
-		runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[x] 保护失败: %v", err))
+		runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[x] Protection failed: %v", err))
 		return err
 	}
 
-	runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[*] 初始化完成! 导出位置: %s", outPath))
+	runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[*] Initialization complete! Exported to: %s", outPath))
 	return nil
 }
 
