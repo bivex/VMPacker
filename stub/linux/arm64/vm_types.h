@@ -77,6 +77,10 @@ typedef struct {
 
   /* PC 反向遍历 */
   u8 reverse; /* 1=反向执行 (pc 递减), 0=正向 */
+
+  /* PIE/ASLR: runtime load base slide for CALL_NAT absolute addresses.
+   * slide = runtime_base - link_time_base.  0 for ET_EXEC. */
+  u64 slide;
 } vm_ctx_t;
 
 /* ---- SP 栈边界检查 ---- */
@@ -121,6 +125,9 @@ static inline void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
 
   /* PC 反向遍历: 默认正向 */
   vm->reverse = 0;
+
+  /* PIE/ASLR slide: 默认 0 (ET_EXEC) */
+  vm->slide = 0;
 }
 
 #endif /* VM_TYPES_H */

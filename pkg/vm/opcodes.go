@@ -71,6 +71,9 @@ const (
 	OpJae byte = 0x64 // JAE (无符号大于等于)
 	OpJbe byte = 0x53 // JBE (无符号小于等于, CF||ZF)  B.LS
 	OpJa  byte = 0x65 // JA  (无符号大于, !CF&&!ZF)    B.HI
+	// 溢出跳转
+	OpJvs byte = 0x76 // JVS imm32 (OF=1, overflow set)   B.VS
+	OpJvc byte = 0x77 // JVC imm32 (OF=0, overflow clear)  B.VC
 
 	// 栈操作
 	OpPush byte = 0x63 // PUSH Rx             2B
@@ -86,6 +89,9 @@ const (
 	// SIMD 加载/存储: [op][rn][len] = 3B
 	OpVld16 byte = 0xC1 // vtmp ← mem[R[rn]], len bytes
 	OpVst16 byte = 0xC2 // mem[R[rn]] ← vtmp, len bytes
+
+	// PIE/ASLR
+	OpSLoadSlide byte = 0xC4 // push vm->slide  1B
 
 	// TBZ/TBNZ: [op][reg][bit][target32] = 7B
 	OpTbz  byte = 0x16 // TBZ  Xt, #bit, target

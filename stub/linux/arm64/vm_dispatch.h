@@ -430,6 +430,9 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_trunc32(vm_ctx_t *vm) {
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_sext32(vm_ctx_t *vm) {
   return h_s_sext32(vm);
 }
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_load_slide(vm_ctx_t *vm) {
+  return h_s_load_slide(vm);
+}
 
 /* ---- 栈比较 ---- */
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_cmp(vm_ctx_t *vm) {
@@ -615,6 +618,7 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_S_REV32] = hw_s_rev32;
   tbl[OP_S_TRUNC32] = hw_s_trunc32;
   tbl[OP_S_SEXT32] = hw_s_sext32;
+  tbl[OP_S_LOAD_SLIDE] = hw_s_load_slide;
   tbl[OP_S_CMP] = hw_s_cmp;
   tbl[OP_S_LD8] = hw_s_ld8;
   tbl[OP_S_LD16] = hw_s_ld16;

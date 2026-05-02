@@ -14,6 +14,7 @@
 
 #include "../vm_decode.h"
 #include "../vm_types.h"
+#include "../vm_umulh.h"
 
 /* ---- 操作栈宏 (带边界检查) ---- */
 #define SPUSH(vm, val)                                                         \
@@ -160,28 +161,25 @@ static inline u32 h_s_ror(vm_ctx_t *vm) {
 
 static inline u32 h_s_umulh(vm_ctx_t *vm) {
   u64 b = SPOP(vm), a = SPOP(vm);
-  __uint128_t r = (__uint128_t)a * (__uint128_t)b;
-  SPUSH(vm, (u64)(r >> 64));
+  SPUSH(vm, umulh64(a, b));
   return 1;
 }
 
 static inline u32 h_s_smulh(vm_ctx_t *vm) {
   u64 b = SPOP(vm), a = SPOP(vm);
-  __int128 r = (__int128)(i64)a * (__int128)(i64)b;
-  SPUSH(vm, (u64)((unsigned __int128)r >> 64));
+  SPUSH(vm, smulh64(a, b));
   return 1;
 }
 
 static inline u32 h_s_udiv(vm_ctx_t *vm) {
   u64 b = SPOP(vm), a = SPOP(vm);
-  SPUSH(vm, b == 0 ? 0 : a / b);
+  SPUSH(vm, b == 0 ? 0 : UDIV64(a, b));
   return 1;
 }
 
 static inline u32 h_s_sdiv(vm_ctx_t *vm) {
   u64 b = SPOP(vm), a = SPOP(vm);
-  i64 divisor = (i64)b;
-  SPUSH(vm, divisor == 0 ? 0 : (u64)((i64)a / divisor));
+  SPUSH(vm, b == 0 ? 0 : SDIV64(a, b));
   return 1;
 }
 
@@ -269,6 +267,12 @@ static inline u32 h_s_trunc32(vm_ctx_t *vm) {
 static inline u32 h_s_sext32(vm_ctx_t *vm) {
   u64 v = SPOP(vm);
   SPUSH(vm, (u64)(i64)(i32)(u32)v);
+  return 1;
+}
+
+/* S_LOAD_SLIDE: push vm->slide (ASLR offset) onto eval stack */
+static inline u32 h_s_load_slide(vm_ctx_t *vm) {
+  SPUSH(vm, vm->slide);
   return 1;
 }
 

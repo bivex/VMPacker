@@ -11,6 +11,7 @@
 
 #include "../vm_decode.h"
 #include "../vm_types.h"
+#include "../vm_umulh.h"
 
 /* ========== 三寄存器 ALU (4B) ========== */
 
@@ -100,8 +101,7 @@ static inline u32 h_ror(vm_ctx_t *vm) {
 /* UMULH Xd, Xn, Xm (无符号高 64 位乘法) */
 static inline u32 h_umulh(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], a = vm->bc[vm->pc + 2], b = vm->bc[vm->pc + 3];
-  __uint128_t r = (__uint128_t)vm->R[a & 31] * (__uint128_t)vm->R[b & 31];
-  vm->R[d & 31] = (u64)(r >> 64);
+  vm->R[d & 31] = umulh64(vm->R[a & 31], vm->R[b & 31]);
   return 4;
 }
 
@@ -183,7 +183,7 @@ static inline u32 h_asr_imm(vm_ctx_t *vm) {
 static inline u32 h_udiv(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], a = vm->bc[vm->pc + 2], b = vm->bc[vm->pc + 3];
   u64 divisor = vm->R[b & 31];
-  vm->R[d & 31] = (divisor == 0) ? 0 : (vm->R[a & 31] / divisor);
+  vm->R[d & 31] = (divisor == 0) ? 0 : UDIV64(vm->R[a & 31], divisor);
   return 4;
 }
 
@@ -191,19 +191,14 @@ static inline u32 h_udiv(vm_ctx_t *vm) {
 static inline u32 h_sdiv(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], a = vm->bc[vm->pc + 2], b = vm->bc[vm->pc + 3];
   i64 divisor = (i64)vm->R[b & 31];
-  if (divisor == 0) {
-    vm->R[d & 31] = 0;
-  } else {
-    vm->R[d & 31] = (u64)((i64)vm->R[a & 31] / divisor);
-  }
+  vm->R[d & 31] = (divisor == 0) ? 0 : SDIV64(vm->R[a & 31], vm->R[b & 31]);
   return 4;
 }
 
 /* SMULH Xd, Xn, Xm (有符号高 64 位乘法) */
 static inline u32 h_smulh(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], a = vm->bc[vm->pc + 2], b = vm->bc[vm->pc + 3];
-  __int128 r = (__int128)(i64)vm->R[a & 31] * (__int128)(i64)vm->R[b & 31];
-  vm->R[d & 31] = (u64)((unsigned __int128)r >> 64);
+  vm->R[d & 31] = smulh64(vm->R[a & 31], vm->R[b & 31]);
   return 4;
 }
 

@@ -1,12 +1,23 @@
 package arm64
 
 import (
+	
+
 	"github.com/vmpacker/pkg/vm"
 )
 
 // ============================================================
 // 特殊指令翻译 — ADRP / ADR
 // ============================================================
+
+// emitAddrWithSlide emits bytecode that computes (link_time_addr + slide)
+// and stores it to register rd. For ET_EXEC slide=0 so this is a no-op addition.
+func (t *Translator) emitAddrWithSlide(rd byte, addr uint64) {
+	t.sPushImm64(addr)
+	t.emit(vm.OpSLoadSlide)
+	t.emit(vm.OpSAdd)
+	t.emit(vm.OpSVstore, rd)
+}
 
 func (t *Translator) trADRP(instructions []vm.Instruction, idx int) (int, error) {
 	inst := instructions[idx]
@@ -18,36 +29,17 @@ func (t *Translator) trADRP(instructions []vm.Instruction, idx int) (int, error)
 	pc := t.funcAddr + uint64(inst.Offset)
 	pageBase := pc &^ 0xFFF
 	adrpResult := pageBase + uint64(inst.Imm)
-	off := t.pos()
 
 	if idx+1 < len(instructions) {
 		next := instructions[idx+1]
 		if Op(next.Op) == ADD_IMM && next.Rd == inst.Rd && next.Rn == inst.Rd {
 			finalAddr := adrpResult + uint64(next.Imm)
-			t.emit(vm.OpMovImm, rd)
-			t.emitU64(0)
-			// 记录重定位信息
-			reloc := Relocation{
-				BcOffset:   uint64(off),
-				TargetAddr: finalAddr,
-				IsInternal: true,
-				FuncName:   t.currentFuncName,
-			}
-			t.relocations = append(t.relocations, reloc)
+			t.emitAddrWithSlide(rd, finalAddr)
 			return 1, nil
 		}
 	}
 
-	t.emit(vm.OpMovImm, rd)
-	t.emitU64(0)
-	// 记录重定位信息
-	reloc := Relocation{
-		BcOffset:   uint64(off),
-		TargetAddr: adrpResult,
-		IsInternal: true,
-		FuncName:   t.currentFuncName,
-	}
-	t.relocations = append(t.relocations, reloc)
+	t.emitAddrWithSlide(rd, adrpResult)
 	return 0, nil
 }
 
@@ -58,18 +50,7 @@ func (t *Translator) trADR(inst vm.Instruction) (int, error) {
 	}
 	pc := t.funcAddr + uint64(inst.Offset)
 	addr := pc + uint64(inst.Imm)
-	off := t.pos()
-	t.emit(vm.OpMovImm, rd)
-	t.emitU64(0)
-
-	// 记录重定位信息
-	reloc := Relocation{
-		BcOffset:   uint64(off),
-		TargetAddr: addr,
-		IsInternal: true,
-		FuncName:   t.currentFuncName,
-	}
-	t.relocations = append(t.relocations, reloc)
+	t.emitAddrWithSlide(rd, addr)
 	return 0, nil
 }
 

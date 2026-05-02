@@ -88,6 +88,9 @@
 #define OP_VLD16 0xC1 /* LD1 {Vn.16B}, [Xn]            3B: [op][rn][len] */
 #define OP_VST16 0xC2 /* ST1 {Vn.16B}, [Xn]            3B: [op][rn][len] */
 
+/* ---- PIE/ASLR ---- */
+#define OP_S_LOAD_SLIDE 0xC4 /* push vm->slide onto eval stack  1B */
+
 /* ---- TBZ/TBNZ ---- */
 #define OP_TBZ                                                                 \
   0x16 /* TBZ  Xt, #bit, target          7B: [op][reg][bit][target32] */

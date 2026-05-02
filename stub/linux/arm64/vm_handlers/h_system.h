@@ -15,12 +15,21 @@ static inline u32 h_nop(vm_ctx_t *vm) {
   return 1;
 }
 
-/* CALL_NAT: BLR 绝对地址调用  [9B: op | addr64] */
+/* CALL_NAT: BLR 绝对地址调用  [9B: op | addr64]
+ * For PIE/ET_DYN, addr is the link-time VA; add vm->slide to get runtime VA. */
 static inline u32 h_call_nat(vm_ctx_t *vm) {
-  u64 addr = rd64(&vm->bc[vm->pc + 1]);
+  u64 addr = rd64(&vm->bc[vm->pc + 1]) + vm->slide;
+#ifdef __aarch64__
   native_fn_t fn = (native_fn_t)addr;
   vm->R[0] = fn(vm->R[0], vm->R[1], vm->R[2], vm->R[3], vm->R[4], vm->R[5],
                 vm->R[6], vm->R[7]);
+#else
+  /* ARM32: args are 32-bit in R0-R3, rest on stack.  Must cast to u32 to
+   * avoid u64 register-pair alignment issues in AAPCS. */
+  typedef u32 (*fn32_t)(u32, u32, u32, u32);
+  fn32_t fn = (fn32_t)(u32)addr;
+  vm->R[0] = (u64)fn((u32)vm->R[0], (u32)vm->R[1], (u32)vm->R[2], (u32)vm->R[3]);
+#endif
   return 9;
 }
 
@@ -28,9 +37,15 @@ static inline u32 h_call_nat(vm_ctx_t *vm) {
 static inline u32 h_call_reg(vm_ctx_t *vm) {
   u8 rn = vm->bc[vm->pc + 1];
   u64 addr = vm->R[rn & 31];
+#ifdef __aarch64__
   native_fn_t fn = (native_fn_t)addr;
   vm->R[0] = fn(vm->R[0], vm->R[1], vm->R[2], vm->R[3], vm->R[4], vm->R[5],
                 vm->R[6], vm->R[7]);
+#else
+  typedef u32 (*fn32_t)(u32, u32, u32, u32);
+  fn32_t fn = (fn32_t)(u32)addr;
+  vm->R[0] = (u64)fn((u32)vm->R[0], (u32)vm->R[1], (u32)vm->R[2], (u32)vm->R[3]);
+#endif
   return 2;
 }
 
@@ -66,9 +81,15 @@ static inline u32 h_br_reg(vm_ctx_t *vm) {
   }
 
   /* 外部尾调用 → native call */
+#ifdef __aarch64__
   native_fn_t fn = (native_fn_t)addr;
   vm->R[0] = fn(vm->R[0], vm->R[1], vm->R[2], vm->R[3], vm->R[4], vm->R[5],
                 vm->R[6], vm->R[7]);
+#else
+  typedef u32 (*fn32_t)(u32, u32, u32, u32);
+  fn32_t fn = (fn32_t)(u32)addr;
+  vm->R[0] = (u64)fn((u32)vm->R[0], (u32)vm->R[1], (u32)vm->R[2], (u32)vm->R[3]);
+#endif
   return 2;
 }
 
@@ -93,62 +114,53 @@ static inline u32 h_vst16(vm_ctx_t *vm) {
 }
 
 /* SVC #imm16  [3B: op | imm16_lo | imm16_hi]
- * 执行 Linux syscall: X8=syscall号, X0-X5=参数, 结果写回 X0
- * imm16 通常为 0 (Linux AArch64 只用 svc #0) */
+ * 执行 Linux syscall: X8/R7=syscall号, X0-X5/R0-R5=参数, 结果写回 X0/R0
+ * imm16 通常为 0 (Linux 只用 svc #0) */
 static inline u32 h_svc(vm_ctx_t *vm) {
-  /* 从 VM 寄存器读取 syscall 参数 */
-  register long x8 __asm__("x8") = (long)vm->R[8]; /* syscall number */
+#ifdef __aarch64__
+  /* ARM64: x8=syscall, x0-x5=args */
+  register long x8 __asm__("x8") = (long)vm->R[8];
   register long x0 __asm__("x0") = (long)vm->R[0];
   register long x1 __asm__("x1") = (long)vm->R[1];
   register long x2 __asm__("x2") = (long)vm->R[2];
   register long x3 __asm__("x3") = (long)vm->R[3];
   register long x4 __asm__("x4") = (long)vm->R[4];
   register long x5 __asm__("x5") = (long)vm->R[5];
-  __asm__ volatile("svc #0"
-                   : "+r"(x0)
-                   : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x5)
-                   : "memory");
+  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x5) : "memory");
   vm->R[0] = (u64)x0;
+#else
+  /* ARM32: r7=syscall, r0-r6=args */
+  register long r7 __asm__("r7") = (long)vm->R[7];
+  register long r0 __asm__("r0") = (long)vm->R[0];
+  register long r1 __asm__("r1") = (long)vm->R[1];
+  register long r2 __asm__("r2") = (long)vm->R[2];
+  register long r3 __asm__("r3") = (long)vm->R[3];
+  register long r4 __asm__("r4") = (long)vm->R[4];
+  register long r5 __asm__("r5") = (long)vm->R[5];
+  __asm__ volatile("svc #0" : "+r"(r0) : "r"(r7), "r"(r1), "r"(r2), "r"(r3), "r"(r4), "r"(r5) : "memory");
+  vm->R[0] = (u64)r0;
+#endif
   return 3;
 }
 
 /* MRS Xd, <sysreg>  [4B: op | d | sysreg_lo | sysreg_hi]
- * 读取 ARM64 系统寄存器到 VM 虚拟寄存器。
+ * 读取系统寄存器到 VM 虚拟寄存器。
  * sysreg 是 15-bit 编码 = bits[19:5] of the MRS instruction.
- * 支持的系统寄存器:
- *   0x5F02 = cntvct_el0 (timer count)
- *   0x5F00 = cntfrq_el0 (timer frequency)
- *   0x5E82 = TPIDR_EL0   (Software Thread ID)
- *   0x5E83 = TPIDRRO_EL0 (Read-only Software Thread ID)
- *   0x5A10 = NZCV        (标志位寄存器)
  */
 static inline u32 h_mrs(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1];
   u16 sysreg = (u16)vm->bc[vm->pc + 2] | ((u16)vm->bc[vm->pc + 3] << 8);
   u64 val = 0;
+#ifdef __aarch64__
   switch (sysreg) {
-  case 0x5F02: /* cntvct_el0 */
-    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(val));
-    break;
-  case 0x5F00: /* cntfrq_el0 */
-    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(val));
-    break;
-  case 0x5E82: /* TPIDR_EL0 - Software Thread ID */
-    __asm__ volatile("mrs %0, tpidr_el0" : "=r"(val));
-    break;  
-  case 0x5E83: /* TPIDRRO_EL0 - Read-only Software Thread ID */
-    __asm__ volatile("mrs %0, tpidrro_el0" : "=r"(val));
-    break;
-  case 0x5A10: /* NZCV - flags */
-      val = ((vm->FL & FL_ZERO) ? 0x4 : 0)   /* Z bit (bit 2) */
-          | ((vm->FL & FL_SIGN) ? 0x8 : 0)   /* N bit (bit 3) */
-          | (!(vm->FL & FL_CARRY) ? 0x2 : 0); /* C bit (bit 1), 注意: 我们的 FL_CARRY = 无符号小于, ARM C 是反向的 */
-      val = val << 28; /* NZCV 在高 4 位 */
-    break;
-  default:
-    /* 不支持的系统寄存器，返回 0 */
-    break;
+  case 0x5F02: __asm__ volatile("mrs %0, cntvct_el0" : "=r"(val)); break;
+  case 0x5F00: __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(val)); break;
+  default: break;
   }
+#else
+  /* ARM32: cntvct_el0/cntfrq_el0 不存在，返回 0 */
+  (void)sysreg;
+#endif
   vm->R[d & 31] = val;
   return 4;
 }

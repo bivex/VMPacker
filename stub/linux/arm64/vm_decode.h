@@ -135,6 +135,7 @@ static inline u8 vm_insn_size(u8 op) {
   case OP_S_REV32:
   case OP_S_TRUNC32:
   case OP_S_SEXT32:
+  case OP_S_LOAD_SLIDE:
   case OP_S_CMP:
   case OP_S_LD8:
   case OP_S_LD16:

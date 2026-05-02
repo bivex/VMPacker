@@ -6,73 +6,67 @@ import (
 	"debug/elf"
 	"encoding/binary"
 	"fmt"
+
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/vmpacker/pkg/arch/arm32"
 	"github.com/vmpacker/pkg/arch/arm64"
 	"github.com/vmpacker/pkg/vm"
 )
 
 // ============================================================
-// ELF Parser + Modifier v3
+// ELF 解析器 + 修改器 v3
 //
-// Injection Strategy: PT_NOTE → PT_LOAD Hijacking
-//   1. Append VM interpreter blob + encrypted bytecode to the end of file
-//   2. Convert PT_NOTE segment to PT_LOAD (RX), mapping the appended data
-//   3. New LOAD segment uses independent virtual address (starting from 0x800000)
-//   4. Rewrite original function as a trampoline → BL to the VM interpreter in the new segment
+// 注入策略: PT_NOTE → PT_LOAD 劫持
+//   1. 将 VM 解释器 blob + 加密字节码追加到文件末尾
+//   2. 将 PT_NOTE 段转换为 PT_LOAD (RX)，映射追加的数据
+//   3. 新 LOAD 段使用独立的虚拟地址 (0x800000 起)
+//   4. 原函数改写为跳板 → BL 到新段中的 VM 解释器
 //
-// Advantages: No existing data is moved, preserving segment alignment.
+// 优点: 不移动任何现有数据，不破坏段对齐
 // ============================================================
 
-// AddrSpec specifies a function by address
+// AddrSpec 按地址指定函数
 type AddrSpec struct {
 	Addr uint64
-	End  uint64 // 0 = auto-detect
-	Name string // optional name
+	End  uint64 // 0 = 自动检测
+	Name string // 可选名称
 }
 
-// RuntimeReloc for runtime relocation entries
-type RuntimeReloc struct {
-	WritePos uint64 // Offset relative to bc (position of data to be relocated in final bytecode)
-	Offset   uint64 // Relative offset (runtime base must be added to complete relocation)
-	FuncId   uint64 // Links this relocation to a specific function ID
-}
-
-// ParseAddrSpec parses address specification: "0xADDR", "0xSTART-0xEND", "0xSTART-0xEND:name"
+// ParseAddrSpec 解析地址规格: "0xADDR", "0xSTART-0xEND", "0xSTART-0xEND:name"
 func ParseAddrSpec(s string) (AddrSpec, error) {
 	var spec AddrSpec
-	// Separate optional name (after the last colon)
+	// 分离可选名称 (最后一个冒号后面)
 	if idx := strings.LastIndex(s, ":"); idx > 2 {
 		candidate := s[idx+1:]
-		// If it doesn't look like a hex number, it's a name
+		// 如果不像十六进制数则是名称
 		if _, err := strconv.ParseUint(candidate, 0, 64); err != nil {
 			spec.Name = candidate
 			s = s[:idx]
 		}
 	}
-	// Parse address range
+	// 解析地址范围
 	if parts := strings.Split(s, "-"); len(parts) == 2 {
 		start, err := strconv.ParseUint(parts[0], 0, 64)
 		if err != nil {
-			return spec, fmt.Errorf("invalid start address: %s", parts[0])
+			return spec, fmt.Errorf("起始地址无效: %s", parts[0])
 		}
 		end, err := strconv.ParseUint(parts[1], 0, 64)
 		if err != nil {
-			return spec, fmt.Errorf("invalid end address: %s", parts[1])
+			return spec, fmt.Errorf("结束地址无效: %s", parts[1])
 		}
 		if end <= start {
-			return spec, fmt.Errorf("end address must be greater than start address")
+			return spec, fmt.Errorf("结束地址必须大于起始地址")
 		}
 		spec.Addr = start
 		spec.End = end
 	} else {
 		addr, err := strconv.ParseUint(s, 0, 64)
 		if err != nil {
-			return spec, fmt.Errorf("invalid address: %s", s)
+			return spec, fmt.Errorf("地址无效: %s", s)
 		}
 		spec.Addr = addr
 	}
@@ -82,31 +76,31 @@ func ParseAddrSpec(s string) (AddrSpec, error) {
 	return spec, nil
 }
 
-// Packer ELF VMP Packer
+// Packer ELF VMP 打包器
 type Packer struct {
-	inputPath    string
-	outputPath   string
-	soName       string
-	funcNames    []string
-	addrSpecs    []AddrSpec
-	verbose      bool
-	stripSymbols bool
-	debug        bool
-	tokenEntry   bool // Tokenized entry mode
-	data         []byte
-	interpBlob   []byte
-	relocations  []arm64.Relocation // Collected relocations
+	inputPath       string
+	outputPath      string
+	funcNames       []string
+	addrSpecs       []AddrSpec
+	verbose         bool
+	stripSymbols    bool
+	debug           bool
+	tokenEntry      bool // Token 化入口模式
+	data            []byte
+	interpBlob      []byte          // ARM64 blob
+	interpBlobARM32 []byte          // ARM32 blob (optional)
+	isARM32         bool            // detected at Process() time
+	thumbFuncs      map[uint64]bool // Thumb-mode function addresses (bit0 stripped)
 }
 
-// FuncBytecode stores encrypted bytecode and metadata for a single function
+// FuncBytecode 保存单个函数的加密字节码和元信息
 type FuncBytecode struct {
-	FI               *vm.FuncInfo
-	Encrypted        []byte
-	XorKey           byte
-	reverseOffsetMap map[int]int // Mapping after reversal (original offset → new offset)
+	FI        *vm.FuncInfo
+	Encrypted []byte
+	XorKey    byte
 }
 
-// NewPacker creates a new ELF packer
+// NewPacker 创建 ELF 打包器
 func NewPacker(input, output string, funcs []string, addrSpecs []AddrSpec, verbose, strip, debug, tokenEntry bool, interpBlob []byte) *Packer {
 	return &Packer{
 		inputPath:    input,
@@ -121,27 +115,40 @@ func NewPacker(input, output string, funcs []string, addrSpecs []AddrSpec, verbo
 	}
 }
 
-// FindFunction locates a function in the ELF
+// SetInterpBlobARM32 sets the ARM32 VM interpreter blob
+func (p *Packer) SetInterpBlobARM32(blob []byte) {
+	p.interpBlobARM32 = blob
+}
+
+// FindFunction 在 ELF 中查找函数
 func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 	syms, err := f.Symbols()
 	if err != nil {
-		// Try dynamic symbol table (for .so)
 		syms, err = f.DynamicSymbols()
-	}
-	if err != nil {
-		return nil, fmt.Errorf("reading symbol table failed: %v", err)
+		if err != nil {
+			return nil, fmt.Errorf("reading symbol table failed: %v", err)
+		}
 	}
 	for _, sym := range syms {
 		if sym.Name == name && elf.ST_TYPE(sym.Info) == elf.STT_FUNC {
+			addr := sym.Value
+			// ARM32: bit0 of symbol value indicates Thumb mode
+			if p.isARM32 && addr&1 != 0 {
+				if p.thumbFuncs == nil {
+					p.thumbFuncs = make(map[uint64]bool)
+				}
+				addr &^= 1 // strip Thumb bit
+				p.thumbFuncs[addr] = true
+			}
 			info := &vm.FuncInfo{
 				Name: sym.Name,
-				Addr: sym.Value,
+				Addr: addr,
 				Size: sym.Size,
 			}
 			if int(sym.Section) < len(f.Sections) {
 				sec := f.Sections[sym.Section]
 				info.Section = sec.Name
-				info.Offset = sec.Offset + (sym.Value - sec.Addr)
+				info.Offset = sec.Offset + (addr - sec.Addr)
 			}
 			return info, nil
 		}
@@ -206,10 +213,48 @@ func (p *Packer) FindFunctionByAddr(f *elf.File, spec AddrSpec) (*vm.FuncInfo, e
 
 	var size uint64
 	if spec.End > 0 {
-		// 用户指定了结束地址
 		size = spec.End - spec.Addr
+	} else if p.isARM32 {
+		// ARM32 RET detection: BX LR (0xE12FFF1E) or POP {..., PC} (0x__BD__xx)
+		startOff := spec.Addr - secAddr
+		isThumb := p.thumbFuncs[spec.Addr]
+		found := false
+		if isThumb {
+			// Thumb: scan 2 bytes at a time for POP {PC} (0xBDxx) or BX LR (0x4770)
+			for i := startOff; i+2 <= uint64(len(secData)); i += 2 {
+				hw := binary.LittleEndian.Uint16(secData[i:])
+				if hw == 0x4770 { // BX LR
+					size = i + 2 - startOff
+					found = true
+					break
+				}
+				if hw&0xFF00 == 0xBD00 { // POP {..., PC}
+					size = i + 2 - startOff
+					found = true
+					break
+				}
+			}
+		} else {
+			for i := startOff; i+4 <= uint64(len(secData)); i += 4 {
+				inst := binary.LittleEndian.Uint32(secData[i:])
+				if inst == 0xE12FFF1E { // BX LR
+					size = i + 4 - startOff
+					found = true
+					break
+				}
+				// POP {..., PC}: cond=AL, 0x08BD8000 mask
+				if inst&0xFFFF8000 == 0xE8BD8000 { // LDMIA SP!, {..., PC}
+					size = i + 4 - startOff
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("cannot detect function size at 0x%X (no BX LR / POP {PC} found)", spec.Addr)
+		}
 	} else {
-		// 自动检测: 扫描到 RET (0xD65F03C0) 指令
+		// ARM64: scan for RET (0xD65F03C0)
 		startOff := spec.Addr - secAddr
 		found := false
 		for i := startOff; i+4 <= uint64(len(secData)); i += 4 {
@@ -289,6 +334,49 @@ func (p *Packer) DecodeFunction(code []byte) []vm.Instruction {
 	return insts
 }
 
+// DecodeFunctionARM32 解码 ARM32/Thumb 指令
+func (p *Packer) DecodeFunctionARM32(code []byte, thumbMode bool) []vm.Instruction {
+	var dec *arm32.Decoder
+	if thumbMode {
+		dec = arm32.NewThumbDecoder()
+	} else {
+		dec = arm32.NewDecoder()
+	}
+	var insts []vm.Instruction
+	off := 0
+	for off < len(code) {
+		if thumbMode {
+			if off+2 > len(code) {
+				break
+			}
+			hw := binary.LittleEndian.Uint16(code[off:])
+			if arm32.IsThumb32(hw) {
+				if off+4 > len(code) {
+					break
+				}
+				hw2 := binary.LittleEndian.Uint16(code[off+2:])
+				raw32 := (uint32(hw) << 16) | uint32(hw2)
+				inst := dec.Decode(raw32, off)
+				insts = append(insts, inst)
+				off += 4
+			} else {
+				inst := dec.Decode(uint32(hw), off)
+				insts = append(insts, inst)
+				off += 2
+			}
+		} else {
+			if off+4 > len(code) {
+				break
+			}
+			raw := binary.LittleEndian.Uint32(code[off:])
+			inst := dec.Decode(raw, off)
+			insts = append(insts, inst)
+			off += 4
+		}
+	}
+	return insts
+}
+
 // Process 主入口
 func (p *Packer) Process() error {
 	var err error
@@ -303,20 +391,30 @@ func (p *Packer) Process() error {
 	}
 	defer f.Close()
 
-	if f.Machine != elf.EM_AARCH64 {
-		return fmt.Errorf("ARM64 only, got: %s", f.Machine)
+	switch {
+	case f.Machine == elf.EM_AARCH64 && f.Class == elf.ELFCLASS64:
+		p.isARM32 = false
+	case f.Machine == elf.EM_ARM && f.Class == elf.ELFCLASS32:
+		p.isARM32 = true
+		if p.thumbFuncs == nil {
+			p.thumbFuncs = make(map[uint64]bool)
+		}
+	default:
+		return fmt.Errorf("unsupported arch: machine=%s class=%s (need ARM64/ELF64 or ARM/ELF32)", f.Machine, f.Class)
 	}
-	if f.Class != elf.ELFCLASS64 {
-		return fmt.Errorf("64-bit ELF only")
+
+	activeBlob := p.interpBlob
+	if p.isARM32 {
+		activeBlob = p.interpBlobARM32
+		if len(activeBlob) == 0 {
+			return fmt.Errorf("ARM32 ELF detected but no ARM32 interp blob provided")
+		}
 	}
 
-	fmt.Printf("[*] ELF: %s, Type: %s, Name: %s\n", f.Machine, f.Type, p.soName)
-	p.soName = filepath.Base(p.inputPath)
-	fmt.Printf("[*] VM interp blob: %d bytes\n", len(p.interpBlob))
+	fmt.Printf("[*] ELF: %s, Type: %s, Class: %s\n", f.Machine, f.Type, f.Class)
+	fmt.Printf("[*] VM interp blob: %d bytes (ARM32=%v)\n", len(activeBlob), p.isARM32)
 
-	dec := arm64.NewDecoder()
-
-	// Phase 1: Collect bytecode for all functions
+	// 第一阶段: 收集所有函数的字节码
 	type funcEntry struct {
 		name   string
 		finder func() (*vm.FuncInfo, error)
@@ -346,38 +444,95 @@ func (p *Packer) Process() error {
 		fmt.Printf("    Addr: 0x%X, Size: %d bytes, Section: %s\n",
 			fi.Addr, fi.Size, fi.Section)
 
+		// Trampoline: ARM64=12B, ARM32=12B, Thumb=12B
+		var minTrampolineSize uint64 = 12
+		if p.isARM32 {
+			minTrampolineSize = 12
+		}
+		if fi.Size < minTrampolineSize {
+			return fmt.Errorf("function %s is too small (%d bytes) for trampoline injection (minimum %d bytes); "+
+				"consider excluding this function", fi.Name, fi.Size, minTrampolineSize)
+		}
+
 		code, err := p.ExtractFuncCode(f, fi)
 		if err != nil {
 			return err
 		}
 
-		insts := p.DecodeFunction(code)
-		fmt.Printf("    Instructions: %d\n", len(insts))
+		// Common translation result fields extracted from arch-specific types
+		type translationResult struct {
+			Bytecode    []byte
+			CodeLen     int
+			Unsupported []string
+			TotalInsts  int
+			TransInsts  int
+		}
 
-		if p.verbose {
-			fmt.Println("    --- Disasm ---")
-			for _, inst := range insts {
-				fmt.Printf("    0x%04X: %-12s raw=0x%08X\n",
-					inst.Offset, dec.InstName(inst.Op), inst.Raw)
+		var insts []vm.Instruction
+		var result translationResult
+		isThumbFunc := p.isARM32 && p.thumbFuncs[fi.Addr]
+
+		if p.isARM32 {
+			insts = p.DecodeFunctionARM32(code, isThumbFunc)
+			fmt.Printf("    Instructions: %d (Thumb=%v)\n", len(insts), isThumbFunc)
+
+			if p.verbose {
+				dec32 := arm32.NewDecoder()
+				fmt.Println("    --- Disasm ---")
+				for _, inst := range insts {
+					fmt.Printf("    0x%04X: %-12s raw=0x%08X\n",
+						inst.Offset, dec32.InstName(inst.Op), inst.Raw)
+				}
+				fmt.Println("    --- End ---")
 			}
-			fmt.Println("    --- End ---")
-		}
 
-		trans := arm64.NewTranslator(fi.Addr, int(fi.Size), fi.Name)
-		if p.debug {
-			trans.SetDebug(true)
-		}
-		result, err := trans.Translate(insts)
-		if err != nil {
-			return fmt.Errorf("translation failed: %v", err)
+			var tr *arm32.Translator
+			if isThumbFunc {
+				tr = arm32.NewThumbTranslator(fi.Addr, int(fi.Size), code)
+			} else {
+				tr = arm32.NewTranslator(fi.Addr, int(fi.Size), code)
+			}
+			if p.debug {
+				tr.SetDebug(true)
+			}
+			r, terr := tr.Translate(insts)
+			if terr != nil {
+				return fmt.Errorf("translation failed: %v", terr)
+			}
+			result = translationResult{
+				Bytecode: r.Bytecode, CodeLen: r.CodeLen,
+				Unsupported: r.Unsupported, TotalInsts: r.TotalInsts, TransInsts: r.TransInsts,
+			}
+		} else {
+			dec64 := arm64.NewDecoder()
+			insts = p.DecodeFunction(code)
+			fmt.Printf("    Instructions: %d\n", len(insts))
+
+			if p.verbose {
+				fmt.Println("    --- Disasm ---")
+				for _, inst := range insts {
+					fmt.Printf("    0x%04X: %-12s raw=0x%08X\n",
+						inst.Offset, dec64.InstName(inst.Op), inst.Raw)
+				}
+				fmt.Println("    --- End ---")
+			}
+
+			trans := arm64.NewTranslator(fi.Addr, int(fi.Size))
+			if p.debug {
+				trans.SetDebug(true)
+			}
+			r, terr := trans.Translate(insts)
+			if terr != nil {
+				return fmt.Errorf("translation failed: %v", terr)
+			}
+			result = translationResult{
+				Bytecode: r.Bytecode, CodeLen: r.CodeLen,
+				Unsupported: r.Unsupported, TotalInsts: r.TotalInsts, TransInsts: r.TransInsts,
+			}
 		}
 
 		fmt.Printf("    Translated: %d/%d\n", result.TransInsts, result.TotalInsts)
 		fmt.Printf("    Bytecode: %d bytes\n", len(result.Bytecode))
-
-		if len(result.Relocations) > 0 {
-			p.relocations = append(p.relocations, result.Relocations...)
-		}
 
 		if len(result.Unsupported) > 0 {
 			fmt.Printf("    [!] Unsupported (%d):\n", len(result.Unsupported))
@@ -385,20 +540,20 @@ func (p *Packer) Process() error {
 				fmt.Printf("        %s\n", u)
 			}
 
-			// Generate translation failure debug file
+			// 生成翻译失败 debug 文件
 			debugPath := p.outputPath + ".debug.txt"
 			df, derr := os.Create(debugPath)
 			if derr != nil {
-				fmt.Printf("    [!] debug file creation failed: %v\n", derr)
+				fmt.Printf("    [!] debug 文件创建失败: %v\n", derr)
 			} else {
 				fmt.Fprintf(df, "================================================================\n")
-				fmt.Fprintf(df, "Translation Failure Report — %s @ 0x%X\n", entry.name, fi.Addr)
-				fmt.Fprintf(df, "Function Size: %d bytes, Total Instructions: %d, Translated: %d\n",
+				fmt.Fprintf(df, "翻译失败报告 — %s @ 0x%X\n", entry.name, fi.Addr)
+				fmt.Fprintf(df, "函数大小: %d bytes, 总指令数: %d, 已翻译: %d\n",
 					fi.Size, result.TotalInsts, result.TransInsts)
 				fmt.Fprintf(df, "================================================================\n\n")
-				fmt.Fprintf(df, "Unsupported Instructions (%d):\n\n", len(result.Unsupported))
+				fmt.Fprintf(df, "不支持的指令 (%d):\n\n", len(result.Unsupported))
 
-				// Build offset→Instruction index to extract raw bytes
+				// 构建 offset→Instruction 索引，用于提取原始字节
 				instMap := make(map[int]vm.Instruction)
 				for _, inst := range insts {
 					instMap[inst.Offset] = inst
@@ -407,54 +562,81 @@ func (p *Packer) Process() error {
 				for idx, u := range result.Unsupported {
 					fmt.Fprintf(df, "[%d] %s\n", idx+1, u)
 
-					// Parse offset from unsupported string (format: "偏移 0x%X:")
+					// 尝试从 unsupported 字符串解析偏移 (格式: "偏移 0xNNNN: ...")
 					var off int
 					if _, err := fmt.Sscanf(u, "偏移 0x%X:", &off); err == nil {
 						if inst, ok := instMap[off]; ok {
 							raw := inst.Raw
-							fmt.Fprintf(df, "    Raw Bytes: %02X %02X %02X %02X\n",
+							fmt.Fprintf(df, "    原始字节: %02X %02X %02X %02X\n",
 								byte(raw), byte(raw>>8), byte(raw>>16), byte(raw>>24))
-							fmt.Fprintf(df, "    Absolute Address: 0x%X\n", fi.Addr+uint64(off))
+							fmt.Fprintf(df, "    绝对地址: 0x%X\n", fi.Addr+uint64(off))
 						}
 					}
 					fmt.Fprintln(df)
 				}
 
+				archName := "arm64"
+				if p.isARM32 {
+					archName = "arm32"
+				}
 				fmt.Fprintf(df, "================================================================\n")
-				fmt.Fprintf(df, "Fix Suggestions:\n")
-				fmt.Fprintf(df, "- Write demo test cases for each unsupported instruction (see demo/ directory)\n")
-				fmt.Fprintf(df, "- Add corresponding cases in pkg/arch/arm64/translator.go translateOne()\n")
-				fmt.Fprintf(df, "- Use -v flag to view full disassembly context\n")
+				fmt.Fprintf(df, "修复建议:\n")
+				fmt.Fprintf(df, "- 为每条不支持的指令编写 demo 测试用例 (参考 demo/ 目录)\n")
+				fmt.Fprintf(df, "- 在 pkg/arch/%s/translator.go translateOne() 中添加对应 case\n", archName)
+				fmt.Fprintf(df, "- 使用 -v 标志查看完整反汇编上下文\n")
 				fmt.Fprintf(df, "================================================================\n")
 
 				df.Close()
-				fmt.Printf("    [+] Failed translation debug file: %s\n", debugPath)
+				fmt.Printf("    [+] 翻译失败 debug 文件: %s\n", debugPath)
 			}
 
 			return fmt.Errorf("translation aborted: %d unsupported instruction(s) in %s — cannot produce safe output",
 				len(result.Unsupported), entry.name)
 		}
 
-		// debug: generate mapping file (pre-reverse, pre-encrypt)
+		// debug: 生成对照文件 (必须在反转/加密之前, 使用原始正向字节码)
 		if p.debug {
 			debugPath := p.outputPath + ".debug.txt"
 			df, derr := os.OpenFile(debugPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 			if derr != nil {
-				fmt.Printf("    [!] debug file creation failed: %v\n", derr)
+				fmt.Printf("    [!] debug file create failed: %v\n", derr)
 			} else {
 				fmt.Fprintf(df, "================================================================\n")
 				fmt.Fprintf(df, "Function: %s @ 0x%X (size: %d)\n", entry.name, fi.Addr, fi.Size)
 				fmt.Fprintf(df, "VM bytecode: %d bytes (pre-reverse)\n", len(result.Bytecode))
 				fmt.Fprintf(df, "================================================================\n\n")
 
-				for _, dbg := range trans.DebugLog() {
-					vmLines := vm.DisasmRange(result.Bytecode, dbg.VMStart, dbg.VMEnd)
-					fmt.Fprintf(df, "ARM64  %04X: %-16s  (raw=0x%08X)\n",
-						dbg.ARM64Offset, dbg.ARM64Asm, dbg.ARM64Raw)
-					for _, vl := range vmLines {
-						fmt.Fprintf(df, "  VM   %s\n", vl)
+				if p.isARM32 {
+					var tr32 *arm32.Translator
+					if isThumbFunc {
+						tr32 = arm32.NewThumbTranslator(fi.Addr, int(fi.Size), code)
+					} else {
+						tr32 = arm32.NewTranslator(fi.Addr, int(fi.Size), code)
 					}
-					fmt.Fprintln(df)
+					tr32.SetDebug(true)
+					tr32.Translate(insts)
+					for _, dbg := range tr32.DebugLog() {
+						vmLines := vm.DisasmRange(result.Bytecode, dbg.VMStart, dbg.VMEnd)
+						fmt.Fprintf(df, "ARM32  %04X: %-16s  (raw=0x%08X)\n",
+							dbg.ARM32Offset, dbg.ARM32Asm, dbg.ARM32Raw)
+						for _, vl := range vmLines {
+							fmt.Fprintf(df, "  VM   %s\n", vl)
+						}
+						fmt.Fprintln(df)
+					}
+				} else {
+					trans64 := arm64.NewTranslator(fi.Addr, int(fi.Size))
+					trans64.SetDebug(true)
+					trans64.Translate(insts)
+					for _, dbg := range trans64.DebugLog() {
+						vmLines := vm.DisasmRange(result.Bytecode, dbg.VMStart, dbg.VMEnd)
+						fmt.Fprintf(df, "ARM64  %04X: %-16s  (raw=0x%08X)\n",
+							dbg.ARM64Offset, dbg.ARM64Asm, dbg.ARM64Raw)
+						for _, vl := range vmLines {
+							fmt.Fprintf(df, "  VM   %s\n", vl)
+						}
+						fmt.Fprintln(df)
+					}
 				}
 
 				df.Close()
@@ -462,16 +644,15 @@ func (p *Packer) Process() error {
 			}
 		}
 
-		// ---- Reverse instructions order ----
-		// Must be done before OpcodeCryptor (encryption uses final PC)
+		// ---- PC 反向遍历: 反转指令顺序 ----
+		// 必须在 OpcodeCryptor 之前执行 (加密使用最终 pc 位置)
 		reversed, offsetMap := reverseInstructions(result.Bytecode, result.CodeLen)
 
-		// Remap branch targets using reversed offsets
+		// 重映射分支目标 (使用反转后的偏移)
 		newCodeLen := len(reversed)
 		remapBranchTargets(reversed, newCodeLen, offsetMap, p.verbose)
 
-		// Remap vm_off in addr_map (indirect BR jump)
-		// trailer is in result.Bytecode[result.CodeLen:], each entry 8B: [arm64_off:u32][vm_off:u32]
+		// 重映射 addr_map 中的 vm_off (BR 间接跳转)
 		mapCount := binary.LittleEndian.Uint32(result.Bytecode[len(result.Bytecode)-16:])
 		trailerStart := result.CodeLen
 		for j := 0; j < int(mapCount); j++ {
@@ -482,7 +663,7 @@ func (p *Packer) Process() error {
 			}
 		}
 
-		// Replace original instruction area with reversed bytecode, keep trailer
+		// 用反转后的字节码替换原始指令区，保留 trailer
 		trailer := result.Bytecode[result.CodeLen:]
 		finalBytecode := make([]byte, 0, newCodeLen+len(trailer))
 		finalBytecode = append(finalBytecode, reversed...)
@@ -495,24 +676,20 @@ func (p *Packer) Process() error {
 				len(offsetMap), newCodeLen, result.CodeLen, len(offsetMap))
 		}
 
-		// ---- OpcodeCryptor: Per-instruction opcode encryption ----
-		// Generate random 4-byte oc_key
+		// ---- OpcodeCryptor: 逐指令 opcode 加密 ----
 		var ocKeyBuf [4]byte
 		if _, err := rand.Read(ocKeyBuf[:]); err != nil {
 			return fmt.Errorf("generating oc_key failed: %v", err)
 		}
 		ocKey := binary.LittleEndian.Uint32(ocKeyBuf[:])
 
-		// Encrypt opcode byte for each instruction in the bytecode (only in [0:CodeLen] range)
-		// reversed=true: each instruction is followed by a 1B size marker
+		// 加密字节码 (reversed=true: 每条指令后有 1B size 标记)
 		encryptOpcodes(result.Bytecode, result.CodeLen, ocKey, true)
 
-		// Write reverse flag + oc_key into trailer placeholders
-		// trailer: [BR map entries][reverse(1B)][oc_key(4B)][map_count][func_addr][func_size]
-		// reverse is located after the BR map
-		reverseOffset := result.CodeLen + int(mapCount)*8 // After BR map
-		result.Bytecode[reverseOffset] = 1                // reverse = 1
-		ocKeyOffset := reverseOffset + 1                  // After reverse(1B)
+		// 将 reverse 标志 + oc_key 写入 trailer
+		reverseOffset := result.CodeLen + int(mapCount)*8
+		result.Bytecode[reverseOffset] = 1
+		ocKeyOffset := reverseOffset + 1                  // reverse(1B) 之后
 		binary.LittleEndian.PutUint32(result.Bytecode[ocKeyOffset:], ocKey)
 
 		if p.verbose {
@@ -520,22 +697,17 @@ func (p *Packer) Process() error {
 				ocKey, result.CodeLen, mapCount, reverseOffset, ocKeyOffset)
 		}
 
-		// ---- XOR chain encryption (entire bytecode) ----
+		// ---- XOR chain 加密 (整段字节码) ----
 		xorKey := byte(0xA5)
 		encrypted := make([]byte, len(result.Bytecode))
 		for i, b := range result.Bytecode {
 			encrypted[i] = b ^ xorKey
 		}
 
-		funcs = append(funcs, FuncBytecode{
-			FI:               fi,
-			Encrypted:        encrypted,
-			XorKey:           xorKey,
-			reverseOffsetMap: offsetMap,
-		})
+		funcs = append(funcs, FuncBytecode{FI: fi, Encrypted: encrypted, XorKey: xorKey})
 	}
 
-	// Phase 2: Batch Injection (PT_NOTE hijack)
+	// 第二阶段: 批量注入 (一次 PT_NOTE 劫持)
 	fmt.Printf("\n[*] Injecting %d functions...\n", len(funcs))
 	err = p.injectVMPBatch(funcs)
 	if err != nil {
@@ -546,7 +718,7 @@ func (p *Packer) Process() error {
 		fmt.Printf("    [+] %s VMP protected\n", fb.FI.Name)
 	}
 
-	// Phase 3: Strip Symbols (Optional)
+	// 第三阶段: 清除符号表 (可选)
 	if p.stripSymbols {
 		p.stripSections()
 		fmt.Println("[*] Symbols stripped")
@@ -562,13 +734,19 @@ func (p *Packer) Process() error {
 }
 
 // stripSections 就地清除符号/调试 section
-// stripSections 清除符号表等 section（等效 strip -s）
 // 不改变文件布局和 section header 数量，只将目标 section 置空
 // 同时修复其他 section 对被删除 section 的 sh_link 引用
 func (p *Packer) stripSections() {
+	if p.isARM32 {
+		p.stripSections32()
+		return
+	}
+	p.stripSections64()
+}
+
+func (p *Packer) stripSections64() {
 	ehdr := readEhdr64(p.data)
 
-	// 读取 section name string table
 	shstrIdx := binary.LittleEndian.Uint16(p.data[0x3E:])
 	shstrOff := ehdr.Shoff + uint64(shstrIdx)*uint64(ehdr.Shentsize)
 	shstrSecOff := binary.LittleEndian.Uint64(p.data[shstrOff+24:])
@@ -663,49 +841,107 @@ func (p *Packer) stripSections() {
 	}
 }
 
-// Phase 2: Batch Injection (PT_NOTE hijack)
+func (p *Packer) stripSections32() {
+	ehdr := readEhdr32(p.data)
+
+	// ELF32: e_shstrndx at offset 0x32
+	shstrIdx := binary.LittleEndian.Uint16(p.data[0x32:])
+	shstrOff := uint32(shstrIdx) * uint32(ehdr.Shentsize)
+	shstrOff += ehdr.Shoff
+	// ELF32 section header: sh_offset at +16 (4B), sh_size at +20 (4B)
+	shstrSecOff := binary.LittleEndian.Uint32(p.data[shstrOff+16:])
+	shstrSecSz := binary.LittleEndian.Uint32(p.data[shstrOff+20:])
+
+	getSectionName := func(nameOff uint32) string {
+		start := shstrSecOff + nameOff
+		if start >= uint32(len(p.data)) {
+			return ""
+		}
+		end := start
+		for end < shstrSecOff+shstrSecSz && end < uint32(len(p.data)) && p.data[end] != 0 {
+			end++
+		}
+		return string(p.data[start:end])
+	}
+
+	stripNames := map[string]bool{
+		".symtab": true, ".strtab": true, ".comment": true,
+		".note.GNU-stack": true, ".note.gnu.build-id": true,
+	}
+
+	stripped := make(map[int]bool)
+	for i := 0; i < int(ehdr.Shnum); i++ {
+		shOff := ehdr.Shoff + uint32(i)*uint32(ehdr.Shentsize)
+		nameOff := binary.LittleEndian.Uint32(p.data[shOff:])
+		name := getSectionName(nameOff)
+		if stripNames[name] {
+			stripped[i] = true
+		}
+	}
+
+	// ELF32 section header layout (40 bytes):
+	// +0: sh_name(4), +4: sh_type(4), +8: sh_flags(4), +12: sh_addr(4),
+	// +16: sh_offset(4), +20: sh_size(4), +24: sh_link(4), +28: sh_info(4),
+	// +32: sh_addralign(4), +36: sh_entsize(4)
+	for i := 0; i < int(ehdr.Shnum); i++ {
+		shOff := ehdr.Shoff + uint32(i)*uint32(ehdr.Shentsize)
+
+		if stripped[i] {
+			secOff := binary.LittleEndian.Uint32(p.data[shOff+16:])
+			secSz := binary.LittleEndian.Uint32(p.data[shOff+20:])
+
+			if uint64(secOff)+uint64(secSz) <= uint64(len(p.data)) {
+				for j := uint32(0); j < secSz; j++ {
+					p.data[secOff+j] = 0
+				}
+			}
+
+			// Clear section header fields (except sh_name)
+			binary.LittleEndian.PutUint32(p.data[shOff+4:], 0)  // sh_type = SHT_NULL
+			binary.LittleEndian.PutUint32(p.data[shOff+8:], 0)  // sh_flags
+			binary.LittleEndian.PutUint32(p.data[shOff+12:], 0) // sh_addr
+			binary.LittleEndian.PutUint32(p.data[shOff+16:], 0) // sh_offset
+			binary.LittleEndian.PutUint32(p.data[shOff+20:], 0) // sh_size
+			binary.LittleEndian.PutUint32(p.data[shOff+24:], 0) // sh_link
+			binary.LittleEndian.PutUint32(p.data[shOff+28:], 0) // sh_info
+			binary.LittleEndian.PutUint32(p.data[shOff+32:], 0) // sh_addralign
+			binary.LittleEndian.PutUint32(p.data[shOff+36:], 0) // sh_entsize
+		} else {
+			shLink := binary.LittleEndian.Uint32(p.data[shOff+24:])
+			if shLink > 0 && stripped[int(shLink)] {
+				binary.LittleEndian.PutUint32(p.data[shOff+24:], 0)
+			}
+		}
+	}
+}
+
+// injectVMPBatch — 批量 PT_NOTE hijack 注入
 func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
+	if p.isARM32 {
+		return p.injectVMPBatch32(funcs)
+	}
+	return p.injectVMPBatch64(funcs)
+}
+
+// injectVMPBatch64 — ARM64 ELF64 注入
+func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 	ehdr := readEhdr64(p.data)
 
-	// Read offset info from blob header
-	if len(p.interpBlob) < 8 {
-		return fmt.Errorf("interp blob too small: %d bytes", len(p.interpBlob))
+	if len(p.interpBlob) < 24 {
+		return fmt.Errorf("token mode requires extended blob header (24 bytes), got %d", len(p.interpBlob))
+	}
+	entryOff := binary.LittleEndian.Uint64(p.interpBlob[:8])
+	tokenEntryOff := binary.LittleEndian.Uint64(p.interpBlob[8:16])
+	tokenTableVAOff := binary.LittleEndian.Uint64(p.interpBlob[16:24])
+	interpCode := p.interpBlob[24:]
+	if tokenEntryOff == 0 {
+		return fmt.Errorf("vm_entry_token not found in blob (compile with -DVM_TOKEN_ENTRY)")
+	}
+	if tokenTableVAOff == 0 {
+		return fmt.Errorf("_token_table_va not found in blob (compile with -DVM_TOKEN_ENTRY)")
 	}
 
-	var entryOff, tokenEntryOff, tokenTableVAOff uint64
-	var interpCode []byte
-
-	if true { /* TOKEN_ONLY: Always use Token mode */
-		// Token mode: 24-byte extended header
-		if len(p.interpBlob) < 24 {
-			return fmt.Errorf("token mode requires extended blob header (24 bytes), got %d", len(p.interpBlob))
-		}
-		entryOff = binary.LittleEndian.Uint64(p.interpBlob[:8])
-		tokenEntryOff = binary.LittleEndian.Uint64(p.interpBlob[8:16])
-		tokenTableVAOff = binary.LittleEndian.Uint64(p.interpBlob[16:24])
-		interpCode = p.interpBlob[24:]
-		if tokenEntryOff == 0 {
-			return fmt.Errorf("vm_entry_token not found in blob (compile with -DVM_TOKEN_ENTRY)")
-		}
-		if tokenTableVAOff == 0 {
-			return fmt.Errorf("_token_table_va not found in blob (compile with -DVM_TOKEN_ENTRY)")
-		}
-	}
-	/* STANDARD_MODE_DISABLED: Standard header 读取已禁用
-	} else {
-		// 标准模式: blob 始终有 24 字节头 (vm_entry + vm_entry_token + _token_table_va)
-		// 即使不使用 token 模式，也需要跳过完整头部
-		if len(p.interpBlob) >= 24 {
-			entryOff = binary.LittleEndian.Uint64(p.interpBlob[:8])
-			interpCode = p.interpBlob[24:]
-		} else {
-			entryOff = binary.LittleEndian.Uint64(p.interpBlob[:8])
-			interpCode = p.interpBlob[8:]
-		}
-	}
-	STANDARD_MODE_DISABLED */
-
-	// 1. Construct payload: [interpCode][pad][bc0][pad][bc1][pad][...]
+	// 1. 构造 payload: [interpCode][bc0][pad][bc1][pad][...]
 	payload := make([]byte, 0, len(interpCode)+1024)
 	payload = append(payload, interpCode...)
 	for len(payload)%4 != 0 {
@@ -727,15 +963,13 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 		}
 	}
 
-	// 2. Append to end of file (page-aligned, QEMU user-mode compatible)
-	// Pad file to page boundary first
+	// 2. 追加到文件末尾 (页对齐)
 	appendOff := uint64(len(p.data))
 	padLen := (0x1000 - (appendOff % 0x1000)) % 0x1000
 	for i := uint64(0); i < padLen; i++ {
 		p.data = append(p.data, 0x00)
 	}
-	payloadFileOff := uint64(len(p.data)) // Now page-aligned
-	// Dynamically calculate payloadVA: scan all LOAD segments, take highest Vaddr+Memsz, align up to 64KB
+	payloadFileOff := uint64(len(p.data))
 	var maxVA uint64
 	for i := 0; i < int(ehdr.Phnum); i++ {
 		phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
@@ -747,15 +981,15 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 			}
 		}
 	}
-	payloadVA := (maxVA + 0xFFFF) &^ 0xFFFF // Align up to 64KB boundary
+	payloadVA := (maxVA + 0xFFFF) &^ 0xFFFF
 
 	p.data = append(p.data, payload...)
 
-	interpVA := payloadVA + entryOff // vm_entry offset is injected into blob header by Makefile
+	interpVA := payloadVA + entryOff
+	_ = interpVA
 
 	fmt.Printf("    Payload at file offset: 0x%X, VA: 0x%X, size: %d\n",
 		payloadFileOff, payloadVA, len(payload))
-	fmt.Printf("    VM interp VA: 0x%X\n", interpVA)
 
 	for i, fb := range funcs {
 		bcVA := payloadVA + uint64(records[i].payloadOff)
@@ -763,7 +997,7 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 			fb.FI.Name, bcVA, records[i].bcLen)
 	}
 
-	// 3. Find PT_NOTE segment and hijack as PT_LOAD
+	// 3. 找到 PT_NOTE 段并劫持为 PT_LOAD
 	noteIdx := -1
 	for i := 0; i < int(ehdr.Phnum); i++ {
 		phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
@@ -794,7 +1028,7 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 	fmt.Printf("    PT_NOTE[%d] -> PT_LOAD RX: off=0x%X va=0x%X sz=0x%X\n",
 		noteIdx, payloadFileOff, payloadVA, len(payload))
 
-	// 4b. Reorder all PT_LOAD segments by Vaddr ascending to prevent kernel BSS mapping failure
+	// 4b. 按 Vaddr 升序重排所有 PT_LOAD 段
 	{
 		type phdrSlot struct {
 			idx  int
@@ -808,7 +1042,6 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 				loads = append(loads, phdrSlot{idx: i, phdr: ph})
 			}
 		}
-		// Check if sorting is needed
 		needSort := false
 		for k := 1; k < len(loads); k++ {
 			if loads[k].phdr.Vaddr < loads[k-1].phdr.Vaddr {
@@ -817,23 +1050,19 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 			}
 		}
 		if needSort {
-			// Sort PHDR entries by Vaddr
 			sort.Slice(loads, func(a, b int) bool {
 				return loads[a].phdr.Vaddr < loads[b].phdr.Vaddr
 			})
-			// Collect original PHDR slot indices
 			slotIndices := make([]int, len(loads))
 			for k := range loads {
 				slotIndices[k] = loads[k].idx
 			}
 			sort.Ints(slotIndices)
-			// Write sorted PHDR content back to original slots
 			for k, si := range slotIndices {
 				off := ehdr.Phoff + uint64(si)*uint64(ehdr.Phentsize)
 				writePhdr64(p.data, off, loads[k].phdr)
 			}
 			fmt.Printf("    [PHDR] Reordered %d PT_LOAD segments by Vaddr ascending\n", len(loads))
-			// Update notePhdrOff — find payload segment's new position
 			for i := 0; i < int(ehdr.Phnum); i++ {
 				off := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
 				ph := readPhdr64(p.data, off)
@@ -845,169 +1074,300 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 		}
 	}
 
-	// 5. Write trampolines and destroy original code for each function
-	if true { /* TOKEN_ONLY: Always use Token trampoline */
-		// ---- Token Mode ----
+	// 5. Token 跳板
+	for len(payload)%8 != 0 {
+		payload = append(payload, 0x00)
+	}
+	tokenTableOff := len(payload)
+	tokenTableVA := payloadVA + uint64(tokenTableOff)
 
-		// 5a. Build token_desc_t descriptor table
-		// 8-byte aligned
-		for len(payload)%8 != 0 {
+	selfVA := payloadVA + tokenTableVAOff
+	for i := range funcs {
+		bcVA := payloadVA + uint64(records[i].payloadOff)
+		bcLen := uint32(records[i].bcLen)
+
+		var desc [16]byte
+		binary.LittleEndian.PutUint64(desc[0:], bcVA-selfVA)
+		binary.LittleEndian.PutUint32(desc[8:], bcLen)
+		binary.LittleEndian.PutUint32(desc[12:], 0)
+		payload = append(payload, desc[:]...)
+	}
+
+	newPhdr.Filesz = uint64(len(payload))
+	newPhdr.Memsz = uint64(len(payload))
+	writePhdr64(p.data, notePhdrOff, newPhdr)
+
+	p.data = p.data[:payloadFileOff]
+	p.data = append(p.data, payload...)
+
+	tblRelOff := tokenTableVA - selfVA
+	binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff:], tblRelOff)
+
+	// Patch _link_time_self_va (u64 right after _token_table_va) with link-time VA
+	// so the stub can compute ASLR slide = runtime_self_va - link_time_self_va
+	binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff+8:], selfVA)
+
+	fmt.Printf("    [TOKEN] descriptor table VA: 0x%X, entries: %d\n", tokenTableVA, len(funcs))
+	fmt.Printf("    [TOKEN] _token_table_va patched at blob offset 0x%X → relative offset 0x%X (PIE)\n", tokenTableVAOff, tblRelOff)
+	fmt.Printf("    [TOKEN] _link_time_self_va patched → 0x%X\n", selfVA)
+
+	vmEntryTokenVA := payloadVA + tokenEntryOff
+	fmt.Printf("    [TOKEN] vm_entry_token VA: 0x%X\n", vmEntryTokenVA)
+
+	for i, fb := range funcs {
+		funcID := uint32(i)
+		token := (uint32(fb.XorKey) << 24) | (0 << 12) | (funcID & 0xFFF)
+
+		trampoline := BuildTokenTrampoline(fb.FI.Addr, vmEntryTokenVA, token)
+		if uint64(len(trampoline)) > fb.FI.Size {
+			return fmt.Errorf("token trampoline for %s (%d bytes) exceeds function size (%d bytes)",
+				fb.FI.Name, len(trampoline), fb.FI.Size)
+		}
+
+		for j := 0; j < len(trampoline); j++ {
+			p.data[fb.FI.Offset+uint64(j)] = trampoline[j]
+		}
+
+		garbageLen := int(fb.FI.Size) - len(trampoline)
+		if garbageLen > 0 {
+			garbage := make([]byte, garbageLen)
+			rand.Read(garbage)
+			copy(p.data[fb.FI.Offset+uint64(len(trampoline)):], garbage)
+		}
+
+		fmt.Printf("    [TOKEN] %s: func_id=%d, token=0x%08X, trampoline=%d bytes\n",
+			fb.FI.Name, funcID, token, len(trampoline))
+	}
+
+	return nil
+}
+
+// injectVMPBatch32 — ARM32 ELF32 注入
+func (p *Packer) injectVMPBatch32(funcs []FuncBytecode) error {
+	ehdr := readEhdr32(p.data)
+	blob := p.interpBlobARM32
+
+	// ARM32 blob header: 3 x uint32 = 12 bytes (entryOff, tokenEntryOff, tokenTableVAOff)
+	if len(blob) < 12 {
+		return fmt.Errorf("ARM32 interp blob too small: %d bytes", len(blob))
+	}
+	entryOff := uint64(binary.LittleEndian.Uint32(blob[:4]))
+	tokenEntryOff := uint64(binary.LittleEndian.Uint32(blob[4:8]))
+	tokenTableVAOff := uint64(binary.LittleEndian.Uint32(blob[8:12]))
+	interpCode := blob[12:]
+	if tokenEntryOff == 0 {
+		return fmt.Errorf("vm_entry_token not found in ARM32 blob")
+	}
+	if tokenTableVAOff == 0 {
+		return fmt.Errorf("_token_table_va not found in ARM32 blob")
+	}
+	_ = entryOff
+
+	// 1. payload
+	payload := make([]byte, 0, len(interpCode)+1024)
+	payload = append(payload, interpCode...)
+	for len(payload)%4 != 0 {
+		payload = append(payload, 0x00)
+	}
+
+	type bcRecord struct {
+		payloadOff int
+		bcLen      int
+	}
+	records := make([]bcRecord, len(funcs))
+	for i, fb := range funcs {
+		records[i].payloadOff = len(payload)
+		records[i].bcLen = len(fb.Encrypted)
+		payload = append(payload, fb.Encrypted...)
+		for len(payload)%4 != 0 {
 			payload = append(payload, 0x00)
 		}
+	}
 
-		// Write count (8 bytes) before table for stub
-		countBuf := make([]byte, 8)
-		binary.LittleEndian.PutUint64(countBuf, uint64(len(funcs)))
-		payload = append(payload, countBuf...)
+	// 2. 页对齐追加
+	appendOff := uint64(len(p.data))
+	padLen := (0x1000 - (appendOff % 0x1000)) % 0x1000
+	for i := uint64(0); i < padLen; i++ {
+		p.data = append(p.data, 0x00)
+	}
+	payloadFileOff := uint32(len(p.data))
 
-		tokenTableOff := len(payload)
-		tokenTableVA := payloadVA + uint64(tokenTableOff)
-
-		// One token_desc_t (16 bytes) per function: bc_off(u64) + bc_len(u32) + reserved(u32)
-		// bc_off = relative offset from _token_table_va's own address (PIE compatible)
-		selfVA := payloadVA + tokenTableVAOff // VA of _token_table_va
-		for i := range funcs {
-			bcVA := payloadVA + uint64(records[i].payloadOff)
-			bcLen := uint32(records[i].bcLen)
-
-			var desc [16]byte
-			binary.LittleEndian.PutUint64(desc[0:], bcVA-selfVA) // Relative offset
-			binary.LittleEndian.PutUint32(desc[8:], bcLen)
-			binary.LittleEndian.PutUint32(desc[12:], 0) // reserved
-			payload = append(payload, desc[:]...)
+	// 动态计算 payloadVA (ELF32 uses 32-bit addresses)
+	var maxVA uint32
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		phOff := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
+		ph := readPhdr32(p.data, phOff)
+		if ph.Type == uint32(elf.PT_LOAD) {
+			end := ph.Vaddr + ph.Memsz
+			if end > maxVA {
+				maxVA = end
+			}
 		}
+	}
+	payloadVA := (maxVA + 0xFFFF) &^ 0xFFFF
 
-		// Add so_name info for runtime base detection
-		soName := p.soName
-		soNameStart := len(payload)
-		payload = append(payload, byte(len(soName)))
-		payload = append(payload, []byte(soName)...)
-		payload = append(payload, 0x00) // null terminator for safety
+	p.data = append(p.data, payload...)
 
-	// Add runtime relocation table if any
-	if len(p.relocations) > 0 {
-		fmt.Printf("    [RELOC] Processing %d relocations...\n", len(p.relocations))
+	fmt.Printf("    Payload at file offset: 0x%X, VA: 0x%X, size: %d\n",
+		payloadFileOff, payloadVA, len(payload))
 
-		// Find ELF base address (minimum Vaddr of PT_LOAD)
-		var elfBase uint64 = 0xFFFFFFFFFFFFFFFF
+	for i, fb := range funcs {
+		bcVA := payloadVA + uint32(records[i].payloadOff)
+		fmt.Printf("    [%s] bytecode VA: 0x%X, len: %d\n",
+			fb.FI.Name, bcVA, records[i].bcLen)
+	}
+
+	// 3. 找到 PT_NOTE
+	noteIdx := -1
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		phOff := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
+		ph := readPhdr32(p.data, phOff)
+		if ph.Type == uint32(elf.PT_NOTE) {
+			noteIdx = i
+			break
+		}
+	}
+	if noteIdx < 0 {
+		return fmt.Errorf("PT_NOTE segment not found")
+	}
+
+	// 4. PT_NOTE → PT_LOAD (RX)
+	notePhdrOff := ehdr.Phoff + uint32(noteIdx)*uint32(ehdr.Phentsize)
+	newPhdr := elf32Phdr{
+		Type:   uint32(elf.PT_LOAD),
+		Off:    payloadFileOff,
+		Vaddr:  payloadVA,
+		Paddr:  payloadVA,
+		Filesz: uint32(len(payload)),
+		Memsz:  uint32(len(payload)),
+		Flags:  uint32(elf.PF_R | elf.PF_X),
+		Align:  0x1000,
+	}
+	writePhdr32(p.data, notePhdrOff, newPhdr)
+
+	fmt.Printf("    PT_NOTE[%d] -> PT_LOAD RX: off=0x%X va=0x%X sz=0x%X\n",
+		noteIdx, payloadFileOff, payloadVA, len(payload))
+
+	// 4b. 按 Vaddr 升序重排 PT_LOAD
+	{
+		type phdrSlot struct {
+			idx  int
+			phdr elf32Phdr
+		}
+		var loads []phdrSlot
 		for i := 0; i < int(ehdr.Phnum); i++ {
-			phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
-			ph := readPhdr64(p.data, phOff)
-			if ph.Type == uint32(elf.PT_LOAD) && ph.Vaddr < elfBase {
-				elfBase = ph.Vaddr
+			off := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
+			ph := readPhdr32(p.data, off)
+			if ph.Type == uint32(elf.PT_LOAD) {
+				loads = append(loads, phdrSlot{idx: i, phdr: ph})
 			}
 		}
-		if elfBase == 0xFFFFFFFFFFFFFFFF {
-			elfBase = 0
-		}
-
-		var runtimeRelocs []RuntimeReloc
-
-		for i, fb := range funcs {
-			funcRelocs := p.getRelocationsForFunc(fb.FI.Name)
-			for _, reloc := range funcRelocs {
-				reOff := uint64(fb.reverseOffsetMap[int(reloc.BcOffset)])
-				writePos := reOff - 9 // pointing to the 8-byte operand
-				runtimeRelocs = append(runtimeRelocs, RuntimeReloc{
-					WritePos: writePos,
-					Offset:   reloc.TargetAddr - elfBase, // Use relative offset
-					FuncId:   uint64(i),
-				})
+		needSort := false
+		for k := 1; k < len(loads); k++ {
+			if loads[k].phdr.Vaddr < loads[k-1].phdr.Vaddr {
+				needSort = true
+				break
 			}
 		}
-
-		table := p.appendRuntimeRelocTable(runtimeRelocs)
-		payload = append(payload, table...)
-
-		fmt.Printf("\nRelocation table total size: %d bytes (at offset 0x%X, base=0x%X)\n", len(table), len(payload)-len(table), elfBase)
-	}
-
-		// Update PT_LOAD segment size (payload grown)
-		newPhdr.Filesz = uint64(len(payload))
-		newPhdr.Memsz = uint64(len(payload))
-		writePhdr64(p.data, notePhdrOff, newPhdr)
-
-		// Re-append payload to data (overwrite previous)
-		p.data = p.data[:payloadFileOff]
-		p.data = append(p.data, payload...)
-
-		// 5b. Patch _token_table_va: store offset relative to its own address (PIE compatible)
-		// selfVA = payloadVA + tokenTableVAOff (already calculated)
-		tblRelOff := tokenTableVA - selfVA
-		binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff:], tblRelOff)
-
-		fmt.Printf("    [TOKEN] descriptor table VA: 0x%X, entries: %d\n", tokenTableVA, len(funcs))
-		fmt.Printf("    [TOKEN] so_name: %s (at offset 0x%X)\n", soName, soNameStart)
-		fmt.Printf("    [TOKEN] _token_table_va patched at blob offset 0x%X → relative offset 0x%X (PIE)\n", tokenTableVAOff, tblRelOff)
-
-		// 5c. Generate Token trampoline for each function
-		vmEntryTokenVA := payloadVA + tokenEntryOff
-		fmt.Printf("    [TOKEN] vm_entry_token VA: 0x%X\n", vmEntryTokenVA)
-
-		for i, fb := range funcs {
-			funcID := uint32(i) // func_id = index (0-based)
-			token := (uint32(fb.XorKey) << 24) | (0 << 12) | (funcID & 0xFFF)
-
-			trampoline := BuildTokenTrampoline(fb.FI.Addr, vmEntryTokenVA, token)
-			if uint64(len(trampoline)) > fb.FI.Size {
-				return fmt.Errorf("token trampoline for %s (%d bytes) exceeds function size (%d bytes)",
-					fb.FI.Name, len(trampoline), fb.FI.Size)
+		if needSort {
+			sort.Slice(loads, func(a, b int) bool {
+				return loads[a].phdr.Vaddr < loads[b].phdr.Vaddr
+			})
+			slotIndices := make([]int, len(loads))
+			for k := range loads {
+				slotIndices[k] = loads[k].idx
 			}
-
-			// Write trampoline
-			for j := 0; j < len(trampoline); j++ {
-				p.data[fb.FI.Offset+uint64(j)] = trampoline[j]
+			sort.Ints(slotIndices)
+			for k, si := range slotIndices {
+				off := ehdr.Phoff + uint32(si)*uint32(ehdr.Phentsize)
+				writePhdr32(p.data, off, loads[k].phdr)
 			}
-
-			// Destroy remaining original code
-			garbageLen := int(fb.FI.Size) - len(trampoline)
-			if garbageLen > 0 {
-				garbage := make([]byte, garbageLen)
-				rand.Read(garbage)
-				copy(p.data[fb.FI.Offset+uint64(len(trampoline)):], garbage)
-			}
-
-			fmt.Printf("    [TOKEN] %s: func_id=%d, token=0x%08X, trampoline=%d bytes\n",
-				fb.FI.Name, funcID, token, len(trampoline))
-		}
-	}
-	/* STANDARD_MODE_DISABLED: Token 模式为唯一入口，Standard 模式已禁用
-	} else {
-		// ---- 标准模式 ----
-		for i, fb := range funcs {
-			bcVA := payloadVA + uint64(records[i].payloadOff)
-			bcLen := uint32(records[i].bcLen)
-
-			trampoline := BuildTrampoline(fb.FI.Addr, interpVA, bcVA, bcLen, fb.XorKey)
-			if uint64(len(trampoline)) > fb.FI.Size {
-				return fmt.Errorf("trampoline for %s (%d bytes) exceeds function size (%d bytes)",
-					fb.FI.Name, len(trampoline), fb.FI.Size)
-			}
-
-			// 写入跳板
-			for j := 0; j < len(trampoline); j++ {
-				p.data[fb.FI.Offset+uint64(j)] = trampoline[j]
-			}
-
-			// 用随机垃圾字节彻底销毁跳板后的原始代码
-			garbageLen := int(fb.FI.Size) - len(trampoline)
-			if garbageLen > 0 {
-				garbage := make([]byte, garbageLen)
-				rand.Read(garbage)
-				copy(p.data[fb.FI.Offset+uint64(len(trampoline)):], garbage)
-			}
-
-			if p.verbose {
-				fmt.Printf("    [%s] Trampoline (%d bytes) + Garbage (%d bytes):\n",
-					fb.FI.Name, len(trampoline), garbageLen)
-				for j := 0; j < len(trampoline); j += 4 {
-					inst := binary.LittleEndian.Uint32(trampoline[j:])
-					fmt.Printf("      +%02X: 0x%08X\n", j, inst)
+			fmt.Printf("    [PHDR] Reordered %d PT_LOAD segments by Vaddr ascending\n", len(loads))
+			for i := 0; i < int(ehdr.Phnum); i++ {
+				off := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
+				ph := readPhdr32(p.data, off)
+				if ph.Type == uint32(elf.PT_LOAD) && ph.Vaddr == payloadVA {
+					notePhdrOff = off
+					break
 				}
 			}
 		}
 	}
-	STANDARD_MODE_DISABLED */
+
+	// 5. Token 跳板 (ARM32)
+	for len(payload)%4 != 0 {
+		payload = append(payload, 0x00)
+	}
+	tokenTableOff := len(payload)
+	tokenTableVA32 := payloadVA + uint32(tokenTableOff)
+
+	// ARM32 token_desc_t: bc_off(u32) + bc_len(u32) = 8 bytes per entry
+	selfVA32 := payloadVA + uint32(tokenTableVAOff)
+	for i := range funcs {
+		bcVA := payloadVA + uint32(records[i].payloadOff)
+		bcLen := uint32(records[i].bcLen)
+
+		var desc [8]byte
+		binary.LittleEndian.PutUint32(desc[0:], bcVA-selfVA32)
+		binary.LittleEndian.PutUint32(desc[4:], bcLen)
+		payload = append(payload, desc[:]...)
+	}
+
+	newPhdr.Filesz = uint32(len(payload))
+	newPhdr.Memsz = uint32(len(payload))
+	writePhdr32(p.data, notePhdrOff, newPhdr)
+
+	p.data = p.data[:payloadFileOff]
+	p.data = append(p.data, payload...)
+
+	tblRelOff := tokenTableVA32 - selfVA32
+	binary.LittleEndian.PutUint32(p.data[payloadFileOff+uint32(tokenTableVAOff):], tblRelOff)
+
+	// Patch _link_time_self_va (word right after _token_table_va) with link-time VA
+	// so the stub can compute ASLR slide = runtime_self_va - link_time_self_va
+	binary.LittleEndian.PutUint32(p.data[payloadFileOff+uint32(tokenTableVAOff)+4:], selfVA32)
+
+	fmt.Printf("    [TOKEN] descriptor table VA: 0x%X, entries: %d\n", tokenTableVA32, len(funcs))
+	fmt.Printf("    [TOKEN] _token_table_va patched at blob offset 0x%X → relative offset 0x%X (PIE)\n", tokenTableVAOff, tblRelOff)
+	fmt.Printf("    [TOKEN] _link_time_self_va patched → 0x%X\n", selfVA32)
+
+	vmEntryTokenVA := payloadVA + uint32(tokenEntryOff)
+	fmt.Printf("    [TOKEN] vm_entry_token VA: 0x%X\n", vmEntryTokenVA)
+
+	for i, fb := range funcs {
+		funcID := uint32(i)
+		token := (uint32(fb.XorKey) << 24) | (0 << 12) | (funcID & 0xFFF)
+
+		isThumb := p.thumbFuncs[fb.FI.Addr]
+		var trampoline []byte
+		if isThumb {
+			trampoline = BuildTokenTrampolineThumb(uint32(fb.FI.Addr), vmEntryTokenVA, token)
+		} else {
+			trampoline = BuildTokenTrampolineARM32(uint32(fb.FI.Addr), vmEntryTokenVA, token)
+		}
+		if uint64(len(trampoline)) > fb.FI.Size {
+			return fmt.Errorf("token trampoline for %s (%d bytes) exceeds function size (%d bytes)",
+				fb.FI.Name, len(trampoline), fb.FI.Size)
+		}
+
+		for j := 0; j < len(trampoline); j++ {
+			p.data[fb.FI.Offset+uint64(j)] = trampoline[j]
+		}
+
+		garbageLen := int(fb.FI.Size) - len(trampoline)
+		if garbageLen > 0 {
+			garbage := make([]byte, garbageLen)
+			rand.Read(garbage)
+			copy(p.data[fb.FI.Offset+uint64(len(trampoline)):], garbage)
+		}
+
+		mode := "ARM"
+		if isThumb {
+			mode = "Thumb"
+		}
+		fmt.Printf("    [TOKEN] %s: func_id=%d, token=0x%08X, trampoline=%d bytes (%s)\n",
+			fb.FI.Name, funcID, token, len(trampoline), mode)
+	}
 
 	return nil
 }
@@ -1021,7 +1381,7 @@ func PrintELFInfo(path string) error {
 	defer f.Close()
 
 	fmt.Printf("ELF: %s\n", path)
-	fmt.Printf("  Arch: %s, Type: %s, Entry: 0x%X\n", f.Machine, f.Type, f.Entry)
+	fmt.Printf("  Arch: %s, Type: %s, Class: %s, Entry: 0x%X\n", f.Machine, f.Type, f.Class, f.Entry)
 
 	fmt.Println("\n  Sections:")
 	for _, s := range f.Sections {
@@ -1033,7 +1393,24 @@ func PrintELFInfo(path string) error {
 
 	fmt.Println("\n  Program Headers:")
 	raw, _ := os.ReadFile(path)
-	if len(raw) >= 64 {
+	if f.Class == elf.ELFCLASS32 && len(raw) >= 52 {
+		ehdr := readEhdr32(raw)
+		for i := 0; i < int(ehdr.Phnum); i++ {
+			ph := readPhdr32(raw, ehdr.Phoff+uint32(i)*uint32(ehdr.Phentsize))
+			flags := ""
+			if ph.Flags&uint32(elf.PF_R) != 0 {
+				flags += "R"
+			}
+			if ph.Flags&uint32(elf.PF_W) != 0 {
+				flags += "W"
+			}
+			if ph.Flags&uint32(elf.PF_X) != 0 {
+				flags += "X"
+			}
+			fmt.Printf("    [%d] Type=0x%X Flags=%s Off=0x%X VA=0x%X FileSz=0x%X MemSz=0x%X\n",
+				i, ph.Type, flags, ph.Off, ph.Vaddr, ph.Filesz, ph.Memsz)
+		}
+	} else if len(raw) >= 64 {
 		ehdr := readEhdr64(raw)
 		for i := 0; i < int(ehdr.Phnum); i++ {
 			ph := readPhdr64(raw, ehdr.Phoff+uint64(i)*uint64(ehdr.Phentsize))
@@ -1077,7 +1454,8 @@ func PrintELFInfo(path string) error {
 func branchTargetOffset(op byte) int {
 	switch op {
 	case vm.OpJmp, vm.OpJe, vm.OpJne, vm.OpJl, vm.OpJge,
-		vm.OpJgt, vm.OpJle, vm.OpJb, vm.OpJae, vm.OpJbe, vm.OpJa:
+		vm.OpJgt, vm.OpJle, vm.OpJb, vm.OpJae, vm.OpJbe, vm.OpJa,
+		vm.OpJvs, vm.OpJvc:
 		return 1
 	case vm.OpTbz, vm.OpTbnz:
 		return 3
@@ -1194,35 +1572,4 @@ func encryptOpcodes(bytecode []byte, codeLen int, ocKey uint32, reversed bool) {
 			pc += size
 		}
 	}
-}
-
-// getRelocationsForFunc returns relocs for a given function name
-func (p *Packer) getRelocationsForFunc(funcName string) []arm64.Relocation {
-	var result []arm64.Relocation
-	for _, r := range p.relocations {
-		if r.FuncName == funcName {
-			result = append(result, r)
-		}
-	}
-	return result
-}
-
-// appendRuntimeRelocTable generates binary table:
-// [magic:4][count:4][entries...]
-// entry: [func_id:8][write_pos:8][offset:8]
-func (p *Packer) appendRuntimeRelocTable(relocs []RuntimeReloc) []byte {
-	buf := new(bytes.Buffer)
-
-	// Magic: RTLR (0x524C5452)
-	binary.Write(buf, binary.LittleEndian, uint32(0x524C5452))
-	// Count
-	binary.Write(buf, binary.LittleEndian, uint32(len(relocs)))
-
-	for _, r := range relocs {
-		binary.Write(buf, binary.LittleEndian, r.FuncId)
-		binary.Write(buf, binary.LittleEndian, r.WritePos)
-		binary.Write(buf, binary.LittleEndian, r.Offset)
-	}
-
-	return buf.Bytes()
 }
