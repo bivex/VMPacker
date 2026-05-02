@@ -14,6 +14,7 @@ type TranslateResult struct {
 	Unsupported []string
 	TotalInsts  int
 	TransInsts  int
+	Relocations []vm.Relocation
 }
 
 // DebugEntry records a single instruction's debug mapping
@@ -310,6 +311,7 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 
 	result.Bytecode = t.code
 	result.Unsupported = t.unsupported
+	result.Relocations = make([]vm.Relocation, 0)
 	return result, nil
 }
 

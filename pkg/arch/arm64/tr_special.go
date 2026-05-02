@@ -13,7 +13,9 @@ import (
 // emitAddrWithSlide emits bytecode that computes (link_time_addr + slide)
 // and stores it to register rd. For ET_EXEC slide=0 so this is a no-op addition.
 func (t *Translator) emitAddrWithSlide(rd byte, addr uint64) {
+	bcOff := t.pos() + 2 // Offset of the imm64 in OpSPushImm64
 	t.sPushImm64(addr)
+	t.addReloc(bcOff, addr, false)
 	t.emit(vm.OpSLoadSlide)
 	t.emit(vm.OpSAdd)
 	t.emit(vm.OpSVstore, rd)

@@ -35,6 +35,7 @@ type TranslateResult struct {
 	Unsupported []string // 不支持的指令列表
 	TotalInsts  int      // 总指令数
 	TransInsts  int      // 已翻译指令数
+	Relocations []vm.Relocation
 }
 
 // DebugEntry 单条指令的 debug 对照信息
@@ -48,11 +49,12 @@ type DebugEntry struct {
 
 // Translator ARM64 → VM 翻译器
 type Translator struct {
-	code        []byte        // 输出缓冲
-	labels      map[int]int   // ARM64偏移 → VM字节码位置 映射
-	fixups      []branchFixup // 待修补的分支目标
-	funcSize    int           // 原函数大小（字节）
-	funcAddr    uint64        // 原函数起始地址
+	code        []byte          // 输出缓冲
+	labels      map[int]int     // ARM64偏移 → VM字节码位置 映射
+	fixups      []branchFixup   // 待修补的分支目标
+	relocations []vm.Relocation // 运行时重定位 (ASLR)
+	funcSize    int             // 原函数大小（字节）
+	funcAddr    uint64          // 原函数起始地址
 	unsupported []string
 	decoder     *Decoder     // 解码器引用（用于名称查找）
 	debug       bool         // debug 模式
@@ -68,11 +70,12 @@ type branchFixup struct {
 // NewTranslator 创建翻译器
 func NewTranslator(funcAddr uint64, funcSize int) *Translator {
 	return &Translator{
-		code:     make([]byte, 0, funcSize*4),
-		labels:   make(map[int]int),
-		funcAddr: funcAddr,
-		funcSize: funcSize,
-		decoder:  NewDecoder(),
+		code:        make([]byte, 0, funcSize*4),
+		labels:      make(map[int]int),
+		relocations: make([]vm.Relocation, 0),
+		funcAddr:    funcAddr,
+		funcSize:    funcSize,
+		decoder:     NewDecoder(),
 	}
 }
 
@@ -103,6 +106,15 @@ func (t *Translator) emitU64(v uint64) {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, v)
 	t.code = append(t.code, b...)
+}
+
+// addReloc 记录一个运行时重定位
+func (t *Translator) addReloc(bcOffset int, targetAddr uint64, isInternal bool) {
+	t.relocations = append(t.relocations, vm.Relocation{
+		BcOffset:   bcOffset,
+		TargetAddr: targetAddr,
+		IsInternal: isInternal,
+	})
 }
 
 // pos 当前字节码位置
@@ -223,6 +235,7 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 
 	result.Bytecode = t.code
 	result.Unsupported = t.unsupported
+	result.Relocations = t.relocations
 	return result, nil
 }
 

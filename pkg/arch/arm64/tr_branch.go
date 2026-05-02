@@ -72,7 +72,9 @@ func (t *Translator) trBranchCond(inst vm.Instruction) error {
 func (t *Translator) trBL(inst vm.Instruction) error {
 	target := uint64(int64(t.funcAddr) + int64(inst.Offset) + inst.Imm)
 
+	bcOff := t.pos() + 1 // Offset of the imm64 in OpCallNative
 	t.emit(vm.OpCallNative)
+	t.addReloc(bcOff, target, false)
 	t.emitU64(target)
 	return nil
 }

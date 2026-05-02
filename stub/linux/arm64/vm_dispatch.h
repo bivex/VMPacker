@@ -49,8 +49,7 @@ __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_halt(vm_ctx_t *vm) {
 }
 
 __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_ret(vm_ctx_t *vm) {
-  u8 r = vm->bc[vm->pc + 1];
-  vm->R[0] = vm->R[r & 31];
+  /* Return result from R[0] per AAPCS64 */
   return VM_STEP_RET;
 }
 

@@ -94,9 +94,9 @@ static inline void sys_munmap(void *addr, unsigned long size) {
  *
  * 返回: R[0] (模拟 X0 返回值)
  */
-__attribute__((section(".text.entry"))) u64 vm_entry(u64 *args, u8 *enc_bc,
-                                                     u32 bc_len, u8 xor_key,
-                                                     u64 slide);
+__attribute__((section(".text.entry"))) u64
+vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_ptr,
+         u32 func_id);
 
 /* ================================================================
  * Token 化入口 (条件编译)
@@ -144,7 +144,12 @@ vm_entry_token_inner(u64 *args, u32 token) {
   if (__builtin_expect(enc_bc == (u8 *)self_va || bc_len == 0, 0))
     return 0; /* 无效条目, 安全退出 */
 
-  return vm_entry(args, enc_bc, bc_len, xor_key, slide);
+  /* ---- 运行时重定位 (RTLR) ---- */
+  /* RTLR table 偏移存储在 _token_table_va + 16 */
+  u64 rtlr_off = *(volatile u64 *)(&_token_table_va + 2);
+  void *rtlr_ptr = (rtlr_off != 0) ? (void *)(self_va + rtlr_off) : 0;
+
+  return vm_entry(args, enc_bc, bc_len, xor_key, slide, rtlr_ptr, func_id);
 }
 
 /* Naked 汇编入口: 保存调用方寄存器, 调用 C 内部函数 */
@@ -174,9 +179,9 @@ __attribute__((naked, section(".text.entry"), used)) void vm_entry_token(void) {
 /* end TOKEN_ONLY */
 
 /* ---- vm_entry 实现 ---- */
-__attribute__((section(".text.entry"))) u64 vm_entry(u64 *args, u8 *enc_bc,
-                                                     u32 bc_len, u8 xor_key,
-                                                     u64 slide) {
+__attribute__((section(".text.entry"))) u64
+vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_ptr,
+         u32 func_id) {
   u64 ret = 0;
 
   /* ---- 1. 动态分配字节码缓冲区 (mmap, 替代栈上 64KB) ---- */
@@ -202,7 +207,30 @@ __attribute__((section(".text.entry"))) u64 vm_entry(u64 *args, u8 *enc_bc,
       bc_buf[i] = enc_bc[i] ^ xor_key;
   }
 
-  /* ---- 2b. 初始化 VM 上下文 (mmap 堆分配, 避免 Go/Rust 协程栈溢出) ---- */
+  /* ---- 1c. 运行时重定位 (RTLR) — 在可写缓冲区执行 ---- */
+  if (rtlr_ptr != 0) {
+    u8 *rtlr_start = (u8 *)rtlr_ptr;
+    if (*(u32 *)rtlr_start == 0x524C5452) { /* "RTLR" */
+      u32 count = *(u32 *)(rtlr_start + 4);
+      u8 *entry = rtlr_start + 8;
+      for (u32 i = 0; i < count; i++) {
+        u64 e_func_id = *(u64 *)entry;
+        if (e_func_id == (u64)func_id) {
+          u64 bc_off = *(u64 *)(entry + 8);
+          u64 target_va = *(u64 *)(entry + 16);
+          /* Fixup absolute address: runtime_addr = target_link_time_va + slide */
+          if (bc_off + 8 <= bc_len) {
+            *(u64 *)(bc_buf + bc_off) = target_va + slide;
+          }
+        } else if (e_func_id > (u64)func_id) {
+          break; /* entries sorted by func_id */
+        }
+        entry += 24;
+      }
+    }
+  }
+
+  /* ---- 2b. 初始化 VM 上下文 (mmap 堆分配) ---- */
   u32 ctx_alloc = (sizeof(vm_ctx_t) + 4095u) & ~4095u;
   vm_ctx_t *vm = (vm_ctx_t *)sys_mmap(ctx_alloc);
   if ((long)vm < 0) {
@@ -316,8 +344,7 @@ __attribute__((section(".text.entry"))) u64 vm_entry(u64 *args, u8 *enc_bc,
       goto cleanup;
     }
     if (_dec_op == OP_RET) {
-      u8 _r = vm->bc[vm->pc + 1];
-      ret = vm->R[_r & 31];
+      ret = vm->R[0];
       goto cleanup;
     }
 
@@ -350,8 +377,8 @@ __attribute__((section(".text.entry"))) u64 vm_entry(u64 *args, u8 *enc_bc,
     vm_handler_fn _handler = vm_jump_table[_dec_op];
     u32 _step = _handler(vm);
 
-    /* -- 检查 HALT 哨兵 (wrap_unknown 等返回) -- */
-    if (__builtin_expect(_step == VM_STEP_HALT, 0)) {
+    /* -- 检查 HALT/RET 哨兵 -- */
+    if (__builtin_expect(_step == VM_STEP_HALT || _step == VM_STEP_RET, 0)) {
       ret = vm->R[0];
       goto cleanup;
     }
@@ -789,7 +816,7 @@ L_UNKNOWN:
 
   /* ---- 统一退出: 释放 mmap 防止泄漏 ---- */
 cleanup:
-  sys_munmap(vm, ctx_alloc);
-  sys_munmap(bc_buf, alloc_size);
+  /* sys_munmap(vm, ctx_alloc); */
+  /* sys_munmap(bc_buf, alloc_size); */
   return ret;
 }

@@ -40,12 +40,21 @@ type Decoder interface {
 	InstName(op int) string
 }
 
+// Relocation 表示字节码中的运行时重定位需求 (主要用于 Android .so ASLR)
+type Relocation struct {
+	BcOffset   int    // 字节码中待修复的位置偏移
+	TargetAddr uint64 // 链接时的目标绝对地址 (runtime_addr = TargetAddr + slide)
+	IsInternal bool   // 目标是否在同一个被保护函数内
+}
+
 // TranslateResult 翻译结果
 type TranslateResult struct {
 	Bytecode    []byte
+	CodeLen     int // 纯字节码长度 (不含 trailer)
 	Unsupported []string
 	TotalInsts  int
 	TransInsts  int
+	Relocations []Relocation
 }
 
 // Translator 字节码翻译器接口

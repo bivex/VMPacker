@@ -91,13 +91,15 @@ type Packer struct {
 	interpBlobARM32 []byte          // ARM32 blob (optional)
 	isARM32         bool            // detected at Process() time
 	thumbFuncs      map[uint64]bool // Thumb-mode function addresses (bit0 stripped)
+	relocations     []vm.Relocation // 运行时待修复的重定位 (主要是 .so ASLR)
 }
 
 // FuncBytecode 保存单个函数的加密字节码和元信息
 type FuncBytecode struct {
-	FI        *vm.FuncInfo
-	Encrypted []byte
-	XorKey    byte
+	FI          *vm.FuncInfo
+	Encrypted   []byte
+	XorKey      byte
+	Relocations []vm.Relocation
 }
 
 // NewPacker 创建 ELF 打包器
@@ -120,7 +122,7 @@ func (p *Packer) SetInterpBlobARM32(blob []byte) {
 	p.interpBlobARM32 = blob
 }
 
-// FindFunction 在 ELF 中查找函数
+// FindFunction 在 ELF 中查找函数，并计算其实体在文件中的正确偏移
 func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 	syms, err := f.Symbols()
 	if err != nil {
@@ -132,12 +134,12 @@ func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 	for _, sym := range syms {
 		if sym.Name == name && elf.ST_TYPE(sym.Info) == elf.STT_FUNC {
 			addr := sym.Value
-			// ARM32: bit0 of symbol value indicates Thumb mode
+			// ARM32: bit0 indicates Thumb mode
 			if p.isARM32 && addr&1 != 0 {
 				if p.thumbFuncs == nil {
 					p.thumbFuncs = make(map[uint64]bool)
 				}
-				addr &^= 1 // strip Thumb bit
+				addr &^= 1
 				p.thumbFuncs[addr] = true
 			}
 			info := &vm.FuncInfo{
@@ -145,10 +147,32 @@ func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 				Addr: addr,
 				Size: sym.Size,
 			}
-			if int(sym.Section) < len(f.Sections) {
+
+			// 优先使用 Program Headers 定位文件偏移 (Android .so 必备)
+			foundOffset := false
+			for _, ph := range f.Progs {
+				if ph.Type == elf.PT_LOAD && (ph.Flags&elf.PF_X != 0) {
+					if addr >= ph.Vaddr && addr < ph.Vaddr+ph.Memsz {
+						info.Offset = ph.Off + (addr - ph.Vaddr)
+						info.Section = "__LOAD_X"
+						foundOffset = true
+						break
+					}
+				}
+			}
+
+			// 如果段信息找不到，回退到 Section Headers
+			if !foundOffset && int(sym.Section) < len(f.Sections) {
 				sec := f.Sections[sym.Section]
-				info.Section = sec.Name
-				info.Offset = sec.Offset + (addr - sec.Addr)
+				if addr >= sec.Addr {
+					info.Section = sec.Name
+					info.Offset = sec.Offset + (addr - sec.Addr)
+					foundOffset = true
+				}
+			}
+
+			if !foundOffset {
+				return nil, fmt.Errorf("could not determine file offset for function %s at 0x%X", name, addr)
 			}
 			return info, nil
 		}
@@ -276,6 +300,11 @@ func (p *Packer) FindFunctionByAddr(f *elf.File, spec AddrSpec) (*vm.FuncInfo, e
 		Size:    size,
 		Section: secName,
 		Offset:  secOffset + (spec.Addr - secAddr),
+	}
+	// Final sanity check for file offset
+	if fi.Offset >= uint64(len(p.data)) {
+		return nil, fmt.Errorf("calculated file offset 0x%X for 0x%X is out of bounds (file size 0x%X)",
+			fi.Offset, fi.Addr, len(p.data))
 	}
 	return fi, nil
 }
@@ -466,6 +495,7 @@ func (p *Packer) Process() error {
 			Unsupported []string
 			TotalInsts  int
 			TransInsts  int
+			Relocations []vm.Relocation
 		}
 
 		var insts []vm.Instruction
@@ -502,6 +532,10 @@ func (p *Packer) Process() error {
 			result = translationResult{
 				Bytecode: r.Bytecode, CodeLen: r.CodeLen,
 				Unsupported: r.Unsupported, TotalInsts: r.TotalInsts, TransInsts: r.TransInsts,
+				Relocations: r.Relocations,
+			}
+			if len(r.Relocations) > 0 {
+				p.relocations = append(p.relocations, r.Relocations...)
 			}
 		} else {
 			dec64 := arm64.NewDecoder()
@@ -528,6 +562,10 @@ func (p *Packer) Process() error {
 			result = translationResult{
 				Bytecode: r.Bytecode, CodeLen: r.CodeLen,
 				Unsupported: r.Unsupported, TotalInsts: r.TotalInsts, TransInsts: r.TransInsts,
+				Relocations: r.Relocations,
+			}
+			if len(r.Relocations) > 0 {
+				p.relocations = append(p.relocations, r.Relocations...)
 			}
 		}
 
@@ -704,7 +742,10 @@ func (p *Packer) Process() error {
 			encrypted[i] = b ^ xorKey
 		}
 
-		funcs = append(funcs, FuncBytecode{FI: fi, Encrypted: encrypted, XorKey: xorKey})
+		funcs = append(funcs, FuncBytecode{
+			FI: fi, Encrypted: encrypted, XorKey: xorKey,
+			Relocations: result.Relocations,
+		})
 	}
 
 	// 第二阶段: 批量注入 (一次 PT_NOTE 劫持)
@@ -745,16 +786,36 @@ func (p *Packer) stripSections() {
 }
 
 func (p *Packer) stripSections64() {
+	if len(p.data) < 64 {
+		return
+	}
 	ehdr := readEhdr64(p.data)
 
-	shstrIdx := binary.LittleEndian.Uint16(p.data[0x3E:])
-	shstrOff := ehdr.Shoff + uint64(shstrIdx)*uint64(ehdr.Shentsize)
+	// Validate section header table bounds
+	shTableEnd := ehdr.Shoff + uint64(ehdr.Shnum)*uint64(ehdr.Shentsize)
+	if ehdr.Shoff == 0 || shTableEnd > uint64(len(p.data)) {
+		if p.verbose {
+			fmt.Printf("    [strip] Section header table missing or truncated (shoff=0x%X, shnum=%d), skipping strip\n",
+				ehdr.Shoff, ehdr.Shnum)
+		}
+		return
+	}
+
+	if uint32(ehdr.Shstrndx) >= uint32(ehdr.Shnum) {
+		return
+	}
+
+	shstrOff := ehdr.Shoff + uint64(ehdr.Shstrndx)*uint64(ehdr.Shentsize)
 	shstrSecOff := binary.LittleEndian.Uint64(p.data[shstrOff+24:])
 	shstrSecSz := binary.LittleEndian.Uint64(p.data[shstrOff+32:])
 
+	if shstrSecOff+shstrSecSz > uint64(len(p.data)) {
+		return
+	}
+
 	getSectionName := func(nameOff uint32) string {
 		start := shstrSecOff + uint64(nameOff)
-		if start >= uint64(len(p.data)) {
+		if start >= uint64(len(p.data)) || start >= shstrSecOff+shstrSecSz {
 			return ""
 		}
 		end := start
@@ -842,19 +903,36 @@ func (p *Packer) stripSections64() {
 }
 
 func (p *Packer) stripSections32() {
+	if len(p.data) < 52 {
+		return
+	}
 	ehdr := readEhdr32(p.data)
 
-	// ELF32: e_shstrndx at offset 0x32
-	shstrIdx := binary.LittleEndian.Uint16(p.data[0x32:])
-	shstrOff := uint32(shstrIdx) * uint32(ehdr.Shentsize)
-	shstrOff += ehdr.Shoff
-	// ELF32 section header: sh_offset at +16 (4B), sh_size at +20 (4B)
+	// Validate section header table bounds
+	shTableEnd := uint64(ehdr.Shoff) + uint64(ehdr.Shnum)*uint64(ehdr.Shentsize)
+	if ehdr.Shoff == 0 || shTableEnd > uint64(len(p.data)) {
+		if p.verbose {
+			fmt.Printf("    [strip] Section header table missing or truncated (shoff=0x%X, shnum=%d), skipping strip\n",
+				ehdr.Shoff, ehdr.Shnum)
+		}
+		return
+	}
+
+	if uint32(ehdr.Shstrndx) >= uint32(ehdr.Shnum) {
+		return
+	}
+
+	shstrOff := uint32(ehdr.Shoff) + uint32(ehdr.Shstrndx)*uint32(ehdr.Shentsize)
 	shstrSecOff := binary.LittleEndian.Uint32(p.data[shstrOff+16:])
 	shstrSecSz := binary.LittleEndian.Uint32(p.data[shstrOff+20:])
 
+	if uint64(shstrSecOff)+uint64(shstrSecSz) > uint64(len(p.data)) {
+		return
+	}
+
 	getSectionName := func(nameOff uint32) string {
 		start := shstrSecOff + nameOff
-		if start >= uint32(len(p.data)) {
+		if start >= uint32(len(p.data)) || start >= shstrSecOff+shstrSecSz {
 			return ""
 		}
 		end := start
@@ -1093,6 +1171,36 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 		payload = append(payload, desc[:]...)
 	}
 
+	// 6. RTLR 重定位表 (主要用于 Android .so ASLR 修复)
+	// 格式: [Magic:4B "RTLR"][Count:4B][{func_id:8B, bc_off:8B, target_addr:8B}...]
+	rtlrOff := len(payload)
+	payload = append(payload, "RTLR"...)
+	totalRelocs := 0
+	for _, fb := range funcs {
+		totalRelocs += len(fb.Relocations)
+	}
+	tmp32 := make([]byte, 4)
+	binary.LittleEndian.PutUint32(tmp32, uint32(totalRelocs))
+	payload = append(payload, tmp32...)
+
+	if totalRelocs > 0 {
+		fmt.Printf("    [RELOC] Appending %d relocations to RTLR table\n", totalRelocs)
+		for i, fb := range funcs {
+			for _, rel := range fb.Relocations {
+				tmp64 := make([]byte, 8)
+				// func_id
+				binary.LittleEndian.PutUint64(tmp64, uint64(i))
+				payload = append(payload, tmp64...)
+				// bc_off
+				binary.LittleEndian.PutUint64(tmp64, uint64(rel.BcOffset))
+				payload = append(payload, tmp64...)
+				// target_addr
+				binary.LittleEndian.PutUint64(tmp64, rel.TargetAddr)
+				payload = append(payload, tmp64...)
+			}
+		}
+	}
+
 	newPhdr.Filesz = uint64(len(payload))
 	newPhdr.Memsz = uint64(len(payload))
 	writePhdr64(p.data, notePhdrOff, newPhdr)
@@ -1107,9 +1215,13 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 	// so the stub can compute ASLR slide = runtime_self_va - link_time_self_va
 	binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff+8:], selfVA)
 
+	// Patch RTLR offset into the descriptor table area (fixed position relative to selfVA)
+	// so the stub can find it.
+	// Actually, let's put the RTLR offset in the 3rd u64 of the header (at offset 24)
+	binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff+16:], uint64(rtlrOff)-(tokenTableVAOff))
+
 	fmt.Printf("    [TOKEN] descriptor table VA: 0x%X, entries: %d\n", tokenTableVA, len(funcs))
-	fmt.Printf("    [TOKEN] _token_table_va patched at blob offset 0x%X → relative offset 0x%X (PIE)\n", tokenTableVAOff, tblRelOff)
-	fmt.Printf("    [TOKEN] _link_time_self_va patched → 0x%X\n", selfVA)
+	fmt.Printf("    [TOKEN] RTLR table at offset 0x%X in payload, %d relocs\n", rtlrOff, totalRelocs)
 
 	vmEntryTokenVA := payloadVA + tokenEntryOff
 	fmt.Printf("    [TOKEN] vm_entry_token VA: 0x%X\n", vmEntryTokenVA)
