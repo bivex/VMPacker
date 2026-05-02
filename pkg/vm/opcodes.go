@@ -182,9 +182,21 @@ const (
 	OpSLd64 byte = 0x93 // pop addr → push *(u64*)  1B
 	OpSSt8  byte = 0x94 // pop val,addr → st8       1B
 	OpSSt16 byte = 0x95 // pop val,addr → st16      1B
-	OpSSt32 byte = 0x96 // pop val,addr → st32      1B
-	OpSSt64 byte = 0x97 // pop val,addr → st64      1B
-)
+	OpSSt32 byte = 0x96 // pop val,addr → st32       1B
+	OpSSt64 byte = 0x97 // pop val,addr → st64       1B
+
+	// SIMD 内存访问
+	OpSVLd byte = 0xA0 // LD SIMD: [op][reg][size_type] (8/16/32/64/128b)
+	OpSVSt byte = 0xA1 // ST SIMD: [op][reg][size_type]
+
+	// FP ALU
+	OpSFAdd byte = 0xB0 // FP ADD: [op][d][n][m][type]
+	OpSFSub byte = 0xB1 // FP SUB: [op][d][n][m][type]
+	OpSFMul byte = 0xB2 // FP MUL: [op][d][n][m][type]
+	OpSFDiv byte = 0xB3 // FP DIV: [op][d][n][m][type]
+	OpSFMov byte = 0xB4 // FP MOV: [op][d][n][type]
+	OpSFCmp byte = 0xB5 // FP CMP: [op][n][m][type]
+	)
 
 // 标志位
 const (

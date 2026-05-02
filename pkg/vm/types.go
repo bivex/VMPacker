@@ -13,6 +13,9 @@ package vm
 // translator 的 mapReg 统一处理。
 const REG_XZR = -2
 
+// REG_V_BASE SIMD/FP 寄存器 (V0-V31) 的起始偏移
+const REG_V_BASE = 64
+
 // Instruction 通用指令表示（架构无关）
 type Instruction struct {
 	Raw    uint32

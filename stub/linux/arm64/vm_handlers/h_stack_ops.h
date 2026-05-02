@@ -347,10 +347,57 @@ static inline u32 h_s_st32(vm_ctx_t *vm) {
 }
 
 static inline u32 h_s_st64(vm_ctx_t *vm) {
-  u64 val = SPOP(vm);
   u64 addr = SPOP(vm);
+  u64 val = SPOP(vm);
   *(u64 *)addr = val;
   return 1;
 }
+
+/* ================================================================
+ * SIMD 内存访问 (Stack machine based)
+ * ================================================================ */
+
+/* SVLD r, sz: pop addr → load sz bytes into V[r] [3B] */
+static inline u32 h_s_vld(vm_ctx_t *vm) {
+  u8 r = vm->bc[vm->pc + 1];
+  u8 sz_type = vm->bc[vm->pc + 2];
+  u64 addr = SPOP(vm);
+  u8 *dst = (u8 *)&vm->V[r & 31][0];
+
+  u32 width = 0;
+  if (sz_type == 0) width = 1;      // B
+  else if (sz_type == 1) width = 2; // H
+  else if (sz_type == 2) width = 4; // S
+  else if (sz_type == 3) width = 8; // D
+  else if (sz_type == 4) width = 16; // Q
+
+  if (width > 0) {
+    for (u32 i = 0; i < width; i++)
+      dst[i] = ((u8 *)addr)[i];
+  }
+  return 3;
+}
+
+/* SVST r, sz: pop addr → store sz bytes from V[r] [3B] */
+static inline u32 h_s_vst(vm_ctx_t *vm) {
+  u8 r = vm->bc[vm->pc + 1];
+  u8 sz_type = vm->bc[vm->pc + 2];
+  u64 addr = SPOP(vm);
+  u8 *src = (u8 *)&vm->V[r & 31][0];
+
+  u32 width = 0;
+  if (sz_type == 0) width = 1;      // B
+  else if (sz_type == 1) width = 2; // H
+  else if (sz_type == 2) width = 4; // S
+  else if (sz_type == 3) width = 8; // D
+  else if (sz_type == 4) width = 16; // Q
+
+  if (width > 0) {
+    for (u32 i = 0; i < width; i++)
+      ((u8 *)addr)[i] = src[i];
+  }
+  return 3;
+}
+
 
 #endif /* H_STACK_OPS_H */

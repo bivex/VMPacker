@@ -130,8 +130,12 @@ func (t *Translator) mapReg(arm64Reg int) (byte, error) {
 	if arm64Reg == vm.REG_XZR {
 		return 16, nil // XZR → R16 (临时零寄存器)
 	}
+	// SIMD registers V0-V31 are encoded as REG_V_BASE + 0..31
+	if arm64Reg >= vm.REG_V_BASE && arm64Reg < vm.REG_V_BASE+32 {
+		return byte(arm64Reg - vm.REG_V_BASE), nil
+	}
 	if arm64Reg < 0 || arm64Reg > 31 {
-		return 0, fmt.Errorf("寄存器 X%d 超出 VM 范围", arm64Reg)
+		return 0, fmt.Errorf("寄存器 X%d/V%d 超出 VM 范围", arm64Reg, arm64Reg-vm.REG_V_BASE)
 	}
 	return byte(arm64Reg), nil
 }
@@ -407,6 +411,10 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		return 0, t.trStackBitLogicalNot(inst, vm.OpSAnd, true)
 	case ORN:
 		return 0, t.trStackBitLogicalNot(inst, vm.OpSOr, false)
+
+	// ========== FP / SIMD ==========
+	case FADD, FSUB, FMUL, FDIV, FMOV, FCMP:
+		return t.translateFP(inst)
 
 	// ========== 位域操作 ==========
 

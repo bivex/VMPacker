@@ -56,12 +56,33 @@ hw_unknown(vm_ctx_t *vm) {
   return VM_STEP_HALT;
 }
 
-/* ---- NOP ---- */
-__attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_nop(vm_ctx_t *vm) {
-  return h_nop(vm);
+/* ---- MRS ---- */
+__attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_mrs(vm_ctx_t *vm) {
+  return h_mrs(vm);
 }
 
-/* ---- 数据移动 ---- */
+/* ---- FP ALU ---- */
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fadd(vm_ctx_t *vm) {
+  return h_fadd(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fsub(vm_ctx_t *vm) {
+  return h_fsub(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmul(vm_ctx_t *vm) {
+  return h_fmul(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fdiv(vm_ctx_t *vm) {
+  return h_fdiv(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmov(vm_ctx_t *vm) {
+  return h_fmov(vm);
+}
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_fcmp(vm_ctx_t *vm) {
+  return h_fcmp(vm);
+}
+
+/* ---- 栈机器 ---- */
+
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_mov_imm(vm_ctx_t *vm) {
   return h_mov_imm(vm);
 }
@@ -94,11 +115,20 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_store64(vm_ctx_t *vm) {
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_load16(vm_ctx_t *vm) {
   return h_load16(vm);
 }
-__attribute__((noinline)) VM_SECTION_MEM static u32 hw_store16(vm_ctx_t *vm) {
-  return h_store16(vm);
+__attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_st64(vm_ctx_t *vm) {
+  return h_s_st64(vm);
+}
+
+/* ---- SIMD 内存 ---- */
+__attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_vld(vm_ctx_t *vm) {
+  return h_s_vld(vm);
+}
+__attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_vst(vm_ctx_t *vm) {
+  return h_s_vst(vm);
 }
 
 /* ---- ALU 三寄存器 ---- */
+
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_add(vm_ctx_t *vm) {
   return h_add(vm);
 }
@@ -628,6 +658,18 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_S_ST16] = hw_s_st16;
   tbl[OP_S_ST32] = hw_s_st32;
   tbl[OP_S_ST64] = hw_s_st64;
+
+  /* ---- SIMD 内存访问 ---- */
+  tbl[OP_SVLD] = hw_s_vld;
+  tbl[OP_SVST] = hw_s_vst;
+
+  /* ---- FP ALU ---- */
+  tbl[OP_SFADD] = hw_fadd;
+  tbl[OP_SFSUB] = hw_fsub;
+  tbl[OP_SFMUL] = hw_fmul;
+  tbl[OP_SFDIV] = hw_fdiv;
+  tbl[OP_SFMOV] = hw_fmov;
+  tbl[OP_SFCMP] = hw_fcmp;
 }
 
 #endif /* VM_INDIRECT_DISPATCH */

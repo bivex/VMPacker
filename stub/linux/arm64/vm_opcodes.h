@@ -196,4 +196,16 @@
 #define OP_S_ST32 0x96 /* pop val,addr → *(u32*)addr=val  1B */
 #define OP_S_ST64 0x97 /* pop val,addr → *(u64*)addr=val  1B */
 
+/* ---- SIMD 内存访问 ---- */
+#define OP_SVLD 0xA0 /* LD SIMD: [op][reg][size_type] (8/16/32/64/128b) */
+#define OP_SVST 0xA1 /* ST SIMD: [op][reg][size_type] */
+
+/* ---- FP ALU ---- */
+#define OP_SFADD 0xB0 /* FP ADD: [op][d][n][m][type] */
+#define OP_SFSUB 0xB1 /* FP SUB: [op][d][n][m][type] */
+#define OP_SFMUL 0xB2 /* FP MUL: [op][d][n][m][type] */
+#define OP_SFDIV 0xB3 /* FP DIV: [op][d][n][m][type] */
+#define OP_SFMOV 0xB4 /* FP MOV: [op][d][n][type] */
+#define OP_SFCMP 0xB5 /* FP CMP: [op][n][m][type] */
+
 #endif /* VM_OPCODES_H */

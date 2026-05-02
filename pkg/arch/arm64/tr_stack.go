@@ -308,6 +308,17 @@ func (t *Translator) trStackLoad(inst vm.Instruction) error {
 		return err
 	}
 
+	if inst.Rd >= vm.REG_V_BASE {
+		szType := byte(inst.Shift)
+		t.sVload(rn)
+		if inst.Imm != 0 {
+			t.sPushImm(uint64(inst.Imm))
+			t.emit(vm.OpSAdd)
+		}
+		t.emit(vm.OpSVLd, rd, szType)
+		return nil
+	}
+
 	op := Op(inst.Op)
 	var sLdOp byte
 	switch op {
@@ -436,6 +447,17 @@ func (t *Translator) trStackStore(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd) // Rt = source value
 	if err != nil {
 		return err
+	}
+
+	if inst.Rd >= vm.REG_V_BASE {
+		szType := byte(inst.Shift)
+		t.sVload(rn)
+		if inst.Imm != 0 {
+			t.sPushImm(uint64(inst.Imm))
+			t.emit(vm.OpSAdd)
+		}
+		t.emit(vm.OpSVSt, rd, szType)
+		return nil
 	}
 
 	op := Op(inst.Op)
@@ -800,6 +822,7 @@ func (t *Translator) emitShiftOnStack(shiftType int, amount uint32, sf bool) {
 
 // trStackSTP 翻译 STP (Store Pair) — 栈模式
 func (t *Translator) trStackSTP(inst vm.Instruction) error {
+	isSIMD := inst.Rd >= vm.REG_V_BASE
 	rn, err := t.mapReg(inst.Rn)
 	if err != nil {
 		return err
@@ -811,6 +834,10 @@ func (t *Translator) trStackSTP(inst vm.Instruction) error {
 	rt2, err := t.mapReg(inst.Rm)
 	if err != nil {
 		return err
+	}
+
+	if isSIMD {
+		return t.trStackSTPSIMD(inst, rt1, rt2, rn)
 	}
 
 	var sStOp byte
@@ -885,8 +912,123 @@ func (t *Translator) trStackSTP(inst vm.Instruction) error {
 	return nil
 }
 
+func (t *Translator) trStackSTPSIMD(inst vm.Instruction, rt1, rt2, rn byte) error {
+	szType := byte(inst.Shift)
+	stride := inst.Imm / int64(t.imm7(inst.Raw)) // scale derived from Imm/imm7
+	if t.imm7(inst.Raw) == 0 {
+		stride = int64(1 << szType)
+	}
+
+	emitWriteback := func() {
+		t.sVload(rn)
+		if inst.Imm >= 0 {
+			t.sPushImm(uint64(inst.Imm))
+			t.emit(vm.OpSAdd)
+		} else {
+			t.sPushImm(uint64(-inst.Imm))
+			t.emit(vm.OpSSub)
+		}
+		t.sVstore(rn)
+	}
+
+	if inst.WB == 3 {
+		emitWriteback()
+		t.sVload(rn)
+		t.emit(vm.OpSVSt, rt1, szType)
+		t.sVload(rn)
+		t.sPushImm(uint64(stride))
+		t.emit(vm.OpSAdd)
+		t.emit(vm.OpSVSt, rt2, szType)
+	} else {
+		storeImm := inst.Imm
+		if inst.WB == 1 {
+			storeImm = 0
+		}
+		t.sVload(rn)
+		if storeImm != 0 {
+			t.sPushImm(uint64(storeImm))
+			t.emit(vm.OpSAdd)
+		}
+		t.emit(vm.OpSVSt, rt1, szType)
+
+		t.sVload(rn)
+		if storeImm+stride != 0 {
+			t.sPushImm(uint64(storeImm + stride))
+			t.emit(vm.OpSAdd)
+		}
+		t.emit(vm.OpSVSt, rt2, szType)
+
+		if inst.WB == 1 {
+			emitWriteback()
+		}
+	}
+	return nil
+}
+
+func (t *Translator) trStackLDPSIMD(inst vm.Instruction, rt1, rt2, rn byte) error {
+	szType := byte(inst.Shift)
+	stride := inst.Imm / int64(t.imm7(inst.Raw))
+	if t.imm7(inst.Raw) == 0 {
+		stride = int64(1 << szType)
+	}
+
+	emitWriteback := func() {
+		t.sVload(rn)
+		if inst.Imm >= 0 {
+			t.sPushImm(uint64(inst.Imm))
+			t.emit(vm.OpSAdd)
+		} else {
+			t.sPushImm(uint64(-inst.Imm))
+			t.emit(vm.OpSSub)
+		}
+		t.sVstore(rn)
+	}
+
+	if inst.WB == 3 {
+		emitWriteback()
+		t.sVload(rn)
+		t.emit(vm.OpSVLd, rt1, szType)
+		t.sVload(rn)
+		t.sPushImm(uint64(stride))
+		t.emit(vm.OpSAdd)
+		t.emit(vm.OpSVLd, rt2, szType)
+	} else {
+		loadImm := inst.Imm
+		if inst.WB == 1 {
+			loadImm = 0
+		}
+		t.sVload(rn)
+		if loadImm != 0 {
+			t.sPushImm(uint64(loadImm))
+			t.emit(vm.OpSAdd)
+		}
+		t.emit(vm.OpSVLd, rt1, szType)
+
+		t.sVload(rn)
+		if loadImm+stride != 0 {
+			t.sPushImm(uint64(loadImm + stride))
+			t.emit(vm.OpSAdd)
+		}
+		t.emit(vm.OpSVLd, rt2, szType)
+
+		if inst.WB == 1 {
+			emitWriteback()
+		}
+	}
+	return nil
+}
+
+func (t *Translator) imm7(raw uint32) int {
+	imm7 := (raw >> 15) & 0x7F
+	if imm7&0x40 != 0 {
+		return int(int8(imm7 | 0x80))
+	}
+	return int(imm7)
+}
+
 // trStackLDP 翻译 LDP (Load Pair) — 栈模式
 func (t *Translator) trStackLDP(inst vm.Instruction) error {
+	isSIMD := inst.Rd >= vm.REG_V_BASE
 	rn, err := t.mapReg(inst.Rn)
 	if err != nil {
 		return err
@@ -898,6 +1040,10 @@ func (t *Translator) trStackLDP(inst vm.Instruction) error {
 	rt2, err := t.mapReg(inst.Rm)
 	if err != nil {
 		return err
+	}
+
+	if isSIMD {
+		return t.trStackLDPSIMD(inst, rt1, rt2, rn)
 	}
 
 	var sLdOp byte

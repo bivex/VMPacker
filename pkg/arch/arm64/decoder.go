@@ -151,6 +151,19 @@ const (
 	LDPSW
 	LDADD
 	CAS
+
+	// FP/SIMD
+	FADD
+	FSUB
+	FMUL
+	FDIV
+	FMOV
+	FCMP
+	FNEG
+	FABS
+	FSQRT
+	FCVT
+
 	UNSUPPORTED
 )
 
@@ -203,6 +216,9 @@ func (d *Decoder) Decode(raw uint32, offset int) vm.Instruction {
 		matched = matchAndDecode(raw, ldstPatterns, &inst)
 	case op0&0b0111 == 0b0101, op0 == 0b1101:
 		matched = matchAndDecode(raw, dpRegPatterns, &inst)
+	case op0 == 0b0111, op0 == 0b1111:
+		// SIMD / Floating-point
+		matched = matchAndDecode(raw, fpuPatterns, &inst)
 	}
 
 	if !matched {
@@ -318,6 +334,9 @@ func OpName(op Op) string {
 		MSR_WRITE: "MSR", PRFM: "PRFM",
 		LDAR: "LDAR", STLR: "STLR", LDAXR: "LDAXR", STLXR: "STLXR",
 		LDPSW: "LDPSW", LDADD: "LDADD", CAS: "CAS",
+		FADD: "FADD", FSUB: "FSUB", FMUL: "FMUL", FDIV: "FDIV",
+		FMOV: "FMOV", FCMP: "FCMP", FNEG: "FNEG", FABS: "FABS",
+		FSQRT: "FSQRT", FCVT: "FCVT",
 	}
 	if n, ok := names[op]; ok {
 		return n

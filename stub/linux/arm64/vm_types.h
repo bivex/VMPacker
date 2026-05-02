@@ -42,6 +42,9 @@ typedef struct {
   /* 寄存器文件: R[0]-R[30] = X0-X30, R[31] = SP */
   u64 R[VM_REG_COUNT];
 
+  /* SIMD/FP 寄存器: V[0]-V[31], 每个 128-bit (2 x u64) */
+  u64 V[32][2];
+
   /* 条件标志 */
   u32 FL;
 
@@ -93,6 +96,11 @@ static inline void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
   /* 清零所有寄存器 */
   for (int i = 0; i < VM_REG_COUNT; i++)
     vm->R[i] = 0;
+
+  for (int i = 0; i < 32; i++) {
+    vm->V[i][0] = 0;
+    vm->V[i][1] = 0;
+  }
 
   /* 从 args 指针恢复参数寄存器 X0-X7 */
   for (int i = 0; i < 8; i++)
