@@ -62,19 +62,77 @@ static inline void sys_munmap(void *addr, unsigned long size) {
   __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1) : "memory");
 }
 
+/* ---- syscall: openat ---- */
+static inline int sys_openat(int dirfd, const char *pathname, int flags) {
+  register long x8 __asm__("x8") = 56; /* __NR_openat */
+  register long x0 __asm__("x0") = (long)dirfd;
+  register long x1 __asm__("x1") = (long)pathname;
+  register long x2 __asm__("x2") = (long)flags;
+  register long x3 __asm__("x3") = 0;
+  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3) : "memory");
+  return (int)x0;
+}
+
+/* ---- syscall: read ---- */
+static inline long sys_read(int fd, void *buf, unsigned long count) {
+  register long x8 __asm__("x8") = 63; /* __NR_read */
+  register long x0 __asm__("x0") = (long)fd;
+  register long x1 __asm__("x1") = (long)buf;
+  register long x2 __asm__("x2") = (long)count;
+  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2) : "memory");
+  return x0;
+}
+
+/* ---- syscall: close ---- */
+static inline int sys_close(int fd) {
+  register long x8 __asm__("x8") = 57; /* __NR_close */
+  register long x0 __asm__("x0") = (long)fd;
+  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8) : "memory");
+  return (int)x0;
+}
+
+/* ---- syscall: mprotect ---- */
+static inline int sys_mprotect(void *addr, unsigned long len, int prot) {
+  register long x8 __asm__("x8") = 226; /* __NR_mprotect */
+  register long x0 __asm__("x0") = (long)addr;
+  register long x1 __asm__("x1") = (long)len;
+  register long x2 __asm__("x2") = prot;
+  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2) : "memory");
+  return (int)x0;
+}
+
+/* ---- Text Write Helpers ---- */
+static inline void enable_text_write(void *addr) {
+  u64 page_start = (u64)addr & ~4095u;
+  sys_mprotect((void *)page_start, 4096, 7); /* PROT_READ | PROT_WRITE | PROT_EXEC */
+}
+
+static inline void disable_text_write(void *addr) {
+  u64 page_start = (u64)addr & ~4095u;
+  sys_mprotect((void *)page_start, 4096, 5); /* PROT_READ | PROT_EXEC */
+}
+
+/* ---- syscall: munmap ---- */
+__attribute__((section(".data.entry"), used)) volatile u64 _so_base = 0;
+
 /*
  * vm_entry — VM 解释器入口
  *
  * 参数:
- *   args    : 指向保存的 X0-X7, callerFP, callerLR (共10个u64)
- *   enc_bc  : XOR 加密的字节码
- *   bc_len  : 字节码长度
- *   xor_key : XOR 解密密钥
+ *   args           : 指向保存的 X0-X7, callerFP, callerLR (共10个u64)
+ *   table_addr     : token 描述符表地址
+ *   table_num      : token 描述符表项数
+ *   current_func_id: 当前函数 ID
+ *   enc_bc         : XOR 加密的字节码
+ *   bc_len         : 字节码长度
+ *   xor_key        : XOR 解密密钥
  *
  * 返回: R[0] (模拟 X0 返回值)
  */
-__attribute__((section(".text.entry"))) u64 vm_entry(u64 *args, u8 *enc_bc,
-                                                     u32 bc_len, u8 xor_key);
+__attribute__((section(".text.entry"))) u64 vm_entry(u64 *args,
+             u64 table_addr, u64 table_num,
+             u32 current_func_id,
+             u8 *enc_bc, u32 bc_len, u8 xor_key);
 
 /* ================================================================
  * Token 化入口 (条件编译)
@@ -115,7 +173,9 @@ vm_entry_token_inner(u64 *args, u32 token) {
   if (__builtin_expect(enc_bc == (u8 *)self_va || bc_len == 0, 0))
     return 0; /* 无效条目, 安全退出 */
 
-  return vm_entry(args, enc_bc, bc_len, xor_key);
+  u64 table_addr = (u64)table;
+  u64 table_num = *((u64 *)(((u8 *)(table)) - 8));
+  return vm_entry(args, table_addr, table_num, func_id, enc_bc, bc_len, xor_key);
 }
 
 /* Naked 汇编入口: 保存调用方寄存器, 调用 C 内部函数 */
@@ -140,9 +200,77 @@ __attribute__((naked, section(".text.entry"), used)) void vm_entry_token(void) {
 
 /* end TOKEN_ONLY */
 
+static u64 get_so_base_by_name(const char *name) {
+  int fd = sys_openat(-100, "/proc/self/maps", 0); /* AT_FDCWD = -100 */
+  if (fd < 0) return 0;
+
+  char buf[512];
+  char line[512];
+  int line_ptr = 0;
+  u64 base = 0;
+
+  for (;;) {
+    long n = sys_read(fd, buf, sizeof(buf));
+    if (n <= 0) break;
+
+    for (int i = 0; i < n; i++) {
+      if (buf[i] == '\n') {
+        line[line_ptr] = 0;
+        /* Minimal string search to avoid libc */
+        int found_name = 0;
+        for (int j = 0; line[j]; j++) {
+          int match = 1;
+          for (int k = 0; name[k]; k++) {
+            if (line[j + k] != name[k]) {
+              match = 0;
+              break;
+            }
+          }
+          if (match) {
+            found_name = 1;
+            break;
+          }
+        }
+
+        if (found_name) {
+          int found_rxp = 0;
+          for (int j = 0; line[j]; j++) {
+            if (line[j] == 'r' && line[j+1] == '-' && line[j+2] == 'x' && line[j+3] == 'p') {
+              found_rxp = 1;
+              break;
+            }
+          }
+          if (found_rxp) {
+            /* Parse base address (hex) */
+            u64 addr = 0;
+            for (int j = 0; line[j]; j++) {
+              char c = line[j];
+              if (c >= '0' && c <= '9') addr = (addr << 4) | (c - '0');
+              else if (c >= 'a' && c <= 'f') addr = (addr << 4) | (c - 'a' + 10);
+              else if (c >= 'A' && c <= 'F') addr = (addr << 4) | (c - 'A' + 10);
+              else break;
+            }
+            base = addr;
+            goto found;
+          }
+        }
+        line_ptr = 0;
+      } else if (line_ptr < 511) {
+        line[line_ptr++] = buf[i];
+      }
+    }
+  }
+
+found:
+  sys_close(fd);
+  return base;
+}
+
 /* ---- vm_entry 实现 ---- */
-__attribute__((section(".text.entry"))) u64 vm_entry(u64 *args, u8 *enc_bc,
-                                                     u32 bc_len, u8 xor_key) {
+__attribute__((section(".text.entry"))) u64 vm_entry(u64 *args,
+             u64 table_addr, u64 table_num,
+             u32 current_func_id,
+             u8 *enc_bc, u32 bc_len, u8 xor_key) {
   u64 ret = 0;
 
   /* ---- 1. 动态分配字节码缓冲区 (mmap, 替代栈上 64KB) ---- */
@@ -225,6 +353,40 @@ __attribute__((section(".text.entry"))) u64 vm_entry(u64 *args, u8 *enc_bc,
     } else {
       /* 无 BR map: 只剥离 21B 固定 trailer */
       vm->bc_len = bc_len - 21;
+    }
+  }
+
+  /* ---- 2d. 运行时重定位 (Relocation) ---- */
+  if (table_addr != 0) {
+    /* 1. Get so name from token_desc_t table */
+    u8 *so_name_info = (u8 *)(table_addr + sizeof(token_desc_t) * table_num);
+    u8 so_name_len = so_name_info[0];
+    u8 *so_name = so_name_info + 1;
+
+    /* 2. Find so base if not cached */
+    if (_so_base == 0) {
+      enable_text_write((void *)&_so_base);
+      _so_base = get_so_base_by_name((char *)so_name);
+      disable_text_write((void *)&_so_base);
+    }
+
+    /* 3. Parse relocation table (RTLR magic) */
+    u8 *reloc_table_start = (u8 *)((u64)so_name_info + so_name_len + 2);
+    u32 magic = rd32(reloc_table_start);
+    if (magic == 0x524C5452) { /* "RTLR" */
+      u32 reloc_count = rd32(reloc_table_start + 4);
+      u8 *reloc_entry = reloc_table_start + 8;
+      for (u32 i = 0; i < reloc_count; i++) {
+        u64 func_id = rd64(reloc_entry);
+        if (func_id == current_func_id) {
+          u64 *write_pos = (u64 *)(bc_buf + rd64(reloc_entry + 8));
+          u64 offset = rd64(reloc_entry + 16);
+          *write_pos = _so_base + offset;
+        }
+        if (func_id > current_func_id)
+          break;
+        reloc_entry += 24;
+      }
     }
   }
 

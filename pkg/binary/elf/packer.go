@@ -6,8 +6,8 @@ import (
 	"debug/elf"
 	"encoding/binary"
 	"fmt"
-
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +33,13 @@ type AddrSpec struct {
 	Addr uint64
 	End  uint64 // 0 = 自动检测
 	Name string // 可选名称
+}
+
+// RuntimeReloc 用于运行时重定位条目
+type RuntimeReloc struct {
+	WritePos uint64 // 相对于 bc 的偏移（待重定位数据的地址在最终字节码中的偏移）
+	Offset   uint64 // 相对偏移（需要运行时加上基址完成重定位）
+	FuncId   uint64 // 标记此重定位信息属于哪个函数的（函数 id）
 }
 
 // ParseAddrSpec 解析地址规格: "0xADDR", "0xSTART-0xEND", "0xSTART-0xEND:name"
@@ -79,6 +86,7 @@ func ParseAddrSpec(s string) (AddrSpec, error) {
 type Packer struct {
 	inputPath    string
 	outputPath   string
+	soName       string
 	funcNames    []string
 	addrSpecs    []AddrSpec
 	verbose      bool
@@ -87,13 +95,15 @@ type Packer struct {
 	tokenEntry   bool // Token 化入口模式
 	data         []byte
 	interpBlob   []byte
+	relocations  []arm64.Relocation // 收集所有重定位
 }
 
 // FuncBytecode 保存单个函数的加密字节码和元信息
 type FuncBytecode struct {
-	FI        *vm.FuncInfo
-	Encrypted []byte
-	XorKey    byte
+	FI               *vm.FuncInfo
+	Encrypted        []byte
+	XorKey           byte
+	reverseOffsetMap map[int]int // 反转后 offset 映射 (原 offset → 新 offset)
 }
 
 // NewPacker 创建 ELF 打包器
@@ -114,6 +124,10 @@ func NewPacker(input, output string, funcs []string, addrSpecs []AddrSpec, verbo
 // FindFunction 在 ELF 中查找函数
 func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 	syms, err := f.Symbols()
+	if err != nil {
+		// 尝试动态符号表（针对 .so）
+		syms, err = f.DynamicSymbols()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("reading symbol table failed: %v", err)
 	}
@@ -296,7 +310,8 @@ func (p *Packer) Process() error {
 		return fmt.Errorf("64-bit ELF only")
 	}
 
-	fmt.Printf("[*] ELF: %s, Type: %s\n", f.Machine, f.Type)
+	fmt.Printf("[*] ELF: %s, Type: %s, Name: %s\n", f.Machine, f.Type, p.soName)
+	p.soName = filepath.Base(p.inputPath)
 	fmt.Printf("[*] VM interp blob: %d bytes\n", len(p.interpBlob))
 
 	dec := arm64.NewDecoder()
@@ -348,7 +363,7 @@ func (p *Packer) Process() error {
 			fmt.Println("    --- End ---")
 		}
 
-		trans := arm64.NewTranslator(fi.Addr, int(fi.Size))
+		trans := arm64.NewTranslator(fi.Addr, int(fi.Size), fi.Name)
 		if p.debug {
 			trans.SetDebug(true)
 		}
@@ -359,6 +374,10 @@ func (p *Packer) Process() error {
 
 		fmt.Printf("    Translated: %d/%d\n", result.TransInsts, result.TotalInsts)
 		fmt.Printf("    Bytecode: %d bytes\n", len(result.Bytecode))
+
+		if len(result.Relocations) > 0 {
+			p.relocations = append(p.relocations, result.Relocations...)
+		}
 
 		if len(result.Unsupported) > 0 {
 			fmt.Printf("    [!] Unsupported (%d):\n", len(result.Unsupported))
@@ -508,7 +527,12 @@ func (p *Packer) Process() error {
 			encrypted[i] = b ^ xorKey
 		}
 
-		funcs = append(funcs, FuncBytecode{FI: fi, Encrypted: encrypted, XorKey: xorKey})
+		funcs = append(funcs, FuncBytecode{
+			FI:               fi,
+			Encrypted:        encrypted,
+			XorKey:           xorKey,
+			reverseOffsetMap: offsetMap,
+		})
 	}
 
 	// 第二阶段: 批量注入 (一次 PT_NOTE 劫持)
@@ -681,7 +705,7 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 	}
 	STANDARD_MODE_DISABLED */
 
-	// 1. 构造 payload: [interpCode][bc0][pad][bc1][pad][...]
+	// 1. 构造 payload: [interpCode][pad][bc0][pad][bc1][pad][...]
 	payload := make([]byte, 0, len(interpCode)+1024)
 	payload = append(payload, interpCode...)
 	for len(payload)%4 != 0 {
@@ -830,6 +854,12 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 		for len(payload)%8 != 0 {
 			payload = append(payload, 0x00)
 		}
+
+		// Write count (8 bytes) before table for stub
+		countBuf := make([]byte, 8)
+		binary.LittleEndian.PutUint64(countBuf, uint64(len(funcs)))
+		payload = append(payload, countBuf...)
+
 		tokenTableOff := len(payload)
 		tokenTableVA := payloadVA + uint64(tokenTableOff)
 
@@ -847,6 +877,38 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 			payload = append(payload, desc[:]...)
 		}
 
+		// Add so_name info for runtime base detection
+		soName := p.soName
+		soNameStart := len(payload)
+		payload = append(payload, byte(len(soName)))
+		payload = append(payload, []byte(soName)...)
+		payload = append(payload, 0x00) // null terminator for safety
+
+		// Add runtime relocation table if any
+		if len(p.relocations) > 0 {
+			fmt.Printf("    [RELOC] Processing %d relocations...\n", len(p.relocations))
+
+			var runtimeRelocs []RuntimeReloc
+
+			for i, fb := range funcs {
+				funcRelocs := p.getRelocationsForFunc(fb.FI.Name)
+				for _, reloc := range funcRelocs {
+					reOff := uint64(fb.reverseOffsetMap[int(reloc.BcOffset)])
+					writePos := reOff - 9 // pointing to the 8-byte operand
+					runtimeRelocs = append(runtimeRelocs, RuntimeReloc{
+						WritePos: writePos,
+						Offset:   reloc.TargetAddr,
+						FuncId:   uint64(i),
+					})
+				}
+			}
+
+			table := p.appendRuntimeRelocTable(runtimeRelocs)
+			payload = append(payload, table...)
+
+			fmt.Printf("\n重定位表总大小: %d 字节 (at offset 0x%X)\n", len(table), len(payload)-len(table))
+		}
+
 		// 更新 PT_LOAD 段大小 (payload 增长了)
 		newPhdr.Filesz = uint64(len(payload))
 		newPhdr.Memsz = uint64(len(payload))
@@ -862,6 +924,7 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 		binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff:], tblRelOff)
 
 		fmt.Printf("    [TOKEN] descriptor table VA: 0x%X, entries: %d\n", tokenTableVA, len(funcs))
+		fmt.Printf("    [TOKEN] so_name: %s (at offset 0x%X)\n", soName, soNameStart)
 		fmt.Printf("    [TOKEN] _token_table_va patched at blob offset 0x%X → relative offset 0x%X (PIE)\n", tokenTableVAOff, tblRelOff)
 
 		// 5c. 为每个函数生成 Token trampoline
@@ -1118,4 +1181,35 @@ func encryptOpcodes(bytecode []byte, codeLen int, ocKey uint32, reversed bool) {
 			pc += size
 		}
 	}
+}
+
+// getRelocationsForFunc returns relocs for a given function name
+func (p *Packer) getRelocationsForFunc(funcName string) []arm64.Relocation {
+	var result []arm64.Relocation
+	for _, r := range p.relocations {
+		if r.FuncName == funcName {
+			result = append(result, r)
+		}
+	}
+	return result
+}
+
+// appendRuntimeRelocTable generates binary table:
+// [magic:4][count:4][entries...]
+// entry: [func_id:8][write_pos:8][offset:8]
+func (p *Packer) appendRuntimeRelocTable(relocs []RuntimeReloc) []byte {
+	buf := new(bytes.Buffer)
+
+	// Magic: RTLR (0x524C5452)
+	binary.Write(buf, binary.LittleEndian, uint32(0x524C5452))
+	// Count
+	binary.Write(buf, binary.LittleEndian, uint32(len(relocs)))
+
+	for _, r := range relocs {
+		binary.Write(buf, binary.LittleEndian, r.FuncId)
+		binary.Write(buf, binary.LittleEndian, r.WritePos)
+		binary.Write(buf, binary.LittleEndian, r.Offset)
+	}
+
+	return buf.Bytes()
 }
