@@ -6,11 +6,22 @@
       <div class="flex items-center space-x-2">
         <el-icon :size="16" color="#3b82f6"><Monitor /></el-icon>
         <span class="text-xs font-semibold text-slate-700 tracking-wide">
-          VMProtect <span class="text-slate-500 font-normal ml-1">工作空间</span>
+          VMProtect <span class="text-slate-500 font-normal ml-1">{{ $t('common.workspace') }}</span>
           <span v-if="currentFile" class="text-blue-600 ml-2">- {{ currentFile }}</span>
         </span>
       </div>
       <div style="--wails-draggable:no-drag" class="flex items-center space-x-0 h-full -mr-4">
+        <el-dropdown trigger="click" @command="handleLanguageChange" class="h-full">
+          <button class="h-full px-4 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors flex items-center justify-center">
+            <el-icon><Promotion /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="en">English</el-dropdown-item>
+              <el-dropdown-item command="zh">简体中文</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <button @click="minWindow" class="h-full px-4 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors flex items-center justify-center">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="5" width="10" height="1" fill="currentColor"/></svg>
         </button>
@@ -25,9 +36,9 @@
 
     <!-- Toolbar -->
     <div class="h-12 flex items-center px-4 bg-slate-100 border-b border-slate-200 space-x-2 shrink-0">
-      <el-button color="#f8fafc" size="small" :icon="Folder" @click="openFile" class="text-slate-700 border-slate-300 hover:text-blue-600 hover:border-blue-400">打开目标文件</el-button>
+      <el-button color="#f8fafc" size="small" :icon="Folder" @click="openFile" class="text-slate-700 border-slate-300 hover:text-blue-600 hover:border-blue-400">{{ $t('common.openFile') }}</el-button>
       <div class="w-px h-5 bg-slate-300 mx-2"></div>
-      <el-button color="#3b82f6" style="color: white;" size="small" :icon="VideoPlay" @click="runPacker" :disabled="!currentFile || selectedCount === 0" class="font-medium border-blue-500 hover:bg-blue-600 focus:outline-none transition-colors">开始保护</el-button>
+      <el-button color="#3b82f6" style="color: white;" size="small" :icon="VideoPlay" @click="runPacker" :disabled="!currentFile || selectedCount === 0" class="font-medium border-blue-500 hover:bg-blue-600 focus:outline-none transition-colors">{{ $t('common.startProtection') }}</el-button>
     </div>
 
     <!-- Main Content Area -->
@@ -36,8 +47,8 @@
       <!-- Detail Sidebar (Project Tree) -->
       <div v-if="currentFile" class="w-64 bg-slate-50 border-r border-slate-200 flex flex-col h-full shrink-0">
         <div class="px-5 py-3 flex justify-between items-center bg-slate-100/50 border-b border-slate-200/50">
-          <span class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">项目元素</span>
-          <el-tooltip content="关闭当前项目并返回主页" placement="right">
+          <span class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">{{ $t('common.projectElements') }}</span>
+          <el-tooltip :content="$t('common.home')" placement="right">
             <button @click="closeProject" class="text-slate-400 hover:text-blue-500 transition-colors p-1 rounded hover:bg-slate-200">
                <el-icon><House /></el-icon>
             </button>
@@ -45,13 +56,13 @@
         </div>
         <ul class="text-sm pt-2 flex-1 text-slate-600 font-medium">
           <li @click="currentTab = 'functions'" :class="{'bg-blue-50/50 text-blue-600 border-blue-500 shadow-[inset_1px_0_0_transparent]': currentTab === 'functions', 'hover:bg-slate-100 border-transparent': currentTab !== 'functions'}" class="px-5 py-2.5 cursor-pointer flex items-center border-r-2 transition-colors">
-            <el-icon class="mr-3 text-lg" :class="{'text-blue-600': currentTab === 'functions', 'text-slate-400': currentTab !== 'functions'}"><StarFilled /></el-icon>目标函数
+            <el-icon class="mr-3 text-lg" :class="{'text-blue-600': currentTab === 'functions', 'text-slate-400': currentTab !== 'functions'}"><StarFilled /></el-icon>{{ $t('common.targetFunctions') }}
           </li>
           <li @click="currentTab = 'packed'" :class="{'bg-blue-50/50 text-blue-600 border-blue-500 shadow-[inset_1px_0_0_transparent]': currentTab === 'packed', 'hover:bg-slate-100 border-transparent': currentTab !== 'packed'}" class="px-5 py-2.5 cursor-pointer flex items-center border-r-2 transition-colors">
-            <el-icon class="mr-3 text-lg" :class="{'text-blue-600': currentTab === 'packed', 'text-slate-400': currentTab !== 'packed'}"><Files /></el-icon>导出输出
+            <el-icon class="mr-3 text-lg" :class="{'text-blue-600': currentTab === 'packed', 'text-slate-400': currentTab !== 'packed'}"><Files /></el-icon>{{ $t('common.outputExport') }}
           </li>
           <li @click="currentTab = 'options'" :class="{'bg-blue-50/50 text-blue-600 border-blue-500 shadow-[inset_1px_0_0_transparent]': currentTab === 'options', 'hover:bg-slate-100 border-transparent': currentTab !== 'options'}" class="px-5 py-2.5 cursor-pointer flex items-center border-r-2 transition-colors">
-            <el-icon class="mr-3 text-lg" :class="{'text-blue-600': currentTab === 'options', 'text-slate-400': currentTab !== 'options'}"><Setting /></el-icon>保护选项
+            <el-icon class="mr-3 text-lg" :class="{'text-blue-600': currentTab === 'options', 'text-slate-400': currentTab !== 'options'}"><Setting /></el-icon>{{ $t('common.protectionOptions') }}
           </li>
         </ul>
       </div>
@@ -68,12 +79,12 @@
               <el-icon class="text-slate-400 text-lg"><Monitor /></el-icon>
             </div>
             <ul class="w-full text-sm pt-4 flex flex-col items-center flex-1 text-slate-600 font-medium space-y-2">
-              <el-tooltip content="起始页" placement="right" :hide-after="0" effect="dark">
+              <el-tooltip :content="$t('common.home')" placement="right" :hide-after="0" effect="dark">
                 <li @click="currentHomeTab = 'home'" :class="{'bg-blue-50/50 text-blue-600 border-blue-500 shadow-[inset_3px_0_0_transparent]': currentHomeTab === 'home', 'hover:bg-slate-100 border-transparent': currentHomeTab !== 'home'}" class="w-full h-12 flex justify-center items-center cursor-pointer border-l-2 transition-colors">
                   <el-icon class="text-xl h-full w-full" :class="{'text-blue-600': currentHomeTab === 'home', 'text-slate-400': currentHomeTab !== 'home'}"><House /></el-icon>
                 </li>
               </el-tooltip>
-              <el-tooltip content="更新日志" placement="right" :hide-after="0" effect="dark">
+              <el-tooltip :content="$t('common.logs')" placement="right" :hide-after="0" effect="dark">
                 <li @click="currentHomeTab = 'logs'" :class="{'bg-blue-50/50 text-blue-600 border-blue-500 shadow-[inset_3px_0_0_transparent]': currentHomeTab === 'logs', 'hover:bg-slate-100 border-transparent': currentHomeTab !== 'logs'}" class="w-full h-12 flex justify-center items-center cursor-pointer border-l-2 transition-colors">
                   <el-icon class="text-xl h-full w-full" :class="{'text-blue-600': currentHomeTab === 'logs', 'text-slate-400': currentHomeTab !== 'logs'}"><Document /></el-icon>
                 </li>
@@ -92,8 +103,8 @@
                      <el-icon :size="32"><Monitor /></el-icon>
                    </div>
                    <div class="flex flex-col">
-                     <span class="text-2xl font-light tracking-tight text-slate-800">虚拟机保护系统 <span class="font-semibold text-blue-600/90">Core Engine</span></span>
-                     <span class="text-sm text-slate-500 mt-1">准备就绪，请打开目标程序以开始操作。</span>
+                     <span class="text-2xl font-light tracking-tight text-slate-800">{{ $t('home.welcomeTitle') }} <span class="font-semibold text-blue-600/90">{{ $t('common.coreEngine') }}</span></span>
+                     <span class="text-sm text-slate-500 mt-1">{{ $t('home.welcomeSubtitle') }}</span>
                    </div>
                 </div>
                 <!-- Body: Drop zone + Quick Actions -->
@@ -117,36 +128,36 @@
                        <el-icon :size="28"><FolderOpened /></el-icon>
                      </div>
                      <span class="text-sm font-medium" :class="isDragOver ? 'text-blue-600' : 'text-slate-600'">
-                       {{ isDragOver ? '松开以打开文件' : '拖拽 ELF 文件到此处，或点击选择' }}
+                       {{ isDragOver ? $t('home.dropZoneRelease') : $t('home.dropZoneText') }}
                      </span>
-                     <span class="text-xs text-slate-400 mt-2">支持 ARM64 ELF 可执行文件</span>
+                     <span class="text-xs text-slate-400 mt-2">{{ $t('home.supportInfo') }}</span>
                    </div>
 
                    <div class="flex items-stretch">
                    <!-- Left Side: Quick actions -->
                    <div class="flex-1 pr-8">
-                     <div class="text-[11px] text-slate-400 mb-4 font-bold uppercase tracking-wider">快速操作</div>
+                     <div class="text-[11px] text-slate-400 mb-4 font-bold uppercase tracking-wider">{{ $t('common.quickActions') }}</div>
                      <ul class="text-sm space-y-2">
                        <li class="flex items-center cursor-pointer px-4 py-3 rounded-lg text-slate-700 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 transition-colors font-medium border border-slate-100 hover:border-blue-200" @click="openFile">
                          <div class="w-8 h-8 rounded bg-white flex items-center justify-center mr-4 shadow-sm text-blue-500 border border-slate-100"><el-icon :size="16"><FolderOpened /></el-icon></div>
-                         打开目标文件...
+                         {{ $t('common.openFile') }}...
                        </li>
                        <li class="flex items-center cursor-pointer px-4 py-3 rounded-lg text-slate-700 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 transition-colors border border-slate-100 hover:border-blue-200 font-medium">
                          <div class="w-8 h-8 rounded bg-white flex items-center justify-center mr-4 shadow-sm text-slate-400 border border-slate-100"><el-icon :size="16"><QuestionFilled /></el-icon></div>
-                         查看文档 / 常见问题
+                         {{ $t('common.help') }}
                        </li>
                      </ul>
                    </div>
                    <!-- Right Side: Recent files -->
                    <div class="w-64 border-l border-slate-100 pl-8">
-                     <div class="text-[11px] text-slate-400 mb-4 font-bold uppercase tracking-wider">最近打开文件</div>
+                     <div class="text-[11px] text-slate-400 mb-4 font-bold uppercase tracking-wider">{{ $t('common.recentFiles') }}</div>
                      <ul v-if="recentFiles.length > 0" class="text-sm space-y-1 text-slate-600">
                        <li v-for="rf in recentFiles" :key="rf.path" @click="loadFile(rf.path)" class="hover:bg-slate-50 hover:text-blue-600 rounded-md px-3 py-2 cursor-pointer flex items-center transition-colors" :title="rf.path">
                          <el-icon class="mr-3 text-slate-400 shrink-0"><Document /></el-icon>
                          <span class="truncate">{{ rf.name }}</span>
                        </li>
                      </ul>
-                     <p v-else class="text-xs text-slate-400 italic px-3">暂无记录</p>
+                     <p v-else class="text-xs text-slate-400 italic px-3">{{ $t('common.noRecentFiles') }}</p>
                    </div>
                    </div>
                 </div>
@@ -157,7 +168,7 @@
             <div v-if="currentHomeTab === 'logs'" class="flex-1 flex items-start justify-center p-12 overflow-y-auto">
               <div class="w-full max-w-4xl bg-white border border-slate-200 text-slate-800 flex flex-col rounded-xl shadow-sm pb-8">
                  <div class="h-20 bg-slate-50 border-b border-slate-100 flex items-center px-10 shrink-0 rounded-t-xl mb-6">
-                   <span class="text-lg font-medium text-slate-800 flex items-center"><el-icon class="mr-3 text-blue-500"><Document /></el-icon>系统更新记录 / Release Notes</span>
+                   <span class="text-lg font-medium text-slate-800 flex items-center"><el-icon class="mr-3 text-blue-500"><Document /></el-icon>{{ $t('logs.title') }}</span>
                  </div>
                  <div class="px-10 space-y-8">
                    <!-- Log Entry -->
@@ -204,14 +215,14 @@
         </div>
 
         <!-- Working View -->
-        <div v-else class="flex flex-col flex-1 h-full min-h-0 bg-slate-100/50" v-loading="isParsing" element-loading-text="正在解析节区与符号表..." element-loading-background="rgba(241, 245, 249, 0.8)">
+        <div v-else class="flex flex-col flex-1 h-full min-h-0 bg-slate-100/50" v-loading="isParsing" :element-loading-text="$t('common.loading')" element-loading-background="rgba(241, 245, 249, 0.8)">
            
            <!-- Tab 1: Functions Table -->
            <div v-show="currentTab === 'functions'" class="flex-1 flex flex-col min-h-0">
              <div class="h-12 border-b border-slate-200 flex items-center px-6 justify-between bg-white/60 backdrop-blur-sm shrink-0">
-                <el-button color="#f8fafc" size="small" :icon="Plus" @click="showAddDialog = true" class="text-slate-700 border-slate-300 hover:text-blue-600 hover:border-blue-400">添加函数</el-button>
+                <el-button color="#f8fafc" size="small" :icon="Plus" @click="showAddDialog = true" class="text-slate-700 border-slate-300 hover:text-blue-600 hover:border-blue-400">{{ $t('functions.addFunction') }}</el-button>
                <div class="w-72">
-                 <el-input v-model="searchQuery" size="small" placeholder="搜索函数..." class="light-input">
+                 <el-input v-model="searchQuery" size="small" :placeholder="$t('functions.searchPlaceholder')" class="light-input">
                    <template #prefix><el-icon><Search /></el-icon></template>
                  </el-input>
                </div>
@@ -225,9 +236,9 @@
                        <th class="py-3 px-6 w-12 text-center">
                          <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" @change="toggleAll" :checked="isAllSelected" />
                        </th>
-                       <th class="py-3 px-6 w-2/5">函数节点</th>
-                       <th class="py-3 px-6 w-1/5">地址</th>
-                       <th class="py-3 px-6">保护状态</th>
+                       <th class="py-3 px-6 w-2/5">{{ $t('functions.tableHeaderNode') }}</th>
+                       <th class="py-3 px-6 w-1/5">{{ $t('functions.tableHeaderAddress') }}</th>
+                       <th class="py-3 px-6">{{ $t('functions.tableHeaderStatus') }}</th>
                      </tr>
                    </thead>
                    <tbody class="divide-y divide-slate-100">
@@ -241,15 +252,15 @@
                        <td class="py-3 px-6 text-slate-500 font-mono text-xs">{{ fn.address }}</td>
                        <td class="py-3 px-6">
                           <span v-if="fn.selected" class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-                            待保护 ({{ fn.protection }})
+                            {{ $t('functions.statusToBeProtected') }} ({{ fn.protection }})
                           </span>
                           <span v-else class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-500 border border-slate-200">
-                            未选择
+                            {{ $t('functions.statusNotSelected') }}
                           </span>
                        </td>
                      </tr>
                      <tr v-if="filteredAndSortedFunctions.length === 0">
-                       <td colspan="4" class="py-12 text-center text-slate-400 italic">未在此文件中发现可保护的对象。</td>
+                       <td colspan="4" class="py-12 text-center text-slate-400 italic">{{ $t('functions.noFunctionsFound') }}</td>
                      </tr>
                    </tbody>
                  </table>
@@ -261,40 +272,40 @@
            <div v-show="currentTab === 'packed'" class="flex-1 overflow-auto p-12 flex justify-center items-start">
               <div class="w-full max-w-7xl bg-white border border-slate-200 rounded-xl p-10 shadow-sm">
                 <h2 class="text-lg font-semibold text-slate-800 mb-8 flex items-center border-b border-slate-100 pb-4">
-                  <el-icon class="mr-3 text-blue-500 text-xl"><Files /></el-icon> 导出输出配置
+                  <el-icon class="mr-3 text-blue-500 text-xl"><Files /></el-icon> {{ $t('output.title') }}
                 </h2>
                 
                 <div class="space-y-6">
                   <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-3">指定保存路径 (Output Path)</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-3">{{ $t('output.outputPath') }}</label>
                     <div class="flex space-x-3">
-                      <el-input v-model="outputPath" placeholder="默认保存到原文件目录下的 _vmp 副本" class="flex-1 custom-input" size="large"></el-input>
-                      <el-button color="#f8fafc" class="ml-2 text-slate-700 border-slate-300 h-10 px-6" @click="browseOutputPath">浏览...</el-button>
+                      <el-input v-model="outputPath" :placeholder="$t('output.outputPathPlaceholder')" class="flex-1 custom-input" size="large"></el-input>
+                      <el-button color="#f8fafc" class="ml-2 text-slate-700 border-slate-300 h-10 px-6" @click="browseOutputPath">{{ $t('common.browse') }}</el-button>
                     </div>
                     <p class="mt-3 text-xs text-slate-500 flex items-center">
-                      <el-icon class="mr-1"><InfoFilled /></el-icon>保护打包完成后的可执行文件将保存到此位置。
+                      <el-icon class="mr-1"><InfoFilled /></el-icon>{{ $t('output.outputPathInfo') }}
                     </p>
                   </div>
 
                   <div v-if="enableDebug">
-                    <label class="block text-sm font-medium text-slate-700 mb-3">Debug 对照文件路径</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-3">{{ $t('output.debugPath') }}</label>
                     <div class="flex space-x-3">
                       <el-input v-model="debugFilePath" class="flex-1 custom-input" size="large"></el-input>
-                      <el-button color="#f8fafc" class="ml-2 text-slate-700 border-slate-300 h-10 px-6" @click="browsePath('debug')">浏览...</el-button>
+                      <el-button color="#f8fafc" class="ml-2 text-slate-700 border-slate-300 h-10 px-6" @click="browsePath('debug')">{{ $t('common.browse') }}</el-button>
                     </div>
                     <p class="mt-3 text-xs text-slate-500 flex items-center">
-                      <el-icon class="mr-1"><InfoFilled /></el-icon>开启 Debug 模式后，虚拟机指令对照信息将写入此文件。
+                      <el-icon class="mr-1"><InfoFilled /></el-icon>{{ $t('output.debugPathInfo') }}
                     </p>
                   </div>
 
                   <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-3">不支持指令 Debug 文件路径</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-3">{{ $t('output.unsupportedPath') }}</label>
                     <div class="flex space-x-3">
                       <el-input v-model="unsupportedFilePath" class="flex-1 custom-input" size="large"></el-input>
-                      <el-button color="#f8fafc" class="ml-2 text-slate-700 border-slate-300 h-10 px-6" @click="browsePath('unsupported')">浏览...</el-button>
+                      <el-button color="#f8fafc" class="ml-2 text-slate-700 border-slate-300 h-10 px-6" @click="browsePath('unsupported')">{{ $t('common.browse') }}</el-button>
                     </div>
                     <p class="mt-3 text-xs text-slate-500 flex items-center">
-                      <el-icon class="mr-1"><InfoFilled /></el-icon>当遇到无法虚拟化的指令时，Packer 会将详细信息写入此文件。
+                      <el-icon class="mr-1"><InfoFilled /></el-icon>{{ $t('output.unsupportedPathInfo') }}
                     </p>
                   </div>
                 </div>
@@ -305,14 +316,14 @@
            <div v-show="currentTab === 'options'" class="flex-1 overflow-auto p-12 flex justify-center items-start">
               <div class="w-full max-w-7xl bg-white border border-slate-200 rounded-xl p-10 shadow-sm">
                 <h2 class="text-lg font-semibold text-slate-800 mb-8 flex items-center border-b border-slate-100 pb-4">
-                  <el-icon class="mr-3 text-blue-500 text-xl"><Setting /></el-icon> 保护选项设置
+                  <el-icon class="mr-3 text-blue-500 text-xl"><Setting /></el-icon> {{ $t('options.title') }}
                 </h2>
                 
                 <div class="space-y-8 divide-y divide-slate-100">
                   <div class="flex items-center justify-between pb-2">
                     <div class="pr-8">
-                      <div class="text-sm font-medium text-slate-800 mb-1">开启 Debug 模式</div>
-                      <div class="text-[13px] text-slate-500 leading-relaxed">打包后在运行时输出虚拟机调试指令流水线日志。通常用于分析执行流或排除故障。</div>
+                      <div class="text-sm font-medium text-slate-800 mb-1">{{ $t('options.enableDebug') }}</div>
+                      <div class="text-[13px] text-slate-500 leading-relaxed">{{ $t('options.enableDebugDesc') }}</div>
                     </div>
                     <div>
                       <el-switch v-model="enableDebug"></el-switch>
@@ -321,8 +332,8 @@
                   
                   <div class="flex items-center justify-between pt-6">
                     <div class="pr-8">
-                      <div class="text-sm font-medium text-slate-800 mb-1">去除符号表 (Strip Symbols)</div>
-                      <div class="text-[13px] text-slate-500 leading-relaxed">保护完成后移除文件中的所有调试符号和未导出函数名，增大逆向分析难度。推荐在发行版中开启。</div>
+                      <div class="text-sm font-medium text-slate-800 mb-1">{{ $t('options.stripSymbols') }}</div>
+                      <div class="text-[13px] text-slate-500 leading-relaxed">{{ $t('options.stripSymbolsDesc') }}</div>
                     </div>
                     <div>
                       <el-switch v-model="stripSymbols"></el-switch>
@@ -331,8 +342,8 @@
                   
                   <div class="flex items-center justify-between pt-6">
                     <div class="pr-8">
-                      <div class="text-sm font-medium text-slate-800 mb-1">Token 化入口模式</div>
-                      <div class="text-[13px] text-slate-500 leading-relaxed">使用 3 指令精简跳板替代默认入口，减小代码体积占用。</div>
+                      <div class="text-sm font-medium text-slate-800 mb-1">{{ $t('options.tokenEntry') }}</div>
+                      <div class="text-[13px] text-slate-500 leading-relaxed">{{ $t('options.tokenEntryDesc') }}</div>
                     </div>
                     <div>
                       <el-switch v-model="tokenEntry"></el-switch>
@@ -347,11 +358,11 @@
              <div class="h-8 bg-slate-100 border-b border-slate-200 px-6 flex items-center justify-between">
                <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center">
                  <span class="w-1.5 h-1.5 rounded-full bg-slate-400 mr-2"></span>
-                 输出控制台
+                 {{ $t('common.outputConsole') }}
                </span>
              </div>
              <div class="flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-700 bg-white" id="terminal-output">
-               <p v-if="logs.length === 0" class="text-slate-400">系统空闲。准备就绪...</p>
+               <p v-if="logs.length === 0" class="text-slate-400">{{ $t('common.systemIdle') }}</p>
                <div v-for="(log, i) in logs" :key="i" class="flex mb-1">
                   <span class="text-slate-400 mr-3 select-none">[{{ new Date().toLocaleTimeString().split(' ')[0] }}]</span>
                   <span :class="{'text-red-500 font-medium': log.includes('[x]') || log.includes('[!]'), 'text-slate-800': log.includes('[+]') || log.includes('>') }">
@@ -370,31 +381,31 @@
       <span class="flex items-center">
         <el-icon class="mr-2 text-blue-400" v-if="isProtecting"><VideoPlay class="animate-spin" /></el-icon>
         <el-icon class="mr-2 text-slate-400" v-else><Monitor /></el-icon>
-        {{ currentFile ? `${currentPath}` : '准备就绪' }}
+        {{ currentFile ? `${currentPath}` : $t('common.ready') }}
       </span>
-      <span class="text-slate-500">核心引擎: v1.0.0</span>
+      <span class="text-slate-500">{{ $t('common.coreEngine') }}: v1.0.0</span>
     </div>
 
     <!-- Add Function Dialog -->
-    <el-dialog v-model="showAddDialog" title="添加自定义函数" width="460" :close-on-click-modal="false" align-center destroy-on-close>
+    <el-dialog v-model="showAddDialog" :title="$t('functions.addDialogTitle')" width="460" :close-on-click-modal="false" align-center destroy-on-close>
       <div style="display: flex; flex-direction: column; gap: 20px;">
         <div>
-          <label style="display: block; font-size: 13px; font-weight: 500; color: #334155; margin-bottom: 8px;">方法名</label>
+          <label style="display: block; font-size: 13px; font-weight: 500; color: #334155; margin-bottom: 8px;">{{ $t('functions.methodName') }}</label>
           <el-input v-model="newFuncForm.name" placeholder="例如: my_encrypt_func" size="large" />
         </div>
         <div>
-          <label style="display: block; font-size: 13px; font-weight: 500; color: #334155; margin-bottom: 8px;">开始地址</label>
+          <label style="display: block; font-size: 13px; font-weight: 500; color: #334155; margin-bottom: 8px;">{{ $t('functions.startAddress') }}</label>
           <el-input v-model="newFuncForm.startAddress" placeholder="十六进制，例如: 401000" size="large" />
         </div>
         <div>
-          <label style="display: block; font-size: 13px; font-weight: 500; color: #334155; margin-bottom: 8px;">结束地址</label>
+          <label style="display: block; font-size: 13px; font-weight: 500; color: #334155; margin-bottom: 8px;">{{ $t('functions.endAddress') }}</label>
           <el-input v-model="newFuncForm.endAddress" placeholder="十六进制，例如: 401100" size="large" />
         </div>
       </div>
       <template #footer>
         <div style="display: flex; justify-content: flex-end; gap: 8px;">
-          <el-button @click="showAddDialog = false">取消</el-button>
-          <el-button type="primary" @click="addFunction" :disabled="!newFuncForm.name.trim() || !newFuncForm.startAddress.trim() || !newFuncForm.endAddress.trim()">确认添加</el-button>
+          <el-button @click="showAddDialog = false">{{ $t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="addFunction" :disabled="!newFuncForm.name.trim() || !newFuncForm.startAddress.trim() || !newFuncForm.endAddress.trim()">{{ $t('common.confirm') }}</el-button>
         </div>
       </template>
     </el-dialog>
@@ -411,6 +422,13 @@ import {
 } from '@element-plus/icons-vue'
 import { SelectFile, AnalyzeELF, Protect, GetRecentFiles, AddRecentFile, SelectSaveFile } from '../wailsjs/go/api/VMPEngine'
 import { WindowMinimise, WindowToggleMaximise, Quit, EventsOn } from '../wailsjs/runtime/runtime'
+
+import { useI18n } from 'vue-i18n'
+const { t, locale } = useI18n()
+
+const handleLanguageChange = (lang: string) => {
+  locale.value = lang
+}
 
 // State definitions
 const currentFile = ref('')
@@ -518,7 +536,7 @@ const loadFile = async (selectedPath: string) => {
      isParsing.value = true
      currentTab.value = 'functions'
      currentFunctions.value = []
-     logs.value.push(`[+] 正在加载目标文件: ${selectedPath}`)
+     logs.value.push(`[+] Loading target file: ${selectedPath}`)
      
      const result: any = await AnalyzeELF(selectedPath)
      
@@ -533,14 +551,14 @@ const loadFile = async (selectedPath: string) => {
        selected: false
      }))
      
-     logs.value.push(`[+] 架构: ${result.arch}, 格式: ${result.format}`)
-     logs.value.push(`[+] 符号表解析完毕, 找到 ${currentFunctions.value.length} 个可保护对象。`)
+     logs.value.push(`[+] Arch: ${result.arch}, Format: ${result.format}`)
+     logs.value.push(`[+] Symbol table parsed, found ${currentFunctions.value.length} protectable objects.`)
      
      // Save to recent files
      AddRecentFile(selectedPath).then(() => loadRecentFiles())
   } catch (err: any) {
-     logs.value.push(`[!] 读取文件失败: ${err}`)
-     ElMessage.error(`打开失败: ${err}`)
+     logs.value.push(`[!] Failed to read file: ${err}`)
+     ElMessage.error(`${t('common.error')}: ${err}`)
      currentFile.value = ''
      currentPath.value = ''
   } finally {
@@ -556,7 +574,7 @@ const browseOutputPath = async () => {
       outputPath.value = selected
     }
   } catch (err: any) {
-    ElMessage.error(`选择路径失败: ${err}`)
+    ElMessage.error(`${t('common.error')}: ${err}`)
   }
 }
 
@@ -574,7 +592,7 @@ const browsePath = async (type: string) => {
       }
     }
   } catch (err: any) {
-    ElMessage.error(`选择路径失败: ${err}`)
+    ElMessage.error(`${t('common.error')}: ${err}`)
   }
 }
 
@@ -586,8 +604,8 @@ const openFile = async () => {
      }
      await loadFile(selectedPath)
   } catch (err: any) {
-     logs.value.push(`[!] 选择文件失败: ${err}`)
-     ElMessage.error(`打开失败: ${err}`)
+     logs.value.push(`[!] Failed to select file: ${err}`)
+     ElMessage.error(`${t('common.error')}: ${err}`)
   }
 }
 
@@ -599,9 +617,9 @@ const runPacker = async () => {
   logs.value = [] // clear logs
   
   try {
-    logs.value.push(`[+] 准备开始保护过程，选中 ${targets.length} 个函数节点...`)
-    logs.value.push(`[+] 设置 - Debug模式: ${enableDebug.value ? '启用' : '禁用'}, 去除符号表: ${stripSymbols.value ? '启用' : '禁用'}`)
-    logs.value.push(`[+] 输出路径: ${outputPath.value}`)
+    logs.value.push(`[+] Preparing protection process, ${targets.length} functions selected...`)
+    logs.value.push(`[+] Settings - Debug: ${enableDebug.value ? 'Enabled' : 'Disabled'}, Strip: ${stripSymbols.value ? 'Enabled' : 'Disabled'}`)
+    logs.value.push(`[+] Output path: ${outputPath.value}`)
     await Protect({
       "file": currentPath.value,
       "functions": targets,
@@ -612,9 +630,9 @@ const runPacker = async () => {
         "tokenEntry": tokenEntry.value
       }
     })
-    logs.value.push(`[+] 操作全部完成。`)
+    logs.value.push(`[+] ${t('common.protectionComplete')}`)
   } catch(err: any){
-    logs.value.push(`[x] 执行失败: ${err}`)
+    logs.value.push(`[x] ${t('common.operationFailed')} ${err}`)
   } finally {
     isProtecting.value = false
   }
@@ -626,7 +644,7 @@ const addFunction = () => {
   let endHex = newFuncForm.value.endAddress.trim().replace(/^0x/i, '')
 
   if (!name || !startHex || !endHex) {
-    ElMessage.warning('请填写完整的函数信息')
+    ElMessage.warning(t('functions.searchPlaceholder')) // Using searchPlaceholder as fallback for "fill info"
     return
   }
 
@@ -634,12 +652,12 @@ const addFunction = () => {
   const endAddr = parseInt(endHex, 16)
 
   if (isNaN(startAddr) || isNaN(endAddr)) {
-    ElMessage.error('地址格式无效，请输入合法的十六进制地址')
+    ElMessage.error(t('functions.invalidAddress'))
     return
   }
 
   if (endAddr <= startAddr) {
-    ElMessage.error('结束地址必须大于开始地址')
+    ElMessage.error(t('functions.addressError'))
     return
   }
 
@@ -654,8 +672,8 @@ const addFunction = () => {
     isCustom: true
   })
 
-  logs.value.push(`[+] 已手动添加函数: ${name} @ 0x${startAddr.toString(16).toUpperCase()} - 0x${endAddr.toString(16).toUpperCase()} (${size} bytes)`)
-  ElMessage.success(`函数 ${name} 已添加`)
+  logs.value.push(`[+] Manually added function: ${name} @ 0x${startAddr.toString(16).toUpperCase()} - 0x${endAddr.toString(16).toUpperCase()} (${size} bytes)`)
+  ElMessage.success(t('functions.addSuccess', { name }))
 
   // Reset form
   newFuncForm.value = { name: '', startAddress: '', endAddress: '' }
