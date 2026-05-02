@@ -233,6 +233,48 @@ make all
 | `-token` | `true` | Token 化入口模式 |
 | `-info` | `false` | 仅打印 ELF 信息 |
 
+## 运行 Demo
+
+`demo/` 目录下提供了一个简单的示例程序，用于演示完整的保护流程。
+
+### 使用 Docker (推荐 macOS/Windows 用户)
+
+如果您使用的不是 Linux ARM64 环境，可以使用 Docker 来编译和运行 Demo：
+
+1. **编译并保护 Demo:**
+   ```bash
+   cd demo
+   # 编译原生二进制文件并保护 'check_simple' 函数
+   make -f Makefile-demo all protect
+   ```
+
+2. **在 Docker 中运行保护后的二进制文件:**
+   ```bash
+   make -f Makefile-demo run-docker
+   ```
+
+输出应包含：
+- 程序打印的结果 (`7`)。
+- 程序的退出代码 (`37`)，这是在虚拟机内部执行的实际计算结果 (`10 * 3 + 7 = 37`)。
+
+### 手动步骤 (Linux ARM64 环境)
+
+1. **编译:**
+   ```bash
+   aarch64-linux-gnu-gcc -static -O1 -nostdlib -march=armv8-a demo_simple.c -o demo_simple
+   ```
+
+2. **保护:**
+   ```bash
+   ./build/vmpacker -func check_simple -v -o demo_simple.vmp demo_simple
+   ```
+
+3. **运行:**
+   ```bash
+   ./demo_simple.vmp
+   echo $? # 应输出 37
+   ```
+
 ## Building
 
 ### 编译 VM 解释器 Stub

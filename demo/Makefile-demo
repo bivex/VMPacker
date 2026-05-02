@@ -9,7 +9,11 @@ TARGET   = demo_simple
 SRC      = demo_simple.c
 PROTECTED = $(TARGET).vmp
 
-.PHONY: all clean protect run-qemu
+# Docker configuration
+DOCKER_IMAGE = debian:latest
+DOCKER_RUN   = docker run --rm --platform linux/arm64 -v "$(shell pwd)":/app -w /app
+
+.PHONY: all clean protect run-docker
 
 all: $(TARGET)
 
@@ -23,15 +27,10 @@ protect: $(TARGET)
 	$(PACKER) -func check_simple -v -o $(PROTECTED) $(TARGET)
 	@echo "[+] Protected binary created: $(PROTECTED)"
 
-# Run using QEMU user-mode (requires qemu-aarch64)
-run-qemu: $(PROTECTED)
-	@if command -v qemu-aarch64 &> /dev/null; then \
-		echo "Running protected binary in QEMU..."; \
-		qemu-aarch64 ./$(PROTECTED); \
-		echo "Exit code (expected 37): $$?"; \
-	else \
-		echo "Error: qemu-aarch64 not found. Please install it to run ARM64 binaries on this host."; \
-	fi
+# Run using Docker (requires Docker Desktop on Mac)
+run-docker: $(PROTECTED)
+	@echo "Running protected binary in Docker..."
+	@$(DOCKER_RUN) $(DOCKER_IMAGE) bash -c "chmod +x ./$(PROTECTED) && ./$(PROTECTED); echo 'Exit code (expected 37): $$?'"
 
 clean:
 	rm -f $(TARGET) $(PROTECTED)

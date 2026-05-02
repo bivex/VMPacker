@@ -232,6 +232,48 @@ make all
 | `-token` | `true` | Token-based entry mode |
 | `-info` | `false` | Print ELF info only |
 
+## Running the Demo
+
+A sample target is provided in the `demo/` directory to demonstrate the full protection workflow.
+
+### Using Docker (Recommended for macOS/Windows)
+
+If you are on a non-Linux or non-ARM64 host, you can use Docker to compile and run the demo:
+
+1. **Build and Protect the demo:**
+   ```bash
+   cd demo
+   # Build the native binary and protect the 'check_simple' function
+   make -f Makefile-demo all protect
+   ```
+
+2. **Run the protected binary in Docker:**
+   ```bash
+   make -f Makefile-demo run-docker
+   ```
+
+The output should show:
+- The result printed by the program (`7`).
+- The exit code of the program (`37`), which is the actual calculation result (`10 * 3 + 7 = 37`) executed inside the VM.
+
+### Manual Steps (Linux ARM64)
+
+1. **Compile:**
+   ```bash
+   aarch64-linux-gnu-gcc -static -O1 -nostdlib -march=armv8-a demo_simple.c -o demo_simple
+   ```
+
+2. **Protect:**
+   ```bash
+   ./build/vmpacker -func check_simple -v -o demo_simple.vmp demo_simple
+   ```
+
+3. **Run:**
+   ```bash
+   ./demo_simple.vmp
+   echo $? # Should be 37
+   ```
+
 ## Building
 
 ### Compile VM Interpreter Stub
