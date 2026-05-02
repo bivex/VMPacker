@@ -12,24 +12,14 @@
 
 /* Target function for virtualization */
 __attribute__((noinline))
-int64_t check_complex(int32_t selector, double factor) {
-    double result = 0.0;
+int64_t check_complex(int32_t selector, double factor, double offset) {
+    /* 1. SCVTF (Integer to FP) */
+    double result = (double)selector;
     
-    /* 1. Exercise Jump Table (Clang -O1/-O2 often uses BR Xn for this) */
-    switch (selector) {
-        case 10: result = 1.5; break;
-        case 20: result = 2.5; break;
-        case 30: result = 3.5; break;
-        case 42: result = 42.0; break;
-        case 100: result = 100.1; break;
-        default: result = 0.1; break;
-    }
+    /* 2. Floating Point Arithmetic (FMUL, FADD) */
+    result = (result * factor) + offset;
 
-    /* 2. Floating Point Arithmetic (FADD, FMUL) */
-    result = (result * factor) + 7.0;
-
-    /* 3. SIMD-style memory movement (LDP/STP)
-     * Using a local array of 64 bytes to encourage Clang to use Q registers. */
+    /* 3. SIMD-style memory movement (LDP/STP) */
     uint64_t data[8];
     for (int i = 0; i < 8; i++) data[i] = (uint64_t)result + i;
     
@@ -48,14 +38,14 @@ int64_t check_complex(int32_t selector, double factor) {
 char out_buf[16];
 
 void _start(void) {
-    /* Test case: selector=42, factor=2.0
+    /* Test case: selector=42, factor=2.0, offset=7.0
      * result = (42.0 * 2.0) + 7.0 = 91.0
      * data[0..7] = 91..98
      * sum = 91+92+93+94+95+96+97+98 = 756
      * sum % 10 = 6
      * Final: 91 + 6 = 97
      */
-    int64_t val = check_complex(42, 2.0);
+    int64_t val = check_complex(42, 2.0, 7.0);
 
     /* Prepare output string: "Result: XX, Hex: XXXX\n" */
     for(int i=0; i<16; i++) out_buf[i] = ' ';

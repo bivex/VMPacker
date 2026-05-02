@@ -100,19 +100,21 @@ func (t *Translator) trFCvt(inst vm.Instruction, vmOp byte) error {
 		return err
 	}
 
-	// Combined type byte: bits[7:1]=reserved, bit 1: SF, bit 0: FPType
+	// Combined type byte: bit 2: Unsigned (FCVTZU/UCVTF), bit 1: SF, bit 0: FPType
 	// SF: 0=32-bit int, 1=64-bit int
 	// FPType: 0=float, 1=double
 	typeByte := byte(0)
 	if inst.SF {
 		typeByte |= 0x2
 	}
-	// Note: for conversions, type bit 22 from ARM64 often matches our FPType.
-	// But let's check the inst.Cond or other field if needed.
-	// For SCVTF: bit 22 is 'type'.
 	raw := inst.Raw
 	if (raw>>22)&1 != 0 {
-		typeByte |= 0x1
+		typeByte |= 0x1 // FPType
+	}
+	
+	// Add Unsigned flag check
+	if Op(inst.Op) == FCVTZU || Op(inst.Op) == UCVTF {
+		typeByte |= 0x4
 	}
 
 	t.emit(vmOp, rd, rn, typeByte)

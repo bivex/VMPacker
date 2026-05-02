@@ -44,7 +44,7 @@ endif
 
 # Compilation options
 # 编译选项
-STUB_CFLAGS = -c -Os -mcmodel=tiny -fno-stack-protector \
+STUB_CFLAGS = -g -c -O0 -mcmodel=tiny -fno-stack-protector \
               -fno-builtin -fno-builtin-memcpy -nostdlib -march=armv8-a \
               -DVM_INDIRECT_DISPATCH -DVM_FUNC_SPLIT -DVM_TOKEN_ENTRY
 

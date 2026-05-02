@@ -173,8 +173,10 @@
 #define OP_S_SBC 0x7E   /* push a-b-(1-carry)    1B */
 
 /* ---- 栈 ALU (一元: pop a, push result) ---- */
-#define OP_S_NOT 0x7F     /* push ~a               1B */
-#define OP_S_CLZ 0x80     /* push clz(a)           1B */
+#define OP_S_NOT 0x4A   /* push ~a               1B */
+#define OP_S_NEG 0x4B   /* push -a               1B */
+#define OP_S_CLZ 0x4C   /* push clz(a)           1B */
+
 #define OP_S_CLS 0x81     /* push cls(a)           1B */
 #define OP_S_RBIT 0x82    /* push rbit(a)          1B */
 #define OP_S_REV 0x84     /* push bswap64(a)       1B */

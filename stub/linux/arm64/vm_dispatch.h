@@ -465,6 +465,9 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_sbc(vm_ctx_t *vm) {
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_not(vm_ctx_t *vm) {
   return h_s_not(vm);
 }
+__attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_neg(vm_ctx_t *vm) {
+  return h_s_neg(vm);
+}
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_clz(vm_ctx_t *vm) {
   return h_s_clz(vm);
 }
@@ -669,6 +672,7 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_S_ADC] = hw_s_adc;
   tbl[OP_S_SBC] = hw_s_sbc;
   tbl[OP_S_NOT] = hw_s_not;
+  tbl[OP_S_NEG] = hw_s_neg;
   tbl[OP_S_CLZ] = hw_s_clz;
   tbl[OP_S_CLS] = hw_s_cls;
   tbl[OP_S_RBIT] = hw_s_rbit;

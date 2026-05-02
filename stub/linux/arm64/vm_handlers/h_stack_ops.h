@@ -19,14 +19,16 @@
 /* ---- 操作栈宏 (带边界检查) ---- */
 #define SPUSH(vm, val)                                                         \
   do {                                                                         \
-    if (__builtin_expect((vm)->eval_sp < VM_EVAL_STACK_SIZE - 1, 1))           \
-      (vm)->eval_stk[++(vm)->eval_sp] = (u64)(val);                            \
+    if (__builtin_expect((vm)->eval_sp < VM_EVAL_STACK_SIZE, 1))               \
+      (vm)->eval_stk[(vm)->eval_sp++] = (u64)(val);                            \
   } while (0)
+
 #define SPOP(vm)                                                               \
-  (__builtin_expect((vm)->eval_sp >= 0, 1) ? (vm)->eval_stk[(vm)->eval_sp--]   \
-                                           : 0)
+  (__builtin_expect((vm)->eval_sp > 0, 1) ? (vm)->eval_stk[--(vm)->eval_sp] : 0)
+
 #define SPEEK(vm)                                                              \
-  (__builtin_expect((vm)->eval_sp >= 0, 1) ? (vm)->eval_stk[(vm)->eval_sp] : 0)
+  (__builtin_expect((vm)->eval_sp > 0, 1) ? (vm)->eval_stk[(vm)->eval_sp - 1] : 0)
+
 
 /* ================================================================
  * 栈 ↔ 寄存器传输
@@ -307,25 +309,41 @@ static inline u32 h_s_cmp(vm_ctx_t *vm) {
 /* LD8: pop addr → push *(u8*)addr */
 static inline u32 h_s_ld8(vm_ctx_t *vm) {
   u64 addr = SPOP(vm);
-  SPUSH(vm, *(u8 *)addr);
+  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+    SPUSH(vm, *(u8 *)addr);
+  } else {
+    SPUSH(vm, 0);
+  }
   return 1;
 }
 
 static inline u32 h_s_ld16(vm_ctx_t *vm) {
   u64 addr = SPOP(vm);
-  SPUSH(vm, *(u16 *)addr);
+  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+    SPUSH(vm, *(u16 *)addr);
+  } else {
+    SPUSH(vm, 0);
+  }
   return 1;
 }
 
 static inline u32 h_s_ld32(vm_ctx_t *vm) {
   u64 addr = SPOP(vm);
-  SPUSH(vm, *(u32 *)addr);
+  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+    SPUSH(vm, *(u32 *)addr);
+  } else {
+    SPUSH(vm, 0);
+  }
   return 1;
 }
 
 static inline u32 h_s_ld64(vm_ctx_t *vm) {
   u64 addr = SPOP(vm);
-  SPUSH(vm, *(u64 *)addr);
+  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+    SPUSH(vm, *(u64 *)addr);
+  } else {
+    SPUSH(vm, 0);
+  }
   return 1;
 }
 
@@ -333,28 +351,37 @@ static inline u32 h_s_ld64(vm_ctx_t *vm) {
 static inline u32 h_s_st8(vm_ctx_t *vm) {
   u64 val = SPOP(vm);
   u64 addr = SPOP(vm);
-  *(u8 *)addr = (u8)val;
+  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+    *(u8 *)addr = (u8)val;
+  }
   return 1;
 }
 
 static inline u32 h_s_st16(vm_ctx_t *vm) {
   u64 val = SPOP(vm);
   u64 addr = SPOP(vm);
-  *(u16 *)addr = (u16)val;
+  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+    *(u16 *)addr = (u16)val;
+  }
   return 1;
 }
 
 static inline u32 h_s_st32(vm_ctx_t *vm) {
   u64 val = SPOP(vm);
   u64 addr = SPOP(vm);
-  *(u32 *)addr = (u32)val;
+  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+    *(u32 *)addr = (u32)val;
+  }
   return 1;
 }
 
+
 static inline u32 h_s_st64(vm_ctx_t *vm) {
-  u64 addr = SPOP(vm);
   u64 val = SPOP(vm);
-  *(u64 *)addr = val;
+  u64 addr = SPOP(vm);
+  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+    *(u64 *)addr = val;
+  }
   return 1;
 }
 
@@ -367,7 +394,8 @@ static inline u32 h_s_vld(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
   u8 sz_type = vm->bc[vm->pc + 2];
   u64 addr = SPOP(vm);
-  u8 *dst = (u8 *)&vm->V[r & 63][0];
+  if (__builtin_expect(addr == 0 || addr == (u64)&vm->R[63], 0)) return 3;
+  u8 *dst = (u8 *)&vm->V[r & 31][0];
 
   u32 width = 0;
   if (sz_type == 0) width = 1;      // B
@@ -388,7 +416,8 @@ static inline u32 h_s_vst(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
   u8 sz_type = vm->bc[vm->pc + 2];
   u64 addr = SPOP(vm);
-  u8 *src = (u8 *)&vm->V[r & 63][0];
+  if (__builtin_expect(addr == 0 || addr == (u64)&vm->R[63], 0)) return 3;
+  u8 *src = (u8 *)&vm->V[r & 31][0];
 
   u32 width = 0;
   if (sz_type == 0) width = 1;      // B

@@ -162,8 +162,10 @@ const (
 	OpSSbc   byte = 0x7E // pop b,a → push sbc    1B
 
 	// 栈 ALU (一元)
-	OpSNot     byte = 0x7F // pop a → push ~a       1B
-	OpSClz     byte = 0x80 // pop a → push clz(a)   1B
+	OpSNot   byte = 0x4A // pop a → push ~a       1B
+	OpSNeg   byte = 0x4B // pop a → push -a       1B
+	OpSClz   byte = 0x4C // pop a → push clz(a)   1B
+
 	OpSCls     byte = 0x81 // pop a → push cls(a)   1B
 	OpSRbit    byte = 0x82 // pop a → push rbit(a)  1B
 	OpSRev     byte = 0x84 // pop a → push bswap64  1B

@@ -42,11 +42,20 @@
 /* ---- Utils (no libc) ---- */
 __attribute__((section(".text.entry")))
 void *memcpy(void *dest, const void *src, unsigned long n) {
-  volatile unsigned char *d = (unsigned char *)dest;
-  volatile const unsigned char *s = (const unsigned char *)src;
-  for (unsigned long i = 0; i < n; i++)
-    d[i] = s[i];
-  return dest;
+  void *ret = dest;
+  __asm__ volatile (
+    "cbz %2, 2f\n"
+    "1:\n"
+    "ldrb w3, [%1], #1\n"
+    "strb w3, [%0], #1\n"
+    "subs %2, %2, #1\n"
+    "b.ne 1b\n"
+    "2:\n"
+    : "+r"(dest), "+r"(src), "+r"(n)
+    : 
+    : "w3", "memory"
+  );
+  return ret;
 }
 
 /* ---- syscall: mmap (无 libc 依赖) ---- */
@@ -54,14 +63,15 @@ static inline void *sys_mmap(unsigned long size) {
   register long x8 __asm__("x8") = 222; /* __NR_mmap */
   register long x0 __asm__("x0") = 0;   /* addr = NULL */
   register long x1 __asm__("x1") = (long)size;
-  register long x2 __asm__("x2") = 3;    /* PROT_READ | PROT_WRITE */
+  register long x2 __asm__("x2") = 3;   /* PROT_READ | PROT_WRITE */
   register long x3 __asm__("x3") = 0x22; /* MAP_PRIVATE | MAP_ANONYMOUS */
   register long x4 __asm__("x4") = -1;   /* fd = -1 */
   register long x5 __asm__("x5") = 0;    /* offset = 0 */
-  __asm__ volatile("svc #0"
-                   : "+r"(x0)
-                   : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x5)
-                   : "memory");
+  __asm__ volatile(
+      "svc #0\n"
+      : "+r"(x0)
+      : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x5)
+      : "memory");
   return (void *)x0;
 }
 
