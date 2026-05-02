@@ -33,6 +33,26 @@ This document details the improvements made to support Android Shared Libraries 
     *   **Libc Integration**: ❌ `vmp_md5_hex` and `vmp_get_process_name` return incorrect data/lengths.
     *   **Diagnosis**: The core VM logic is stable, but the interface between Native and VM context has a bug. Specifically, the cleanup code in the interpreter stub or the register restoration in `vm_entry_token` is likely corrupting `X0` or failing to preserve callee-saved registers (`X19-X28`) required by the Android runtime.
 
+### Verification Commands used:
+```bash
+# 1. Rebuild the tool and the stub
+make clean && make stub CROSS= && make packer
+
+# 2. Protect the Android test library
+./build/vmpacker -func vmp_compute,vmp_verify_key,vmp_md5_hex,vmp_get_process_name \
+    -o test/android/build/libnative_test_protected_arm64.so \
+    test/android/build/libnative_test_arm64.so
+
+# 3. Deploy to emulator
+adb shell mkdir -p /data/local/tmp/vmptest
+adb push test/android/build/test_runner_arm64 /data/local/tmp/vmptest/
+adb push test/android/build/libnative_test_protected_arm64.so /data/local/tmp/vmptest/libnative_test.so
+adb shell chmod +x /data/local/tmp/vmptest/test_runner_arm64
+
+# 4. Run tests
+adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64"
+```
+
 ## 3. Future Work
 
 1.  **ABI Compliance**: Fix the register saving/restoration logic in `vm_entry_token` to ensure `X19-X28` are preserved and `X0` is never overwritten by cleanup code (like `munmap`).
