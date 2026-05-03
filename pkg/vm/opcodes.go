@@ -14,7 +14,7 @@ const (
 	MaxExtFunc = 16  // maximum number of external functions
 )
 
-const (
+var (
 	// Data operations
 	OpNop      byte = 0xC3 // no operation            1B: [op]
 	OpMovImm   byte = 0x5A // Rx = imm64            10B: [op][r][imm64_LE]

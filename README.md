@@ -156,7 +156,7 @@ Requirements: Go 1.21+, GCC cross-compiler (aarch64-linux-gnu-gcc) or Android ND
 
 ## Roadmap
 
-- [ ] Dynamic opcode mapping — unique ISA per protection run
+- [x] Dynamic opcode mapping — unique ISA per protection run
 - [ ] Hybrid mode — partial native + partial VM execution
 - [ ] x86_64 architecture support
 

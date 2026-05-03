@@ -402,7 +402,7 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 
 	encryptOpcodes(result.Bytecode, result.CodeLen, ocKey, true)
 
-	reverseOffset := result.CodeLen + int(mapCount)*8
+	reverseOffset := result.CodeLen + 256 + int(mapCount)*8
 	result.Bytecode[reverseOffset] = 1
 	ocKeyOffset := reverseOffset + 1
 	binary.LittleEndian.PutUint32(result.Bytecode[ocKeyOffset:], ocKey)

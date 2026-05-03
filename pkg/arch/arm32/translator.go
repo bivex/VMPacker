@@ -297,7 +297,9 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 
 	result.CodeLen = t.pos()
 
-	// Trailer: addr map + reverse + oc_key + map_count + func_addr + func_size
+	// Trailer: addr map + reverse + oc_key + map_count + func_addr + func_size + op_map
+	// First append the op_map (256 bytes) so C interpreter can read it
+	t.emit(vm.GlobalOpMap[:]...)
 	mapCount := uint32(len(t.labels))
 	for arm32Off, vmOff := range t.labels {
 		t.emitU32(uint32(arm32Off))

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	elfpacker "github.com/vmpacker/pkg/binary/elf"
+	"github.com/vmpacker/pkg/vm"
 )
 
 // ============================================================
@@ -134,6 +135,9 @@ Examples:
 	fmt.Printf("[*] Output: %s\n", outPath)
 	fmt.Printf("[*] Functions: %v\n", funcs)
 	fmt.Println()
+
+	// generate dynamic opcodes
+	vm.GenerateDynamicISA()
 
 	packer := elfpacker.NewPacker(inputPath, outPath, funcs, addrSpecs, *verbose, *strip, *debug, *tokenEntry, interpBlob)
 	packer.SetInterpBlobARM32(interpBlobARM32)

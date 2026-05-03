@@ -535,183 +535,183 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_st64(vm_ctx_t *vm) {
  * tbl: 调用方栈上分配的 vm_handler_fn[256] 数组
  * ================================================================ */
 __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
-  for (int i = 0; i < 256; i++)
+  for (int i = 0; i < OP_ID_COUNT; i++)
     tbl[i] = hw_unknown;
 
   /* 系统 */
-  tbl[OP_NOP] = hw_nop;
-  tbl[OP_HALT] = hw_halt;
-  tbl[OP_RET] = hw_ret;
+  tbl[OP_ID_NOP] = hw_nop;
+  tbl[OP_ID_HALT] = hw_halt;
+  tbl[OP_ID_RET] = hw_ret;
 
   /* 数据移动 */
-  tbl[OP_MOV_IMM] = hw_mov_imm;
-  tbl[OP_MOV_IMM32] = hw_mov_imm32;
-  tbl[OP_MOV_REG] = hw_mov_reg;
+  tbl[OP_ID_MOV_IMM] = hw_mov_imm;
+  tbl[OP_ID_MOV_IMM32] = hw_mov_imm32;
+  tbl[OP_ID_MOV_REG] = hw_mov_reg;
 
   /* 内存 */
-  tbl[OP_LOAD8] = hw_load8;
-  tbl[OP_LOAD32] = hw_load32;
-  tbl[OP_LOAD64] = hw_load64;
-  tbl[OP_STORE8] = hw_store8;
-  tbl[OP_STORE32] = hw_store32;
-  tbl[OP_STORE64] = hw_store64;
-  tbl[OP_LOAD16] = hw_load16;
-  tbl[OP_STORE16] = hw_store16;
+  tbl[OP_ID_LOAD8] = hw_load8;
+  tbl[OP_ID_LOAD32] = hw_load32;
+  tbl[OP_ID_LOAD64] = hw_load64;
+  tbl[OP_ID_STORE8] = hw_store8;
+  tbl[OP_ID_STORE32] = hw_store32;
+  tbl[OP_ID_STORE64] = hw_store64;
+  tbl[OP_ID_LOAD16] = hw_load16;
+  tbl[OP_ID_STORE16] = hw_store16;
 
   /* ALU 三寄存器 */
-  tbl[OP_ADD] = hw_add;
-  tbl[OP_SUB] = hw_sub;
-  tbl[OP_MUL] = hw_mul;
-  tbl[OP_XOR] = hw_xor;
-  tbl[OP_AND] = hw_and;
-  tbl[OP_OR] = hw_or;
-  tbl[OP_SHL] = hw_shl;
-  tbl[OP_SHR] = hw_shr;
-  tbl[OP_ASR] = hw_asr;
-  tbl[OP_NOT] = hw_not;
-  tbl[OP_ROR] = hw_ror;
-  tbl[OP_UMULH] = hw_umulh;
+  tbl[OP_ID_ADD] = hw_add;
+  tbl[OP_ID_SUB] = hw_sub;
+  tbl[OP_ID_MUL] = hw_mul;
+  tbl[OP_ID_XOR] = hw_xor;
+  tbl[OP_ID_AND] = hw_and;
+  tbl[OP_ID_OR] = hw_or;
+  tbl[OP_ID_SHL] = hw_shl;
+  tbl[OP_ID_SHR] = hw_shr;
+  tbl[OP_ID_ASR] = hw_asr;
+  tbl[OP_ID_NOT] = hw_not;
+  tbl[OP_ID_ROR] = hw_ror;
+  tbl[OP_ID_UMULH] = hw_umulh;
 
   /* ALU 立即数 */
-  tbl[OP_ADD_IMM] = hw_add_imm;
-  tbl[OP_SUB_IMM] = hw_sub_imm;
-  tbl[OP_XOR_IMM] = hw_xor_imm;
-  tbl[OP_AND_IMM] = hw_and_imm;
-  tbl[OP_OR_IMM] = hw_or_imm;
-  tbl[OP_MUL_IMM] = hw_mul_imm;
-  tbl[OP_SHL_IMM] = hw_shl_imm;
-  tbl[OP_SHR_IMM] = hw_shr_imm;
-  tbl[OP_ASR_IMM] = hw_asr_imm;
+  tbl[OP_ID_ADD_IMM] = hw_add_imm;
+  tbl[OP_ID_SUB_IMM] = hw_sub_imm;
+  tbl[OP_ID_XOR_IMM] = hw_xor_imm;
+  tbl[OP_ID_AND_IMM] = hw_and_imm;
+  tbl[OP_ID_OR_IMM] = hw_or_imm;
+  tbl[OP_ID_MUL_IMM] = hw_mul_imm;
+  tbl[OP_ID_SHL_IMM] = hw_shl_imm;
+  tbl[OP_ID_SHR_IMM] = hw_shr_imm;
+  tbl[OP_ID_ASR_IMM] = hw_asr_imm;
 
   /* 比较 */
-  tbl[OP_CMP] = hw_cmp;
-  tbl[OP_CMP_IMM] = hw_cmp_imm;
+  tbl[OP_ID_CMP] = hw_cmp;
+  tbl[OP_ID_CMP_IMM] = hw_cmp_imm;
 
   /* 分支 */
-  tbl[OP_JMP] = hw_jmp;
-  tbl[OP_JE] = hw_je;
-  tbl[OP_JNE] = hw_jne;
-  tbl[OP_JL] = hw_jl;
-  tbl[OP_JGE] = hw_jge;
-  tbl[OP_JGT] = hw_jgt;
-  tbl[OP_JLE] = hw_jle;
-  tbl[OP_JB] = hw_jb;
-  tbl[OP_JAE] = hw_jae;
-  tbl[OP_JBE] = hw_jbe;
-  tbl[OP_JA] = hw_ja;
+  tbl[OP_ID_JMP] = hw_jmp;
+  tbl[OP_ID_JE] = hw_je;
+  tbl[OP_ID_JNE] = hw_jne;
+  tbl[OP_ID_JL] = hw_jl;
+  tbl[OP_ID_JGE] = hw_jge;
+  tbl[OP_ID_JGT] = hw_jgt;
+  tbl[OP_ID_JLE] = hw_jle;
+  tbl[OP_ID_JB] = hw_jb;
+  tbl[OP_ID_JAE] = hw_jae;
+  tbl[OP_ID_JBE] = hw_jbe;
+  tbl[OP_ID_JA] = hw_ja;
 
   /* 栈操作 */
-  tbl[OP_PUSH] = hw_push;
-  tbl[OP_POP] = hw_pop;
+  tbl[OP_ID_PUSH] = hw_push;
+  tbl[OP_ID_POP] = hw_pop;
 
   /* 原生调用 */
-  tbl[OP_CALL_NAT] = hw_call_nat;
-  tbl[OP_CALL_REG] = hw_call_reg;
-  tbl[OP_BR_REG] = hw_br_reg;
+  tbl[OP_ID_CALL_NAT] = hw_call_nat;
+  tbl[OP_ID_CALL_REG] = hw_call_reg;
+  tbl[OP_ID_BR_REG] = hw_br_reg;
 
   /* SIMD */
-  tbl[OP_VLD16] = hw_vld16;
-  tbl[OP_VST16] = hw_vst16;
+  tbl[OP_ID_VLD16] = hw_vld16;
+  tbl[OP_ID_VST16] = hw_vst16;
 
   /* TBZ/TBNZ */
-  tbl[OP_TBZ] = hw_tbz;
-  tbl[OP_TBNZ] = hw_tbnz;
+  tbl[OP_ID_TBZ] = hw_tbz;
+  tbl[OP_ID_TBNZ] = hw_tbnz;
 
   /* CCMP/CCMN */
-  tbl[OP_CCMP_REG] = hw_ccmp_reg;
-  tbl[OP_CCMP_IMM] = hw_ccmp_imm;
-  tbl[OP_CCMN_REG] = hw_ccmn_reg;
-  tbl[OP_CCMN_IMM] = hw_ccmn_imm;
+  tbl[OP_ID_CCMP_REG] = hw_ccmp_reg;
+  tbl[OP_ID_CCMP_IMM] = hw_ccmp_imm;
+  tbl[OP_ID_CCMN_REG] = hw_ccmn_reg;
+  tbl[OP_ID_CCMN_IMM] = hw_ccmn_imm;
 
   /* SVC */
-  tbl[OP_SVC] = hw_svc;
+  tbl[OP_ID_SVC] = hw_svc;
 
   /* UDIV/SDIV */
-  tbl[OP_UDIV] = hw_udiv;
-  tbl[OP_SDIV] = hw_sdiv;
+  tbl[OP_ID_UDIV] = hw_udiv;
+  tbl[OP_ID_SDIV] = hw_sdiv;
 
   /* MRS */
-  tbl[OP_MRS] = hw_mrs;
+  tbl[OP_ID_MRS] = hw_mrs;
 
   /* SMULH/CLZ/CLS/RBIT/REV */
-  tbl[OP_SMULH] = hw_smulh;
-  tbl[OP_CLZ] = hw_clz;
-  tbl[OP_CLS] = hw_cls;
-  tbl[OP_RBIT] = hw_rbit;
-  tbl[OP_REV] = hw_rev;
-  tbl[OP_REV16] = hw_rev16;
-  tbl[OP_REV32] = hw_rev32;
+  tbl[OP_ID_SMULH] = hw_smulh;
+  tbl[OP_ID_CLZ] = hw_clz;
+  tbl[OP_ID_CLS] = hw_cls;
+  tbl[OP_ID_RBIT] = hw_rbit;
+  tbl[OP_ID_REV] = hw_rev;
+  tbl[OP_ID_REV16] = hw_rev16;
+  tbl[OP_ID_REV32] = hw_rev32;
 
   /* ADC/SBC */
-  tbl[OP_ADC] = hw_adc;
-  tbl[OP_SBC] = hw_sbc;
+  tbl[OP_ID_ADC] = hw_adc;
+  tbl[OP_ID_SBC] = hw_sbc;
 
   /* ---- 栈机器操作码 ---- */
-  tbl[OP_S_VLOAD] = hw_s_vload;
-  tbl[OP_S_VSTORE] = hw_s_vstore;
-  tbl[OP_S_PUSH_IMM32] = hw_s_push_imm32;
-  tbl[OP_S_PUSH_IMM64] = hw_s_push_imm64;
-  tbl[OP_S_DUP] = hw_s_dup;
-  tbl[OP_S_SWAP] = hw_s_swap;
-  tbl[OP_S_DROP] = hw_s_drop;
-  tbl[OP_S_ADD] = hw_s_add;
-  tbl[OP_S_SUB] = hw_s_sub;
-  tbl[OP_S_MUL] = hw_s_mul;
-  tbl[OP_S_XOR] = hw_s_xor;
-  tbl[OP_S_AND] = hw_s_and;
-  tbl[OP_S_OR] = hw_s_or;
-  tbl[OP_S_SHL] = hw_s_shl;
-  tbl[OP_S_SHR] = hw_s_shr;
-  tbl[OP_S_ASR] = hw_s_asr;
-  tbl[OP_S_ROR] = hw_s_ror;
-  tbl[OP_S_UMULH] = hw_s_umulh;
-  tbl[OP_S_SMULH] = hw_s_smulh;
-  tbl[OP_S_UDIV] = hw_s_udiv;
-  tbl[OP_S_SDIV] = hw_s_sdiv;
-  tbl[OP_S_ADC] = hw_s_adc;
-  tbl[OP_S_SBC] = hw_s_sbc;
-  tbl[OP_S_NOT] = hw_s_not;
-  tbl[OP_S_NEG] = hw_s_neg;
-  tbl[OP_S_CLZ] = hw_s_clz;
-  tbl[OP_S_CLS] = hw_s_cls;
-  tbl[OP_S_RBIT] = hw_s_rbit;
-  tbl[OP_S_REV] = hw_s_rev;
-  tbl[OP_S_REV16] = hw_s_rev16;
-  tbl[OP_S_REV32] = hw_s_rev32;
-  tbl[OP_S_TRUNC32] = hw_s_trunc32;
-  tbl[OP_S_SEXT32] = hw_s_sext32;
-  tbl[OP_S_LOAD_SLIDE] = hw_s_load_slide;
-  tbl[OP_S_CMP] = hw_s_cmp;
-  tbl[OP_S_LD8] = hw_s_ld8;
-  tbl[OP_S_LD16] = hw_s_ld16;
-  tbl[OP_S_LD32] = hw_s_ld32;
-  tbl[OP_S_LD64] = hw_s_ld64;
-  tbl[OP_S_ST8] = hw_s_st8;
-  tbl[OP_S_ST16] = hw_s_st16;
-  tbl[OP_S_ST32] = hw_s_st32;
-  tbl[OP_S_ST64] = hw_s_st64;
+  tbl[OP_ID_S_VLOAD] = hw_s_vload;
+  tbl[OP_ID_S_VSTORE] = hw_s_vstore;
+  tbl[OP_ID_S_PUSH_IMM32] = hw_s_push_imm32;
+  tbl[OP_ID_S_PUSH_IMM64] = hw_s_push_imm64;
+  tbl[OP_ID_S_DUP] = hw_s_dup;
+  tbl[OP_ID_S_SWAP] = hw_s_swap;
+  tbl[OP_ID_S_DROP] = hw_s_drop;
+  tbl[OP_ID_S_ADD] = hw_s_add;
+  tbl[OP_ID_S_SUB] = hw_s_sub;
+  tbl[OP_ID_S_MUL] = hw_s_mul;
+  tbl[OP_ID_S_XOR] = hw_s_xor;
+  tbl[OP_ID_S_AND] = hw_s_and;
+  tbl[OP_ID_S_OR] = hw_s_or;
+  tbl[OP_ID_S_SHL] = hw_s_shl;
+  tbl[OP_ID_S_SHR] = hw_s_shr;
+  tbl[OP_ID_S_ASR] = hw_s_asr;
+  tbl[OP_ID_S_ROR] = hw_s_ror;
+  tbl[OP_ID_S_UMULH] = hw_s_umulh;
+  tbl[OP_ID_S_SMULH] = hw_s_smulh;
+  tbl[OP_ID_S_UDIV] = hw_s_udiv;
+  tbl[OP_ID_S_SDIV] = hw_s_sdiv;
+  tbl[OP_ID_S_ADC] = hw_s_adc;
+  tbl[OP_ID_S_SBC] = hw_s_sbc;
+  tbl[OP_ID_S_NOT] = hw_s_not;
+  tbl[OP_ID_S_NEG] = hw_s_neg;
+  tbl[OP_ID_S_CLZ] = hw_s_clz;
+  tbl[OP_ID_S_CLS] = hw_s_cls;
+  tbl[OP_ID_S_RBIT] = hw_s_rbit;
+  tbl[OP_ID_S_REV] = hw_s_rev;
+  tbl[OP_ID_S_REV16] = hw_s_rev16;
+  tbl[OP_ID_S_REV32] = hw_s_rev32;
+  tbl[OP_ID_S_TRUNC32] = hw_s_trunc32;
+  tbl[OP_ID_S_SEXT32] = hw_s_sext32;
+  tbl[OP_ID_S_LOAD_SLIDE] = hw_s_load_slide;
+  tbl[OP_ID_S_CMP] = hw_s_cmp;
+  tbl[OP_ID_S_LD8] = hw_s_ld8;
+  tbl[OP_ID_S_LD16] = hw_s_ld16;
+  tbl[OP_ID_S_LD32] = hw_s_ld32;
+  tbl[OP_ID_S_LD64] = hw_s_ld64;
+  tbl[OP_ID_S_ST8] = hw_s_st8;
+  tbl[OP_ID_S_ST16] = hw_s_st16;
+  tbl[OP_ID_S_ST32] = hw_s_st32;
+  tbl[OP_ID_S_ST64] = hw_s_st64;
 
   /* ---- SIMD 内存访问 ---- */
-  tbl[OP_SVLD] = hw_s_vld;
-  tbl[OP_SVST] = hw_s_vst;
+  tbl[OP_ID_SVLD] = hw_s_vld;
+  tbl[OP_ID_SVST] = hw_s_vst;
 
   /* ---- FP ALU ---- */
-  tbl[OP_SFADD] = hw_fadd;
-  tbl[OP_SFSUB] = hw_fsub;
-  tbl[OP_SFMUL] = hw_fmul;
-  tbl[OP_SFDIV] = hw_fdiv;
-  tbl[OP_SFMOV] = hw_fmov;
-  tbl[OP_SFCMP] = hw_fcmp;
-  tbl[OP_SFNEG] = hw_fneg;
-  tbl[OP_SFABS] = hw_fabs;
-  tbl[OP_SFSQRT] = hw_fsqrt;
-  tbl[OP_SFMAX] = hw_fmax;
-  tbl[OP_SFMIN] = hw_fmin;
-  tbl[OP_SFCVTIF] = hw_fcvt_if;
-  tbl[OP_SFCVTFI] = hw_fcvt_fi;
-  tbl[OP_SFMOVRV] = hw_fmov_rv;
-  tbl[OP_SFMOVVR] = hw_fmov_vr;
-  tbl[OP_SFCVT] = hw_fcvt;
+  tbl[OP_ID_SFADD] = hw_fadd;
+  tbl[OP_ID_SFSUB] = hw_fsub;
+  tbl[OP_ID_SFMUL] = hw_fmul;
+  tbl[OP_ID_SFDIV] = hw_fdiv;
+  tbl[OP_ID_SFMOV] = hw_fmov;
+  tbl[OP_ID_SFCMP] = hw_fcmp;
+  tbl[OP_ID_SFNEG] = hw_fneg;
+  tbl[OP_ID_SFABS] = hw_fabs;
+  tbl[OP_ID_SFSQRT] = hw_fsqrt;
+  tbl[OP_ID_SFMAX] = hw_fmax;
+  tbl[OP_ID_SFMIN] = hw_fmin;
+  tbl[OP_ID_SFCVTIF] = hw_fcvt_if;
+  tbl[OP_ID_SFCVTFI] = hw_fcvt_fi;
+  tbl[OP_ID_SFMOVRV] = hw_fmov_rv;
+  tbl[OP_ID_SFMOVVR] = hw_fmov_vr;
+  tbl[OP_ID_SFCVT] = hw_fcvt;
 }
 
 #endif /* VM_INDIRECT_DISPATCH */

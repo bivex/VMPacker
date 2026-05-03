@@ -268,7 +268,7 @@ if (bc_off <= (u64)bc_len - 8) {
    *           → oc_key(4B) → reverse(1B) → BR map entries
    * 固定 trailer 大小: 4+8+4+4+1 = 21B
    */
-  if (bc_len >= 21) { /* 最小 trailer: 21B */
+  if (bc_len >= 21 + 256) { /* 最小 trailer: 21B + 256B(op_map) */
     u32 trail_func_size = rd32(&bc_buf[bc_len - 4]);
     u64 trail_func_addr = rd64(&bc_buf[bc_len - 12]);
     u32 trail_map_count = rd32(&bc_buf[bc_len - 16]);
@@ -276,7 +276,7 @@ if (bc_off <= (u64)bc_len - 8) {
     u8 trail_reverse = bc_buf[bc_len - 21];
     u32 map_data_size =
         trail_map_count * 8 +
-        21; /* +21 for reverse+oc_key+map_count+func_addr+func_size */
+        21 + 256; /* +21 for reverse+oc_key+map_count+func_addr+func_size + 256 for op_map */
 
     /* 设置 OpcodeCryptor 密钥 + reverse 标志 */
     vm->oc_key = trail_oc_key;
@@ -287,7 +287,7 @@ if (bc_off <= (u64)bc_len - 8) {
       vm->func_addr = trail_func_addr + vm->slide;
       vm->func_size = trail_func_size;
       vm->map_count = trail_map_count;
-      vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size];
+      vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size + 256];
       vm->bc_len = bc_len - map_data_size; /* 实际字节码不含 trailer */
 
       /* 插入排序 addr_map (按 arm64_off 升序, 为二分查找准备) */
@@ -899,6 +899,26 @@ L_S_TRUNC32:
   NEXT(h_s_trunc32(vm));
 L_S_SEXT32:
   NEXT(h_s_sext32(vm));
+L_S_CMP:
+  NEXT(h_s_cmp(vm));
+
+/* ---- 未知指令 ---- */
+L_UNKNOWN:
+  ret = vm->R[0]; /* fall through to cleanup */
+
+#undef DISPATCH
+#undef NEXT
+#undef NEXT0
+
+#endif /* VM_INDIRECT_DISPATCH */
+
+  /* ---- 统一退出: 释放 mmap 防止泄漏 ---- */
+cleanup:
+  /* sys_munmap(vm, ctx_alloc); */
+  /* sys_munmap(bc_buf, alloc_size); */
+  return ret;
+}
+T(h_s_sext32(vm));
 L_S_CMP:
   NEXT(h_s_cmp(vm));
 

@@ -243,7 +243,23 @@ u64 vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide) {
 
 #ifdef VM_INDIRECT_DISPATCH
   vm_handler_fn vm_jump_table[256];
-  vm_init_jump_table(vm_jump_table);
+  
+  if (bc_len >= 21 + 256 && vm->map_count > 0) {
+    u8 *op_map = &bc_buf[vm->bc_len];
+    vm_handler_fn handlers[OP_ID_COUNT];
+    vm_init_jump_table(handlers);
+    for (int i = 0; i < 256; i++) {
+        u8 id = op_map[i];
+        if (id < OP_ID_COUNT) {
+            vm_jump_table[i] = handlers[id];
+        } else {
+            vm_jump_table[i] = handlers[0]; // fallback
+        }
+    }
+  } else {
+    vm_init_jump_table(vm_jump_table); // Should not happen, but safe fallback
+  }
+
   DBG('9'); /* before VM loop */
 
   if (vm->reverse) {

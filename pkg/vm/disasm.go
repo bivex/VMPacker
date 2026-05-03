@@ -18,12 +18,14 @@ type opInfo struct {
 	Size int // total instruction bytes (0 = variable)
 }
 
-var opTable = map[byte]opInfo{
-	OpNop:      {"NOP", 1},
-	OpMovImm:   {"MOV_IMM64", 10}, // op + r + imm64
-	OpMovImm32: {"MOV_IMM32", 6},  // op + r + imm32
-	OpMovReg:   {"MOV_REG", 3},    // op + dst + src
+var opTable map[byte]opInfo
 
+func init() {
+	opTable = map[byte]opInfo{
+		OpNop:      {"NOP", 1},
+		OpMovImm:   {"MOV_IMM64", 10}, // op + r + imm64
+		OpMovImm32: {"MOV_IMM32", 6},  // op + r + imm32
+		OpMovReg:   {"MOV_REG", 3},    // op + dst + src
 	OpLoad8:   {"LOAD8", 5}, // op + dst + base + imm16
 	OpLoad32:  {"LOAD32", 5},
 	OpLoad64:  {"LOAD64", 5},
@@ -177,6 +179,7 @@ var opTable = map[byte]opInfo{
 	OpSFMovRV: {"FMOV_RV", 4},
 	OpSFMovVR: {"FMOV_VR", 4},
 	OpSFCvt:   {"FCVT", 4},
+}
 }
 
 // InstructionSize returns total byte count for the given opcode (0 = unknown)

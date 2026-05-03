@@ -219,7 +219,9 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 	// record pure bytecode length (before trailer)
 	result.CodeLen = t.pos()
 
-	// ---- append trailer (BR indirect jump mapping table + reverse + oc_key placeholder) ----
+	// ---- append trailer (BR indirect jump mapping table + reverse + oc_key placeholder + op_map) ----
+	// First append the op_map (256 bytes) so C interpreter can read it
+	t.emit(vm.GlobalOpMap[:]...)
 	// entry: [arm64_off:u32][vm_off:u32]
 	// reverse and oc_key are filled with actual values by packer
 	mapCount := uint32(len(t.labels))
