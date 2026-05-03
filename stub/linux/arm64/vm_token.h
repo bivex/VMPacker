@@ -22,7 +22,7 @@
 #define TOKEN_ENCODE(fid, off, key) \
     (((u32)(key) << 24) | ((u32)(off) << 12) | ((u32)(fid) & 0xFFF))
 
-/* ---- Token 描述符表条目 (packer 在 payload 中写入) ---- */
+/* ---- Token descriptor table entries (written by packer in payload) ---- */
 typedef struct {
     u64 bc_off;     /* 加密字节码相对于 _token_table_va 的偏移 (PIE 兼容) */
     u32 bc_len;     /* 字节码长度 */

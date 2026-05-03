@@ -115,7 +115,7 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
  * ================================================================ */
 /* TOKEN_ONLY: Token 入口始终编译 */
 
-/* Packer 在 payload 中 patch 此变量为 token 描述符表的 VA */
+/* Packer patches this variable with the token descriptor table VA in payload */
 __attribute__((section(".data.entry"), used)) volatile u64 _token_table_va = 0;
 /* Packer patches this with the link-time VA of _token_table_va,
  * so the stub can compute ASLR slide = runtime_self_va - link_time_self_va */

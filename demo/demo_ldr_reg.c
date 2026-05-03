@@ -2,7 +2,7 @@
  * demo_ldr_reg.c — 测试 LDR_REG (寄存器偏移寻址) 在 VMP reverse 模式下的行为
  *
  * GCC -O2 会将 table[idx] 编译为: LDR Wd, [Xn, Xm, LSL #2]
- * 这是 check_stub_crc 中 CRC32 查表的核心指令模式。
+ * This is the core instruction pattern for CRC32 table lookup in check_stub_crc.
  *
  * 预期输出: checksum=0x12345678 的某个 CRC 变换值
  * VMP 前: 正确输出
@@ -13,7 +13,7 @@
 #include <stdio.h>
 
 
-/* 小型查找表 (模拟 CRC32 表) — 放在 .text 中确保生成 LDR_REG */
+/* Small lookup table (simulating CRC32 table) — placed in .text to ensure LDR_REG generation */
 static const uint32_t lookup[256] __attribute__((aligned(4))) = {
     0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F,
     0xE963A535, 0x9E6495A3, 0x0EDB8832, 0x79DCB8A4, 0xE0D5E91E, 0x97D2D988,

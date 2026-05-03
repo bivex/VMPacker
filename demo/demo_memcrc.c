@@ -40,8 +40,8 @@ static unsigned int crc32_calc(const unsigned char *data, unsigned int len) {
 
 /*
  * 用一个全局数组模拟 stub 的 .text 段。
- * 实际场景中，stub 通过 ADR 指令获取自己的 PC，
- * 然后回算到 blob 起始地址进行 CRC。
+ * In a real scenario, the stub obtains its own PC via the ADR instruction,
+ * then back-calculates to the blob start address for CRC.
  */
 static unsigned char fake_stub_code[] = {
     /* 模拟 64 字节 stub 代码 */
@@ -124,7 +124,7 @@ test_func_to_check(unsigned int a, unsigned int b) {
 static int test_self_locate(void) {
   /*
    * 对 test_func_to_check 的前 16 字节做 CRC
-   * (实际 stub 中会对整个 blob 做 CRC)
+   * (In the actual stub, the entire blob is CRC-checked)
    *
    * 注意: 这里只证明"可以从函数指针获取代码地址并计算CRC",
    * 不验证具体 CRC 值（因为编译器可能改变代码）。

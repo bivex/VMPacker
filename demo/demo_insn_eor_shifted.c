@@ -1,10 +1,10 @@
 // demo/demo_insn_eor_shifted.c
-// 测试 EOR 指令的所有移位变体: LSL, LSR, ASR, ROR
+// Test all EOR instruction shift variants: LSL, LSR, ASR, ROR
 #include <stdio.h>
 #include <stdint.h>
 
-// 测试 EOR with ROR shift (CRC32 中常见)
-// 函数需要足够大（>72B）以支持 standard mode trampoline
+// Test EOR with ROR shift (common in CRC32)
+// Function needs to be large enough (>72B) to support standard mode trampoline
 int __attribute__((noinline)) test_eor_shifted(uint32_t a, uint32_t b) {
     uint32_t r1, r2, r3, r4;
     uint32_t t1, t2, t3, t4;
@@ -16,7 +16,7 @@ int __attribute__((noinline)) test_eor_shifted(uint32_t a, uint32_t b) {
     asm volatile("eor %w0, %w1, %w2, lsr #8" : "=r"(r2) : "r"(a), "r"(b));
     // EOR with ASR #16
     asm volatile("eor %w0, %w1, %w2, asr #16" : "=r"(r3) : "r"(a), "r"(b));
-    // EOR with LSL #4 (已支持，作为对照)
+    // EOR with LSL #4 (already supported, as control)
     asm volatile("eor %w0, %w1, %w2, lsl #4" : "=r"(r4) : "r"(a), "r"(b));
 
     // AND with ROR #13
@@ -28,13 +28,13 @@ int __attribute__((noinline)) test_eor_shifted(uint32_t a, uint32_t b) {
     // ORR with ROR #19
     asm volatile("orr %w0, %w1, %w2, ror #19" : "=r"(t4) : "r"(a), "r"(b));
 
-    // 额外指令确保函数体 > 72 字节
+    // Extra instructions to ensure function body > 72 bytes
     // EOR with LSR #3
     asm volatile("eor %w0, %w1, %w2, lsr #3" : "=r"(u1) : "r"(r1), "r"(r2));
     // EOR with ASR #11
     asm volatile("eor %w0, %w1, %w2, asr #11" : "=r"(u2) : "r"(r3), "r"(r4));
 
-    // 组合所有结果确保每个变体都被使用
+    // Combine all results to ensure each variant is used
     uint32_t eor_result = r1 ^ r2 ^ r3 ^ r4;
     uint32_t logic_result = t1 ^ t2 ^ t3 ^ t4;
     uint32_t extra_result = u1 ^ u2;
@@ -47,12 +47,12 @@ int main() {
 
     int got = test_eor_shifted(a, b);
 
-    // 原生运行验证：只要不崩溃且返回非零即可
-    // VMP 测试时对比原生结果
+    // Native run verification: as long as it doesn't crash and returns non-zero
+    // Compare with native results during VMP testing
     printf("EOR_SHIFTED result=0x%08X\n", (uint32_t)got);
 
-    // 用 adb 原生运行获取基准值，然后 VMP 运行对比
-    // 这里用简单的 sanity check：结果不应为 0
+    // Use adb to get baseline values from native run, then compare with VMP run
+    // Simple sanity check: result should not be 0
     if (got != 0) {
         printf("EOR_SHIFTED PASS\n");
         return 0;

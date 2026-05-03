@@ -1,11 +1,11 @@
 /*
  * vm_crc.h — CRC32 完整性校验 (无外部依赖)
  *
- * CRC-32/ISO 多项式 0xEDB88320，与 Go crc32.ChecksumIEEE 一致。
- * 用于 stub 内部对字节码和自身代码做完整性校验。
+ * CRC-32/ISO polynomial 0xEDB88320, compatible with Go crc32.ChecksumIEEE.
+ * Used for integrity checking of bytecode and stub code internally.
  *
  * 尾部 CRC 段格式 (在 BR 映射表之前，可选):
- *   [stub_va:u64]     stub 代码在内存中的虚拟地址
+ *   [stub_va:u64]     stub code virtual address in memory
  *   [stub_size:u32]   stub 代码大小
  *   [stub_crc:u32]    stub 代码的 CRC32
  *   [bc_crc:u32]      字节码 (不含 CRC 段和 BR 表) 的 CRC32

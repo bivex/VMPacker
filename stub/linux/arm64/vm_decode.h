@@ -1,7 +1,7 @@
 /*
  * vm_decode.h — 字节码读取工具函数
  *
- * 小端读取: 从字节码流中读取 16/32/64 位值。
+ * Little-endian reads: read 16/32/64-bit values from bytecode stream.
  */
 #ifndef VM_DECODE_H
 #define VM_DECODE_H

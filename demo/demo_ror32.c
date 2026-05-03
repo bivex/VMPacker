@@ -1,12 +1,13 @@
 /*
  * demo_ror32.c — 验证 ROR 32-bit bug
  *
- * 包含 rotl32() + chained XOR decrypt 逻辑——与 check_stub_crc 中
- * decrypt_crc_info 完全相同的模式。
+ * Contains rotl32() + chained XOR decrypt logic—identical pattern to
+ * decrypt_crc_info in check_stub_crc.
  *
  * ARM64 编译后 rotl32(v,7) 会生成:
  *   EOR Wd, Wn, Wm, ROR #25
- * 这是一个 32-bit ROR。如果 VM 的 h_ror 做 64-bit ROR，结果就会出错。
+ * This is a 32-bit ROR. If the VM's h_ror performs a 64-bit ROR, the result
+ * will be incorrect.
  *
  * 编译: aarch64-linux-gnu-gcc -O2 -march=armv8-a -static -o demo_ror32
  * demo_ror32.c 反汇编验证: aarch64-linux-gnu-objdump -d demo_ror32 | grep -A30
@@ -33,7 +34,7 @@ static void my_exit(int code) {
 typedef unsigned int u32;
 typedef unsigned char u8;
 
-/* 与 integrity.c 中完全相同的 rotl32 */
+/* Exactly the same rotl32 as in integrity.c */
 static u32 rotl32(u32 v, int n) { return (v << n) | (v >> (32 - n)); }
 
 /* 与 decrypt_crc_info 相同的解密链 */

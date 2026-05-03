@@ -2,7 +2,8 @@
  * vm_sections.h — Handler Section 分配宏
  *
  * 当 VM_FUNC_SPLIT 宏定义时，将 handler 包装函数分散到
- * 不同的 ELF section 中，使 IDA Pro 将每个片段识别为独立函数。
+ * in different ELF sections, making IDA Pro recognize each fragment as an
+ * independent function.
  *
  * Section 分组:
  *   .text.vm_alu    — ALU 运算 (add/sub/mul/xor/and/or/shl/shr/asr/not/ror + _imm)

@@ -5,7 +5,7 @@
  *   - 字节码被划分为固定大小的 segment (如 64 字节)
  *   - 每个 segment 有独立的 XOR key (密钥链: key[i+1] = crc32(key[i]))
  *   - 运行时只解密当前 segment, 同时回加密上一个 segment
- *   - 内存中同一时刻最多 1 个 segment 是明文 → 防止内存 dump
+ *   - At most 1 segment is in plaintext in memory at any time → prevents memory dumps
  *
  * 数据格式 (packer 生成):
  *   [seg_count:u32]            segment 数量

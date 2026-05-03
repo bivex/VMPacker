@@ -24,7 +24,7 @@ test/android/
 ├── settings.gradle
 ├── gradle.properties
 └── scripts/
-    └── protect_and_repack.sh         # APK 中 .so 保护 + 重签名
+    └── protect_and_repack.sh         # protect .so in APK + re-sign
 ```
 
 ## 前置要求
@@ -64,7 +64,7 @@ make test-all
 ### 测试流程
 
 1. `make so32/so64` — 使用 NDK clang 编译 `libnative_test.so`
-2. `make protect32/protect64` — VMPacker 保护 `.so` 中的目标函数
+2. `make protect32/protect64` — VMPacker protects target functions in `.so`
 3. `make push32/push64` — 通过 adb 推送到设备 `/data/local/tmp/vmptest/`
 4. `make run-on-device` — 分别用未保护和保护后的 `.so` 运行测试
 5. 对比输出：保护前后结果应完全一致
@@ -88,7 +88,7 @@ cd test/android
 # 构建 debug APK
 make apk
 
-# 保护 APK 中的 .so 并重签名
+# Protect .so in APK and re-sign
 make apk-protect
 
 # 安装到设备

@@ -3,7 +3,7 @@
  *
  * UMULH Xd, Xn, Xm: Xd = (Xn * Xm)[127:64]
  *
- * 所有 UMULH 内联在 test_umulh 中，不使用子函数调用。
+ * All UMULH instructions are inlined in test_umulh, without subroutine calls.
  * 使用 X9-X14 作为安全临时寄存器，避免与 ABI 参数冲突。
  *
  * .inst 编码:

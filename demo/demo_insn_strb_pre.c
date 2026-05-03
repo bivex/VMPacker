@@ -20,7 +20,7 @@ int test_strb_pre(void) {
     uint64_t val_c = 0xEF;
     uint64_t val_d = 0x42;
 
-    // 获取 buf 中间位置的指针
+    // Get pointer to the middle of buf
     uint8_t *ptr = &buf[16];
 
     // Test 1: STURB with negative offset (-1)
