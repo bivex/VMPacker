@@ -11,15 +11,16 @@ import (
 )
 
 // ============================================================
-// vmpacker - ARM64/ARM32 ELF VMP 保护工具 (模块化版本)
+// vmpacker - ARM64/ARM32 ELF VMP protection tool (modular version)
 //
-// 用法:
+// Usage:
 //   vmpacker -func check_license [-v] [-o output] input.elf
 //   vmpacker -info input.elf
 //
-// 功能:
-//   读取编译好的 ARM64/ARM32 ELF，解码指定函数的指令，
-//   翻译为自定义 VM 字节码，替换原函数为 VM 跳板。
+// Functionality:
+//   Read a compiled ARM64/ARM32 ELF, decode instructions of specified
+//   functions, translate to custom VM bytecode, replace original
+//   functions with VM trampolines.
 // ============================================================
 
 //go:embed vm_interp.bin
@@ -29,33 +30,33 @@ var interpBlob []byte
 var interpBlobARM32 []byte
 
 func main() {
-	funcList := flag.String("func", "", "要保护的函数名（逗号分隔多个）")
-	addrList := flag.String("addr", "", "按地址保护（格式: 0xADDR:SIZE[:name], 逗号分隔多个）")
-	output := flag.String("o", "", "输出文件路径（默认: 原文件名.vmp）")
-	verbose := flag.Bool("v", false, "详细输出（显示反汇编）")
-	strip := flag.Bool("strip", true, "清除符号表（防止strip破坏保护）")
-	debug := flag.Bool("debug", false, "生成 debug 对照文件（ARM64 → VM 字节码映射）")
-	tokenEntry := flag.Bool("token", true, "启用 Token 化入口模式（3 指令跳板）— 默认开启")
-	info := flag.Bool("info", false, "仅打印 ELF 信息，不做保护")
+	funcList := flag.String("func", "", "comma-separated function names to protect")
+	addrList := flag.String("addr", "", "protect by address (format: 0xADDR:SIZE[:name], comma-separated)")
+	output := flag.String("o", "", "output file path (default: original.vmp)")
+	verbose := flag.Bool("v", false, "verbose output (show disassembly)")
+	strip := flag.Bool("strip", true, "strip symbol table (prevent strip from breaking protection)")
+	debug := flag.Bool("debug", false, "generate debug mapping file (ARM64 -> VM bytecode)")
+	tokenEntry := flag.Bool("token", true, "enable tokenized entry mode (3-inst trampoline) - default on")
+	info := flag.Bool("info", false, "print ELF info only, do not protect")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `vmpacker - ARM64/ARM32 ELF VMP 保护工具
+		fmt.Fprintf(os.Stderr, `vmpacker - ARM64/ARM32 ELF VMP protection tool
 
-用法:
-  vmpacker -func <函数名> [-v] [-o output] <input.elf>
-  vmpacker -addr <地址:大小[:名称]> [-v] [-o output] <input.elf>
+Usage:
+  vmpacker -func <function> [-v] [-o output] <input.elf>
+  vmpacker -addr <addr:size[:name]> [-v] [-o output] <input.elf>
   vmpacker -info <input.elf>
 
-选项:
+Options:
 `)
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, `
-示例:
+Examples:
   vmpacker -func check_license -v -o protected.elf original.elf
   vmpacker -func check_license -token -v -o protected.elf original.elf
   vmpacker -func "check_license,verify_token" app.elf
-  vmpacker -addr "0x4006AC-0x400790" app.elf
-  vmpacker -addr "0x4006AC-0x400790:main" -func verify app.elf
+  vmpacker -addr "0x4006AC:0x400790" app.elf
+  vmpacker -addr "0x4006AC:0x400790:main" -func verify app.elf
   vmpacker -info app.elf
 `)
 	}
@@ -69,13 +70,13 @@ func main() {
 
 	inputPath := flag.Arg(0)
 
-	// 检查输入文件是否存在
+	// check if input file exists
 	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "[!] 文件不存在: %s\n", inputPath)
+		fmt.Fprintf(os.Stderr, "[!] File not found: %s\n", inputPath)
 		os.Exit(1)
 	}
 
-	// 仅显示信息
+	// info only mode
 	if *info {
 		if err := elfpacker.PrintELFInfo(inputPath); err != nil {
 			fmt.Fprintf(os.Stderr, "[!] %v\n", err)
@@ -84,14 +85,14 @@ func main() {
 		return
 	}
 
-	// 需要指定函数
+	// function must be specified
 	if *funcList == "" && *addrList == "" {
-		fmt.Fprintf(os.Stderr, "[!] 请用 -func 或 -addr 指定要保护的函数\n")
+		fmt.Fprintf(os.Stderr, "[!] Use -func or -addr to specify functions to protect\n")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	// 解析函数名列表
+	// parse function name list
 	var funcs []string
 	if *funcList != "" {
 		for _, f := range strings.Split(*funcList, ",") {
@@ -102,7 +103,7 @@ func main() {
 		}
 	}
 
-	// 解析地址列表
+	// parse address list
 	var addrSpecs []elfpacker.AddrSpec
 	if *addrList != "" {
 		for _, spec := range strings.Split(*addrList, ",") {
@@ -112,34 +113,34 @@ func main() {
 			}
 			as, err := elfpacker.ParseAddrSpec(spec)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "[!] 地址格式错误: %s — %v\n", spec, err)
+				fmt.Fprintf(os.Stderr, "[!] Invalid address format: %s — %v\n", spec, err)
 				os.Exit(1)
 			}
 			addrSpecs = append(addrSpecs, as)
 		}
 	}
 
-	// 输出路径
+	// output path
 	outPath := *output
 	if outPath == "" {
 		outPath = inputPath + ".vmp"
 	}
 
-	// 执行
+	// execute
 	fmt.Println("========================================")
-	fmt.Println("  vmpacker - ARM64/ARM32 ELF VMP 保护工具")
+	fmt.Println("  vmpacker - ARM64/ARM32 ELF VMP protection tool")
 	fmt.Println("========================================")
-	fmt.Printf("[*] 输入: %s\n", inputPath)
-	fmt.Printf("[*] 输出: %s\n", outPath)
-	fmt.Printf("[*] 保护函数: %v\n", funcs)
+	fmt.Printf("[*] Input:  %s\n", inputPath)
+	fmt.Printf("[*] Output: %s\n", outPath)
+	fmt.Printf("[*] Functions: %v\n", funcs)
 	fmt.Println()
 
 	packer := elfpacker.NewPacker(inputPath, outPath, funcs, addrSpecs, *verbose, *strip, *debug, *tokenEntry, interpBlob)
 	packer.SetInterpBlobARM32(interpBlobARM32)
 	if err := packer.Process(); err != nil {
-		fmt.Fprintf(os.Stderr, "\n[!] 失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "\n[!] Failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("\n[+] VMP 保护完成!")
+	fmt.Println("\n[+] VMP protection complete!")
 }

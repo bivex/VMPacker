@@ -7,7 +7,7 @@ import (
 )
 
 // ============================================================
-// FP / SIMD 翻译 — 基础 ALU
+// FP / SIMD translation - basic ALU
 // ============================================================
 
 func (t *Translator) trFAddSub(inst vm.Instruction, vmOp byte) error {
@@ -140,7 +140,7 @@ func (t *Translator) trFMoveRV(inst vm.Instruction) error {
 	return nil
 }
 
-// 代理方法到 translator.go dispatch
+// Proxy methods to translator.go dispatch
 func (t *Translator) translateFP(inst vm.Instruction) (int, error) {
 	op := Op(inst.Op)
 	switch op {

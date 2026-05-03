@@ -7,8 +7,8 @@ import (
 )
 
 // ============================================================
-// 加载/存储 — 仅保留无法用栈模式实现的特殊格式指令
-// Acquire/Release 指令语义简单不涉及 temp 寄存器
+// Load/Store - only special format instructions that can't use stack mode
+// Acquire/Release instructions - simple semantics, no temp register involvement
 // ============================================================
 
 // trLdar 翻译 LDAR/LDARB/LDARH/LDAXR/LDAXRB/LDAXRH

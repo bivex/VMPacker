@@ -6,7 +6,7 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// Op ARM32 指令操作码
+// Op - ARM32 instruction opcodes
 type Op int
 
 const (
@@ -166,7 +166,7 @@ const (
 	UNSUPPORTED
 )
 
-// ARM32 条件码 (bits[31:28])
+// ARM32 condition codes (bits[31:28])
 const (
 	COND_EQ = 0x0 // Equal (Z=1)
 	COND_NE = 0x1 // Not equal (Z=0)
@@ -185,7 +185,7 @@ const (
 	COND_AL = 0xE // Always
 )
 
-// Decoder ARM32 解码器，实现 vm.Decoder 接口
+// Decoder - ARM32 decoder implementing vm.Decoder interface
 // Supports both ARM (A32) and Thumb/Thumb-2 (T32) modes.
 type Decoder struct {
 	thumbMode bool // true = Thumb/Thumb-2 mode

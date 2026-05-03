@@ -7,15 +7,15 @@ import (
 )
 
 // ============================================================
-// 分支翻译 — B / B.cond / BL / BLR / BR / TBZ
-// CSEL/CBZ 已迁移到 tr_stack.go (trStackCSEL/trStackCBZ)
+// Branch translation - B / B.cond / BL / BLR / BR / TBZ
+// CSEL/CBZ migrated to tr_stack.go (trStackCSEL/trStackCBZ)
 // ============================================================
 
 func (t *Translator) trBranch(inst vm.Instruction) error {
 	target := inst.Offset + int(inst.Imm)
 
 	if target < 0 || target > t.funcSize {
-		return fmt.Errorf("分支目标 0x%X 超出函数范围 [0, 0x%X)", target, t.funcSize)
+		return fmt.Errorf("branch target 0x%X out of function range [0, 0x%X)", target, t.funcSize)
 	}
 
 	t.emit(vm.OpJmp)
@@ -29,7 +29,7 @@ func (t *Translator) trBranchCond(inst vm.Instruction) error {
 	target := inst.Offset + int(inst.Imm)
 
 	if target < 0 || target > t.funcSize {
-		return fmt.Errorf("条件分支目标 0x%X 超出函数范围 [0, 0x%X]", target, t.funcSize)
+		return fmt.Errorf("conditional branch target 0x%X out of function range [0, 0x%X]", target, t.funcSize)
 	}
 
 	var vmOp byte
@@ -59,7 +59,7 @@ func (t *Translator) trBranchCond(inst vm.Instruction) error {
 	case COND_PL:
 		vmOp = vm.OpJge // PL: N==0 → FL_SIGN not set
 	default:
-		return fmt.Errorf("不支持的条件码 0x%X", inst.Cond)
+		return fmt.Errorf("unsupported condition code 0x%X", inst.Cond)
 	}
 
 	t.emit(vmOp)
@@ -97,14 +97,14 @@ func (t *Translator) trBR(inst vm.Instruction) error {
 	return nil
 }
 
-// trTBZ 翻译 TBZ/TBNZ — test bit and branch
-// 字节码: [OpTbz/OpTbnz][reg][bit][target32] = 7B
-// inst.Shift = bit number (b5:b40), inst.Imm = offset (已乘4)
+// trTBZ translates TBZ/TBNZ — test bit and branch
+// Bytecode: [OpTbz/OpTbnz][reg][bit][target32] = 7B
+// inst.Shift = bit number (b5:b40), inst.Imm = offset (already multiplied by 4)
 func (t *Translator) trTBZ(inst vm.Instruction, isZero bool) error {
 	target := inst.Offset + int(inst.Imm)
 
 	if target < 0 || target > t.funcSize {
-		return fmt.Errorf("TBZ/TBNZ 分支目标 0x%X 超出函数范围 [0, 0x%X)", target, t.funcSize)
+		return fmt.Errorf("TBZ/TBNZ branch target 0x%X out of function range [0, 0x%X)", target, t.funcSize)
 	}
 
 	rd, err := t.mapReg(inst.Rd)

@@ -4,9 +4,9 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// ---- STP/LDP 栈模式翻译 ----
+// ---- STP/LDP stack mode translation ----
 
-// abs64 返回 int64 绝对值
+// abs64 returns int64 absolute value
 func abs64(v int64) int64 {
 	if v < 0 {
 		return -v
@@ -23,7 +23,7 @@ func (t *Translator) imm7(raw uint32) int {
 	return int(imm7)
 }
 
-// trStackSTP 翻译 STP (Store Pair) — 栈模式
+// trStackSTP translates STP (Store Pair) - stack mode
 func (t *Translator) trStackSTP(inst vm.Instruction) error {
 	isSIMD := inst.Rd >= vm.REG_V_BASE
 	rn, err := t.mapReg(inst.Rn)
@@ -221,7 +221,7 @@ func (t *Translator) trStackLDPSIMD(inst vm.Instruction, rt1, rt2, rn byte) erro
 	return nil
 }
 
-// trStackLDP 翻译 LDP (Load Pair) — 栈模式
+// trStackLDP translates LDP (Load Pair) - stack mode
 func (t *Translator) trStackLDP(inst vm.Instruction) error {
 	isSIMD := inst.Rd >= vm.REG_V_BASE
 	rn, err := t.mapReg(inst.Rn)
@@ -280,11 +280,11 @@ func (t *Translator) trStackLDP(inst vm.Instruction) error {
 		if inst.WB == 1 {
 			loadImm = 0
 		}
-		// 栈模式不需要 pickTemp! 当 rt1==rn 时:
-		// 先计算 addr2 并保存到栈, 再 load
-		// 但更简单的方式: 先计算 base+offset, load rt1, 再计算 base+offset+stride, load rt2
+		// Stack mode doesn't need pickTemp! When rt1==rn:
+		// calculate addr2 and save to stack first, then load
+		// Simpler approach: calculate base+offset, load rt1, then calculate base+offset+stride, load rt2
 
-		// 先保存 base 地址到栈: addr_base = Rn + loadImm
+		// First save base address to stack: addr_base = Rn + loadImm
 		t.sVload(rn)
 		if loadImm != 0 {
 			t.sPushImm(uint64(abs64(loadImm)))
@@ -314,8 +314,8 @@ func (t *Translator) trStackLDP(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackLdpsw 翻译 LDPSW — Load pair of signed words — 栈模式
-// 加载两个 32-bit 值并 sign-extend 到 64-bit
+// trStackLdpsw translates LDPSW - Load pair of signed words - stack mode
+// Load two 32-bit values and sign-extend to 64-bit
 func (t *Translator) trStackLdpsw(inst vm.Instruction) error {
 	rn, err := t.mapReg(inst.Rn)
 	if err != nil {
@@ -372,8 +372,8 @@ func (t *Translator) trStackLdpsw(inst vm.Instruction) error {
 		if inst.WB == 1 {
 			loadImm = 0
 		}
-		// load [Rn+loadImm] — 栈模式不需要 pickTemp, 即使 rt1==rn 也安全
-		// 因为 VLOAD(rn) 在栈上复制了值，后续 VSTORE(rt1) 不影响栈上的地址
+		// load [Rn+loadImm] -- stack mode doesn't need pickTemp, safe even when rt1==rn
+		// Because VLOAD(rn) copies value on stack, subsequent VSTORE(rt1) doesn't affect address on stack
 		t.sVload(rn)
 		if loadImm != 0 {
 			t.sPushImm(uint64(loadImm))

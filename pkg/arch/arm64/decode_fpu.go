@@ -3,12 +3,12 @@ package arm64
 import "github.com/vmpacker/pkg/vm"
 
 // ============================================================
-// FP / SIMD 模式表
+// FP / SIMD pattern table
 // ============================================================
 
 var fpuPatterns = []InstrPattern{
 	// ---- FP Data Processing (2-source) ----
-	// 编码: 0:0:S:11110:type:1:Rm:0010:opcode:Rn:Rd
+	// Encoding: 0:0:S:11110:type:1:Rm:0010:opcode:Rn:Rd
 	{
 		Name: "FADD", Mask: 0x5F20FC00, Value: 0x1E202800, Op: FADD,
 		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRm16, fRn, fRd},
@@ -41,7 +41,7 @@ var fpuPatterns = []InstrPattern{
 	},
 
 	// ---- FP Data Processing (1-source) ----
-	// 编码: 0:0:S:11110:type:1:00000:opcode:Rn:Rd
+	// Encoding: 0:0:S:11110:type:1:00000:opcode:Rn:Rd
 	// bits[20:16] = 00000
 	{
 		Name: "FMOV", Mask: 0x5F3F0C00, Value: 0x1E204000, Op: FMOV,
@@ -70,7 +70,7 @@ var fpuPatterns = []InstrPattern{
 	},
 
 	// ---- FP <-> Integer conversion (scalar) ----
-	// 编码: sf:0:0:11110:type:1:opcode:Rn:Rd
+	// Encoding: sf:0:0:11110:type:1:opcode:Rn:Rd
 	// bits[20:16] varies
 	{
 		Name: "FCVTZS_GENERIC", Mask: 0x5F200C00, Value: 0x1E380000, Op: FCVTZS,

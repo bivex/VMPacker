@@ -6,7 +6,7 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// 使用真实 objdump 反汇编中的指令编码做 golden test
+// Golden tests using real objdump disassembly instruction encodings
 
 func TestDecode_STP_64bit(t *testing.T) {
 	d := NewDecoder()
@@ -338,7 +338,7 @@ func TestDecode_LDUR_64(t *testing.T) {
 	expect(t, "LDUR_64 Rn", 14, inst.Rn)
 	expect(t, "LDUR_64 Rd", 1, inst.Rd)
 	expect(t, "LDUR_64 Imm", int64(-8), inst.Imm)
-	expect(t, "LDUR_64 WB", 0, inst.WB) // 无 writeback
+	expect(t, "LDUR_64 WB", 0, inst.WB) // no writeback
 }
 
 func TestDecode_STUR_64(t *testing.T) {
@@ -381,7 +381,7 @@ func TestDecode_STUR_32(t *testing.T) {
 	expect(t, "STUR_32 Imm", int64(-4), inst.Imm)
 }
 
-// ---- 辅助 ----
+// ---- Helpers ----
 
 func expect[T comparable](t *testing.T, name string, want, got T) {
 	t.Helper()

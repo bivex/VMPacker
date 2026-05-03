@@ -3,17 +3,17 @@ package arm64
 import "github.com/vmpacker/pkg/vm"
 
 // ============================================================
-// 数据处理（寄存器）模式表
+// Data processing (register) pattern table
 //
-// 覆盖: ADD/SUB/ADDS/SUBS(reg), AND/ORR/EOR/ANDS(reg), MVN,
+// Covers: ADD/SUB/ADDS/SUBS(reg), AND/ORR/EOR/ANDS(reg), MVN,
 //       LSL/LSR/ASR/ROR(reg), MUL/MADD/MSUB, SDIV/UDIV,
 //       CSEL/CSINC/CSINV/CSNEG
 // ============================================================
 
 var dpRegPatterns = []InstrPattern{
 	// ---- Logical (shifted register) ----
-	// 编码: sf:opc:01010:shift:N:Rm:imm6:Rn:Rd
-	// bits[28:24] = 01010 → 组内用 opc+N 区分
+	// Encoding: sf:opc:01010:shift:N:Rm:imm6:Rn:Rd
+	// bits[28:24] = 01010 → use opc+N to distinguish within group
 	{
 		Name: "AND_REG", Mask: 0x7F200000, Value: 0x0A000000, Op: AND_REG,
 		Fields: []FieldDef{fSF, {Name: "shtype", Hi: 23, Lo: 22}, fRm16, {Name: "shift", Hi: 15, Lo: 10}, fRn, fRd},
@@ -66,7 +66,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Add/Subtract (shifted register) ----
-	// 编码: sf:op:S:01011:shift:0:Rm:imm6:Rn:Rd
+	// Encoding: sf:op:S:01011:shift:0:Rm:imm6:Rn:Rd
 	// bits[28:24] = 01011
 	{
 		Name: "ADD_REG", Mask: 0x7F200000, Value: 0x0B000000, Op: ADD_REG,
@@ -90,7 +90,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Add/Subtract with carry ----
-	// 编码: sf:op:S:11010000:Rm:000000:Rn:Rd
+	// Encoding: sf:op:S:11010000:Rm:000000:Rn:Rd
 	{
 		Name: "ADC", Mask: 0x7FE0FC00, Value: 0x1A000000, Op: ADC,
 		Fields: []FieldDef{fSF, fRm16, fRn, fRd},
@@ -113,7 +113,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Conditional select ----
-	// 编码: sf:op:S:11010:00:Rm:cond:o2:Rn:Rd
+	// Encoding: sf:op:S:11010:00:Rm:cond:o2:Rn:Rd
 	// bits[28:21] = 11010_00_0 (bit21=0 for condsel)
 	{
 		Name: "CSEL", Mask: 0x7FE00C00, Value: 0x1A800000, Op: CSEL,
@@ -137,7 +137,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Data processing (2-source): DIV/SHIFT ----
-	// 编码: sf:0:S:11010110:Rm:opcode:Rn:Rd
+	// Encoding: sf:0:S:11010110:Rm:opcode:Rn:Rd
 	// bits[28:21] = 11010_11_0 (bit21=1 for 2-source)
 	{
 		Name: "UDIV", Mask: 0x7FE0FC00, Value: 0x1AC00800, Op: UDIV,
@@ -165,7 +165,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Data processing (1-source) ----
-	// 编码: sf:1:S:11010110:00000:opcode2:Rn:Rd
+	// Encoding: sf:1:S:11010110:00000:opcode2:Rn:Rd
 	// bits[30:21] = 1_0_11010110, bit20:16 = 00000
 	{
 		Name: "CLZ", Mask: 0x7FFFFC00, Value: 0x5AC01000, Op: CLZ,
@@ -190,7 +190,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 	{
 		// REV: 32-bit opcode2=000010(0x5AC00800), 64-bit opcode2=000011(0xDAC00C00)
-		// 用 sf 区分: sf=0→32-bit REV, sf=1→64-bit REV
+		// Use sf to distinguish: sf=0→32-bit REV, sf=1→64-bit REV
 		Name: "REV_32", Mask: 0xFFFFFC00, Value: 0x5AC00800, Op: REV,
 		Fields: []FieldDef{fRn, fRd},
 		Post: func(f map[string]int64, inst *vm.Instruction) {
@@ -210,7 +210,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Data processing (3-source): MUL/MADD/MSUB ----
-	// 编码: sf:00:11011:000:Rm:o0:Ra:Rn:Rd
+	// Encoding: sf:00:11011:000:Rm:o0:Ra:Rn:Rd
 	// MUL = MADD with Ra=11111
 	{
 		Name: "MUL", Mask: 0x7FE0FC00, Value: 0x1B007C00, Op: MUL,
@@ -222,8 +222,8 @@ var dpRegPatterns = []InstrPattern{
 		},
 	},
 	{
-		// MADD: o0=0, Ra≠11111 → 需要匹配 o0=0 但 Ra 任意
-		// 用更宽松的 mask 先匹配 MADD（MUL 的 mask 更严格，放在前面优先匹配）
+		// MADD: o0=0, Ra≠11111 → need to match o0=0 with any Ra
+		// Use looser mask to match MADD first (MUL has stricter mask, matched earlier)
 		Name: "MADD", Mask: 0x7FE08000, Value: 0x1B000000, Op: MADD,
 		Fields: []FieldDef{fSF, fRm16, fRn, fRd},
 		Post: func(f map[string]int64, inst *vm.Instruction) {
@@ -243,7 +243,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Data processing (3-source): SMADDL/SMSUBL ----
-	// 编码: 1:00:11011:010:Rm:o0:Ra:Rn:Rd  (sf=1 only, 32×32→64)
+	// Encoding: 1:00:11011:010:Rm:o0:Ra:Rn:Rd  (sf=1 only, 32×32→64)
 	// SMADDL: o0=0, Xd = Xa + SEXT(Wn)*SEXT(Wm)
 	// SMULL:  o0=0, Ra=11111 (SMADDL alias)
 	{
@@ -270,7 +270,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Data processing (3-source): UMADDL/UMSUBL ----
-	// 编码: 1:00:11011:101:Rm:o0:Ra:Rn:Rd  (sf=1 only, 32×32→64 unsigned)
+	// Encoding: 1:00:11011:101:Rm:o0:Ra:Rn:Rd  (sf=1 only, 32×32→64 unsigned)
 	// UMADDL: o0=0, Xd = Xa + ZEXT(Wn)*ZEXT(Wm)
 	// UMULL:  o0=0, Ra=11111 (UMADDL alias)
 	{
@@ -297,7 +297,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Data processing (3-source): UMULH ----
-	// 编码: 1:00:11011:110:Rm:0:11111:Rn:Rd
+	// Encoding: 1:00:11011:110:Rm:0:11111:Rn:Rd
 	// sf=1 (64-bit only), op54=00, op31=110, o0=0, Ra=11111
 	{
 		Name: "UMULH", Mask: 0xFFE0FC00, Value: 0x9BC07C00, Op: UMULH,
@@ -310,7 +310,7 @@ var dpRegPatterns = []InstrPattern{
 		},
 	},
 	// ---- Data processing (3-source): SMULH ----
-	// 编码: 1:00:11011:010:Rm:0:11111:Rn:Rd
+	// Encoding: 1:00:11011:010:Rm:0:11111:Rn:Rd
 	// sf=1 (64-bit only), op54=00, op31=010, o0=0, Ra=11111
 	{
 		Name: "SMULH", Mask: 0xFFE0FC00, Value: 0x9B407C00, Op: SMULH,
@@ -324,7 +324,7 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Add/Subtract (extended register) ----
-	// 编码: sf:op:S:01011:00:1:Rm:option:imm3:Rn:Rd
+	// Encoding: sf:op:S:01011:00:1:Rm:option:imm3:Rn:Rd
 	// bits[28:24]=01011, bits[23:22]=00, bit21=1
 	{
 		Name: "ADD_EXT", Mask: 0x7FE00000, Value: 0x0B200000, Op: ADD_EXT,
@@ -407,14 +407,14 @@ var dpRegPatterns = []InstrPattern{
 	},
 }
 
-// postXZR3 逻辑/算术/条件选择(reg): Rd/Rn/Rm=31 → XZR
+// postXZR3 logic/arithmetic/conditional select(reg): Rd/Rn/Rm=31 → XZR
 func postXZR3(f map[string]int64, inst *vm.Instruction) {
 	xzrReplace(&inst.Rd)
 	xzrReplace(&inst.Rn)
 	xzrReplace(&inst.Rm)
 }
 
-// postShiftedXZR3 shifted register: XZR 替换 + shift type 保存
+// postShiftedXZR3 shifted register: XZR replacement + shift type save
 func postShiftedXZR3(f map[string]int64, inst *vm.Instruction) {
 	xzrReplace(&inst.Rd)
 	xzrReplace(&inst.Rn)
@@ -424,16 +424,16 @@ func postShiftedXZR3(f map[string]int64, inst *vm.Instruction) {
 	}
 }
 
-// postExtReg extended register: option→ShiftType, imm3→Shift, Rn=31→SP(保留), Rd=31→SP(保留), Rm→XZR
+// postExtReg extended register: option→ShiftType, imm3→Shift, Rn=31→SP(preserved), Rd=31→SP(preserved), Rm→XZR
 func postExtReg(f map[string]int64, inst *vm.Instruction) {
-	// Rd=31 在 extended register 中也是 SP (如 SUB SP, SP, Xm)，不做 XZR 替换
+	// Rd=31 in extended register is also SP (e.g. SUB SP, SP, Xm), don't replace with XZR
 	xzrReplace(&inst.Rm)
-	// Rn=31 在 extended register 中是 SP, 不做 XZR 替换
+	// Rn=31 in extended register is SP, don't replace with XZR
 	if option, ok := f["option"]; ok {
 		inst.ShiftType = int(option) // 0=UXTB..7=SXTX
 	}
 	if imm3, ok := f["imm3"]; ok {
-		inst.Shift = int(imm3) // 额外左移量 0-4
+		inst.Shift = int(imm3) // extra left shift amount 0-4
 	}
 }
 
@@ -453,6 +453,6 @@ func postCCMPImm(f map[string]int64, inst *vm.Instruction) {
 		inst.WB = int(nzcv)
 	}
 	if imm5, ok := f["imm5"]; ok {
-		inst.Rm = int(imm5) // 复用 Rm 字段存储 imm5
+		inst.Rm = int(imm5) // reuse Rm field to store imm5
 	}
 }

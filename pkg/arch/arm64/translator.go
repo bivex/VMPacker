@@ -8,66 +8,66 @@ import (
 )
 
 // ============================================================
-// ARM64 → VM 字节码翻译器
+// ARM64 → VM bytecode translator
 //
-// 把解码后的 ARM64 指令翻译为自定义 VM 字节码。
-// 不支持的指令返回错误（不会静默跳过）。
+// Translates decoded ARM64 instructions into custom VM bytecode.
+// Returns error for unsupported instructions (never silently skips).
 //
-// 寄存器映射:
-//   ARM64 X0-X15 → VM R0-R15 (直接映射)
-//   ARM64 X16-X28 → 不支持 (trap)
-//   ARM64 X29(FP) → 函数内不翻译
-//   ARM64 X30(LR) → 特殊处理
-//   ARM64 XZR/SP  → 看上下文
+// Register mapping:
+//   ARM64 X0-X15 → VM R0-R15 (direct mapping)
+//   ARM64 X16-X28 → unsupported (trap)
+//   ARM64 X29(FP) → not translated within function
+//   ARM64 X30(LR) → special handling
+//   ARM64 XZR/SP  → context-dependent
 //
-// 模块文件:
-//   tr_alu.go       — 算术/逻辑/移动指令
-//   tr_bitfield.go  — 位域操作 (UBFM/SBFM/EXTR)
-//   tr_loadstore.go — 加载/存储 (LDR/STR/STP/LDP)
-//   tr_branch.go    — 分支/条件选择 (B/BL/CBZ/CSEL)
-//   tr_special.go   — 特殊指令 (ADRP/ADR)
+// Module files:
+//   tr_alu.go       — arithmetic/logic/move instructions
+//   tr_bitfield.go  — bitfield operations (UBFM/SBFM/EXTR)
+//   tr_loadstore.go — load/store (LDR/STR/STP/LDP)
+//   tr_branch.go    — branch/conditional select (B/BL/CBZ/CSEL)
+//   tr_special.go   — special instructions (ADRP/ADR)
 // ============================================================
 
-// TranslateResult 翻译结果
+// TranslateResult - translation result
 type TranslateResult struct {
-	Bytecode    []byte   // 生成的 VM 字节码 (含 trailer)
-	CodeLen     int      // 纯字节码长度 (不含 trailer，用于 opcode 加密范围)
-	Unsupported []string // 不支持的指令列表
-	TotalInsts  int      // 总指令数
-	TransInsts  int      // 已翻译指令数
+	Bytecode    []byte   // generated VM bytecode (includes trailer)
+	CodeLen     int      // pure bytecode length (excludes trailer, used for opcode encryption range)
+	Unsupported []string // list of unsupported instructions
+	TotalInsts  int      // total instruction count
+	TransInsts  int      // translated instruction count
 	Relocations []vm.Relocation
 }
 
-// DebugEntry 单条指令的 debug 对照信息
+// DebugEntry - debug mapping for a single instruction
 type DebugEntry struct {
-	ARM64Offset int    // ARM64 指令在函数内的偏移
-	ARM64Asm    string // ARM64 反汇编文本
-	ARM64Raw    uint32 // ARM64 原始编码
-	VMStart     int    // 翻译后 VM 字节码起始位置
-	VMEnd       int    // 翻译后 VM 字节码结束位置
+	ARM64Offset int    // ARM64 instruction offset within function
+	ARM64Asm    string // ARM64 disassembly text
+	ARM64Raw    uint32 // ARM64 raw encoding
+	VMStart     int    // Translated VM bytecode start position
+	VMEnd       int    // Translated VM bytecode end position
 }
 
-// Translator ARM64 → VM 翻译器
+// Translator ARM64 → VM translator
 type Translator struct {
-	code        []byte          // 输出缓冲
-	labels      map[int]int     // ARM64偏移 → VM字节码位置 映射
-	fixups      []branchFixup   // 待修补的分支目标
-	relocations []vm.Relocation // 运行时重定位 (ASLR)
-	funcSize    int             // 原函数大小（字节）
-	funcAddr    uint64          // 原函数起始地址
+	code        []byte          // output buffer
+	labels      map[int]int     // ARM64 offset → VM bytecode position mapping
+	fixups      []branchFixup   // pending branch targets to patch
+	relocations []vm.Relocation // runtime relocations (ASLR)
+	funcSize    int             // original function size in bytes
+	funcAddr    uint64          // original function start address
 	unsupported []string
-	decoder     *Decoder     // 解码器引用（用于名称查找）
-	debug       bool         // debug 模式
-	debugLog    []DebugEntry // debug 对照记录
+	decoder     *Decoder     // decoder reference (for name lookup)
+	debug       bool         // debug mode
+	debugLog    []DebugEntry // debug mapping log
 }
 
 type branchFixup struct {
-	vmOffset    int  // VM 字节码中需要修补的位置
-	arm64Target int  // 目标 ARM64 偏移
-	isRelToFunc bool // 是否相对于函数起始
+	vmOffset    int  // VM bytecode position to patch
+	arm64Target int  // target ARM64 offset
+	isRelToFunc bool // relative to function start
 }
 
-// NewTranslator 创建翻译器
+// NewTranslator creates translator
 func NewTranslator(funcAddr uint64, funcSize int) *Translator {
 	return &Translator{
 		code:        make([]byte, 0, funcSize*4),
@@ -79,36 +79,36 @@ func NewTranslator(funcAddr uint64, funcSize int) *Translator {
 	}
 }
 
-// SetDebug 开启 debug 模式
+// SetDebug enables debug mode
 func (t *Translator) SetDebug(on bool) {
 	t.debug = on
 }
 
-// DebugLog 返回 debug 对照记录
+// DebugLog returns debug mapping log
 func (t *Translator) DebugLog() []DebugEntry {
 	return t.debugLog
 }
 
-// emit 追加字节
+// emit appends bytes
 func (t *Translator) emit(b ...byte) {
 	t.code = append(t.code, b...)
 }
 
-// emitU32 追加 32 位小端
+// emitU32 appends 32-bit little-endian
 func (t *Translator) emitU32(v uint32) {
 	b := make([]byte, 4)
 	binary.LittleEndian.PutUint32(b, v)
 	t.code = append(t.code, b...)
 }
 
-// emitU64 追加 64 位小端
+// emitU64 appends 64-bit little-endian
 func (t *Translator) emitU64(v uint64) {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, v)
 	t.code = append(t.code, b...)
 }
 
-// addReloc 记录一个运行时重定位
+// addReloc records a runtime relocation
 func (t *Translator) addReloc(bcOffset int, targetAddr uint64, isInternal bool) {
 	t.relocations = append(t.relocations, vm.Relocation{
 		BcOffset:   bcOffset,
@@ -117,19 +117,19 @@ func (t *Translator) addReloc(bcOffset int, targetAddr uint64, isInternal bool) 
 	})
 }
 
-// pos 当前字节码位置
+// pos returns current bytecode position
 func (t *Translator) pos() int {
 	return len(t.code)
 }
 
-// trunc32 截断为32位 (W寄存器): Rd &= 0xFFFFFFFF
+// trunc32 truncates to 32-bit (W register): Rd &= 0xFFFFFFFF
 func (t *Translator) trunc32(rd byte) {
 	t.emit(vm.OpAndImm, rd, rd)
 	t.emitU32(0xFFFFFFFF)
 }
 
-// sext32 将 Rd 低32位符号扩展到64位: Rd = (i64)(i32)Rd
-// 实现: LSL 32 → ASR 32
+// sext32 sign-extends lower 32 bits of Rd to 64-bit: Rd = (i64)(i32)Rd
+// Implementation: LSL 32 → ASR 32
 func (t *Translator) sext32(rd byte) {
 	t.emit(vm.OpShlImm, rd, rd)
 	t.emitU32(32)
@@ -137,7 +137,7 @@ func (t *Translator) sext32(rd byte) {
 	t.emitU32(32)
 }
 
-// mapReg ARM64寄存器 → VM寄存器
+// mapReg maps ARM64 register → VM register
 func (t *Translator) mapReg(arm64Reg int) (byte, error) {
 	if arm64Reg == vm.REG_XZR {
 		return 63, nil // XZR → R63 (Permanent Zero)
@@ -147,12 +147,12 @@ func (t *Translator) mapReg(arm64Reg int) (byte, error) {
 		return byte(arm64Reg - vm.REG_V_BASE), nil
 	}
 	if arm64Reg < 0 || arm64Reg > 31 {
-		return 0, fmt.Errorf("寄存器 X%d/V%d 超出 VM 范围", arm64Reg, arm64Reg-vm.REG_V_BASE)
+		return 0, fmt.Errorf("register X%d/V%d out of VM range", arm64Reg, arm64Reg-vm.REG_V_BASE)
 	}
 	return byte(arm64Reg), nil
 }
 
-// Translate 翻译整个函数
+// Translate translates entire function
 func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult, error) {
 	result := &TranslateResult{TotalInsts: len(instructions)}
 
@@ -171,7 +171,7 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 		var err error
 		skip, err = t.translateOne(instructions, i)
 
-		// debug: 记录对照
+		// debug: record mapping
 		if t.debug {
 			inst := instructions[i]
 			entry := DebugEntry{
@@ -182,7 +182,7 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 				VMEnd:       t.pos(),
 			}
 			t.debugLog = append(t.debugLog, entry)
-			// 如果有 skip 的后续指令也记录
+			// record subsequent skipped instructions
 			for s := 1; s <= skip && i+s < len(instructions); s++ {
 				skipped := instructions[i+s]
 				t.debugLog = append(t.debugLog, DebugEntry{
@@ -197,7 +197,7 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 
 		if err != nil {
 			t.unsupported = append(t.unsupported, fmt.Sprintf(
-				"偏移 0x%04X: %s (raw=0x%08X) - %v",
+				"offset 0x%04X: %s (raw=0x%08X) - %v",
 				instructions[i].Offset, OpName(Op(instructions[i].Op)), instructions[i].Raw, err))
 			t.emit(vm.OpHalt)
 		} else {
@@ -211,24 +211,24 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 	for _, fix := range t.fixups {
 		target, ok := t.labels[fix.arm64Target]
 		if !ok {
-			return nil, fmt.Errorf("分支目标 ARM64 偏移 0x%X 未找到对应 VM 位置", fix.arm64Target)
+			return nil, fmt.Errorf("branch target ARM64 offset 0x%X not found in VM positions", fix.arm64Target)
 		}
 		binary.LittleEndian.PutUint32(t.code[fix.vmOffset:], uint32(target))
 	}
 
-	// 记录纯字节码长度 (trailer 之前)
+	// record pure bytecode length (before trailer)
 	result.CodeLen = t.pos()
 
-	// ---- 追加 trailer (BR 间接跳转映射表 + reverse + oc_key 占位) ----
+	// ---- append trailer (BR indirect jump mapping table + reverse + oc_key placeholder) ----
 	// entry: [arm64_off:u32][vm_off:u32]
-	// reverse 和 oc_key 由 packer 填充实际值
+	// reverse and oc_key are filled with actual values by packer
 	mapCount := uint32(len(t.labels))
 	for arm64Off, vmOff := range t.labels {
 		t.emitU32(uint32(arm64Off))
 		t.emitU32(uint32(vmOff))
 	}
-	t.emit(0)    // reverse 占位 (packer 填充: 0=正向, 1=反向)
-	t.emitU32(0) // oc_key 占位 (packer 填充)
+	t.emit(0)    // reverse placeholder (packer fills: 0=forward, 1=reverse)
+	t.emitU32(0) // oc_key placeholder (filled by packer)
 	t.emitU32(mapCount)
 	t.emitU64(t.funcAddr)
 	t.emitU32(uint32(t.funcSize))
@@ -239,7 +239,7 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 	return result, nil
 }
 
-// translateOne 翻译单条指令，返回需要跳过的后续指令数
+// translateOne translates single instruction, returns number of subsequent instructions to skip
 func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, error) {
 	inst := instructions[idx]
 	op := Op(inst.Op)
@@ -249,7 +249,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		t.emit(vm.OpNop)
 		return 0, nil
 
-	// ========== 数据处理（立即数）—— 栈模式 ==========
+	// ========== Data processing (immediate) -- stack mode ==========
 
 	case ADD_IMM:
 		return 0, t.trStackAluImm(inst, vm.OpSAdd)
@@ -257,7 +257,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		return 0, t.trStackAluImm(inst, vm.OpSSub)
 	case ADDS_IMM, SUBS_IMM:
 		if inst.Rd == vm.REG_XZR {
-			// CMN/CMP Xn, #imm — 栈模式
+			// CMN/CMP Xn, #imm -- stack mode
 			rn, err := t.mapReg(inst.Rn)
 			if err != nil {
 				return 0, err
@@ -287,7 +287,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		return 0, t.trStackAluImm(inst, vm.OpSAnd)
 	case ANDS_IMM:
 		if inst.Rd == vm.REG_XZR {
-			// TST Xn, #imm — 栈模式
+			// TST Xn, #imm -- stack mode
 			rn, err := t.mapReg(inst.Rn)
 			if err != nil {
 				return 0, err
@@ -313,7 +313,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 	case MOVN:
 		return 0, t.trStackMovN(inst)
 
-	// ========== 数据处理（寄存器）==========
+	// ========== Data processing (register) ==========
 
 	case ADD_REG:
 		return 0, t.trStackAluReg(inst, vm.OpSAdd)
@@ -323,16 +323,16 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		return 0, t.trStackAluReg(inst, vm.OpSAnd)
 	case ORR_REG:
 		if inst.Rn == vm.REG_XZR {
-			// MOV alias: ORR Xd, XZR, Xm → 栈模式
+			// MOV alias: ORR Xd, XZR, Xm → stack mode
 			return 0, t.trStackMovReg(vm.Instruction{Op: inst.Op, Rd: inst.Rd, Rn: inst.Rm, SF: inst.SF})
 		}
 		return 0, t.trStackAluReg(inst, vm.OpSOr)
 	case EOR_REG:
 		return 0, t.trStackAluReg(inst, vm.OpSXor)
 	case EON:
-		return 0, t.trStackEON(inst) // 栈模式
+		return 0, t.trStackEON(inst) // stack mode
 	case MVN:
-		// MVN Xd, Xm[, shift] — 栈模式
+		// MVN Xd, Xm[, shift] — stack mode
 		rd, err := t.mapReg(inst.Rd)
 		if err != nil {
 			return 0, err
@@ -364,7 +364,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 
 	case ADDS_REG, SUBS_REG:
 		if inst.Rd == vm.REG_XZR {
-			// CMN/CMP Xn, Xm — 栈模式
+			// CMN/CMP Xn, Xm -- stack mode
 			rn, err := t.mapReg(inst.Rn)
 			if err != nil {
 				return 0, err
@@ -396,7 +396,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 
 	case ANDS_REG:
 		if inst.Rd == vm.REG_XZR {
-			// TST Xn, Xm — 栈模式
+			// TST Xn, Xm -- stack mode
 			rn, err := t.mapReg(inst.Rn)
 			if err != nil {
 				return 0, err
@@ -430,7 +430,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		FMAX, FMIN, FCVTZS, FCVTZU, SCVTF, UCVTF, FCVT:
 		return t.translateFP(inst)
 
-	// ========== 位域操作 ==========
+	// ========== Bitfield operations ==========
 
 	case UBFM:
 		return 0, t.trStackUBFM(inst)
@@ -439,7 +439,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 	case BFM:
 		return 0, t.trStackBFM(inst)
 
-	// ========== 加载/存储 ==========
+	// ========== Load/store ==========
 
 	case LDR_IMM, LDRB_IMM, LDRH_IMM, LDRSB_IMM, LDRSH_IMM, LDRSW_IMM:
 		return 0, t.trStackLoad(inst)
@@ -453,7 +453,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 	case LDP:
 		return 0, t.trStackLDP(inst)
 
-	// ========== 分支 ==========
+	// ========== Branch ==========
 
 	case B:
 		return 0, t.trBranch(inst)
@@ -473,7 +473,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		t.emit(vm.OpRet, 0)
 		return 0, nil
 
-	// ========== 条件选择 ==========
+	// ========== Conditional select ==========
 	case CSEL:
 		return 0, t.trStackCSEL(inst)
 	case CSINC:
@@ -495,9 +495,9 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 	case UMSUBL:
 		return 0, t.trStackUMADDL(inst, true)
 	case UMULH:
-		return 0, t.trStackUnary(inst, vm.OpSUmulh) // UMULH 是二元但不设 flags
+		return 0, t.trStackUnary(inst, vm.OpSUmulh) // UMULH is binary but doesn't set flags
 
-	// ========== 扩展寄存器加减 (T4) — 栈模式 ==========
+	// ========== Extended register add/subtract (T4) -- stack mode ==========
 	case ADD_EXT:
 		return 0, t.trStackAddSubExt(inst, vm.OpSAdd, false)
 	case SUB_EXT:
@@ -535,9 +535,9 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 
 	// ========== MRS ==========
 	case MRS:
-		return 0, t.trMRS(inst) // 系统寄存器保留原路由
+		return 0, t.trMRS(inst) // system register keeps original routing
 
-	// ========== SMULH/CLZ/CLS/RBIT/REV — 栈模式 ==========
+	// ========== SMULH/CLZ/CLS/RBIT/REV — stack mode ==========
 	case SMULH:
 		return 0, t.trStackAluReg(inst, vm.OpSSmulh)
 	case CLZ:
@@ -553,7 +553,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 	case REV32:
 		return 0, t.trStackUnary(inst, vm.OpSRev32)
 
-	// ========== ADC/ADCS/SBC/SBCS — 栈模式 ==========
+	// ========== ADC/ADCS/SBC/SBCS — stack mode ==========
 	case ADC:
 		return 0, t.trStackAluReg(inst, vm.OpSAdc)
 	case ADCS:
@@ -563,7 +563,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 	case SBCS:
 		return 0, t.trStackAluRegFlags(inst, vm.OpSSbc, true)
 
-	// ========== 寄存器偏移加载/存储 — 栈模式 ==========
+	// ========== Register offset load/store — stack mode ==========
 	case LDR_REG, LDRB_REG, LDRH_REG:
 		return 0, t.trStackLoadReg(inst)
 	case LDRSB_REG, LDRSH_REG, LDRSW_REG:
@@ -595,11 +595,11 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		t.code = append(t.code, byte(inst.Imm))
 		return 0, nil
 
-	// ========== 位域提取 ==========
+	// ========== Bitfield extract ==========
 	case EXTR:
 		return 0, t.trStackEXTR(inst)
 
-	// ========== NOP 化指令 (Batch 4/6/7) ==========
+	// ========== NOP-ified instructions (Batch 4/6/7) ==========
 	case DMB, DSB, ISB, WFE, WFI, YIELD_ARM, CLREX, MSR_WRITE, PRFM:
 		t.emit(vm.OpNop)
 		return 0, nil
@@ -626,6 +626,6 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 		return 0, t.trStackCas(inst)
 
 	default:
-		return 0, fmt.Errorf("不支持的指令类型")
+		return 0, fmt.Errorf("unsupported instruction type")
 	}
 }

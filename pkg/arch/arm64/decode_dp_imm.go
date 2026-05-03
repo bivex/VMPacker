@@ -3,13 +3,13 @@ package arm64
 import "github.com/vmpacker/pkg/vm"
 
 // ============================================================
-// 数据处理（立即数）模式表
+// Data processing (immediate) pattern table
 //
-// 覆盖: ADD/SUB/ADDS/SUBS(imm), AND/ORR/EOR(imm),
+// Covers: ADD/SUB/ADDS/SUBS(imm), AND/ORR/EOR(imm),
 //       MOVZ/MOVK/MOVN, UBFM/SBFM, EXTR, ADR/ADRP
 // ============================================================
 
-// 通用位域：寄存器
+// Common bit fields: registers
 var (
 	fSF   = FieldDef{Name: "sf", Hi: 31, Lo: 31}
 	fRd   = FieldDef{Name: "Rd", Hi: 4, Lo: 0}
@@ -19,7 +19,7 @@ var (
 
 var dpImmPatterns = []InstrPattern{
 	// ---- Add/Subtract (immediate) ----
-	// 编码: sf:op:S:10001:sh:imm12:Rn:Rd
+	// Encoding: sf:op:S:10001:sh:imm12:Rn:Rd
 	{
 		Name: "ADD_IMM", Mask: 0x7F000000, Value: 0x11000000, Op: ADD_IMM,
 		Fields: []FieldDef{fSF, {Name: "sh", Hi: 22, Lo: 22}, {Name: "imm12", Hi: 21, Lo: 10}, fRn, fRd},
@@ -64,7 +64,7 @@ var dpImmPatterns = []InstrPattern{
 	},
 
 	// ---- Logical (immediate) ----
-	// 编码: sf:opc:100100:N:immr:imms:Rn:Rd
+	// Encoding: sf:opc:100100:N:immr:imms:Rn:Rd
 	{
 		Name: "AND_IMM", Mask: 0x7F800000, Value: 0x12000000, Op: AND_IMM,
 		Fields: []FieldDef{fSF, {Name: "N", Hi: 22, Lo: 22}, {Name: "immr", Hi: 21, Lo: 16}, {Name: "imms", Hi: 15, Lo: 10}, fRn, fRd},
@@ -81,14 +81,14 @@ var dpImmPatterns = []InstrPattern{
 		Post:   postBitmaskImm,
 	},
 	{
-		// ANDS(imm) opc=11 → 需要设置 flags (TST = ANDS XZR, Xn, #imm)
+		// ANDS(imm) opc=11 → needs to set flags (TST = ANDS XZR, Xn, #imm)
 		Name: "ANDS_IMM", Mask: 0x7F800000, Value: 0x72000000, Op: ANDS_IMM,
 		Fields: []FieldDef{fSF, {Name: "N", Hi: 22, Lo: 22}, {Name: "immr", Hi: 21, Lo: 16}, {Name: "imms", Hi: 15, Lo: 10}, fRn, fRd},
 		Post:   postBitmaskImmANDS,
 	},
 
 	// ---- Move wide (immediate) ----
-	// 编码: sf:opc:100101:hw:imm16:Rd
+	// Encoding: sf:opc:100101:hw:imm16:Rd
 	{
 		Name: "MOVN", Mask: 0x7F800000, Value: 0x12800000, Op: MOVN,
 		Fields: []FieldDef{fSF, {Name: "hw", Hi: 22, Lo: 21}, {Name: "imm16", Hi: 20, Lo: 5}, fRd},
@@ -115,7 +115,7 @@ var dpImmPatterns = []InstrPattern{
 	},
 
 	// ---- Bitfield (SBFM/UBFM) ----
-	// 编码: sf:opc:100110:N:immr:imms:Rn:Rd
+	// Encoding: sf:opc:100110:N:immr:imms:Rn:Rd
 	{
 		Name: "SBFM", Mask: 0x7F800000, Value: 0x13000000, Op: SBFM,
 		Fields: []FieldDef{fSF, {Name: "immr", Hi: 21, Lo: 16}, {Name: "imms", Hi: 15, Lo: 10}, fRn, fRd},
@@ -143,7 +143,7 @@ var dpImmPatterns = []InstrPattern{
 	},
 
 	// ---- Extract (EXTR) ----
-	// 编码: sf:00:100111:N0:Rm:imms:Rn:Rd
+	// Encoding: sf:00:100111:N0:Rm:imms:Rn:Rd
 	{
 		Name: "EXTR", Mask: 0x7F800000, Value: 0x13800000, Op: EXTR,
 		Fields: []FieldDef{fSF, fRm16, {Name: "imms", Hi: 15, Lo: 10}, fRn, fRd},
@@ -173,8 +173,8 @@ var dpImmPatterns = []InstrPattern{
 	},
 }
 
-// postBitmaskImm 逻辑立即数的 bitmask 解码
-// 逻辑立即数指令中 Rn=31 表示 XZR（零寄存器），不是 SP
+// postBitmaskImm decodes logical immediate bitmask
+// For logical imm instructions, Rn=31 means XZR (zero register), not SP
 func postBitmaskImm(f map[string]int64, inst *vm.Instruction) {
 	n := uint32(f["N"])
 	immr := uint32(f["immr"])
@@ -185,10 +185,10 @@ func postBitmaskImm(f map[string]int64, inst *vm.Instruction) {
 		return
 	}
 	inst.Imm = int64(imm)
-	xzrReplace(&inst.Rn) // Rn=31 → XZR (逻辑立即数组中 Rn 始终是 XZR 而非 SP)
+	xzrReplace(&inst.Rn) // Rn=31 → XZR (logical imm: Rn is always XZR, not SP)
 }
 
-// postBitmaskImmANDS ANDS(imm) 专用：Rn=31→XZR, Rd=31→XZR (TST alias)
+// postBitmaskImmANDS ANDS(imm) specific: Rn=31→XZR, Rd=31→XZR (TST alias)
 func postBitmaskImmANDS(f map[string]int64, inst *vm.Instruction) {
 	n := uint32(f["N"])
 	immr := uint32(f["immr"])

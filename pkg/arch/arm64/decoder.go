@@ -7,25 +7,25 @@ import (
 )
 
 // ============================================================
-// ARM64 (AArch64) 指令解码器 v3 — 表驱动架构
+// ARM64 (AArch64) instruction decoder v3 - table-driven architecture
 //
-// 基于 ARM Architecture Reference Manual 的顶层分组：
+// Top-level grouping based on ARM Architecture Reference Manual:
 //   op0[3:0] = bits[28:25]
 //
-// 解码流程:
-//   raw → op0 分组 → matchAndDecode(模式表) → vm.Instruction
+// Decode flow:
+//   raw → op0 group → matchAndDecode(pattern table) → vm.Instruction
 //
-// 模式表定义在以下文件中：
-//   decode_dp_imm.go  — 数据处理(立即数)
-//   decode_dp_reg.go  — 数据处理(寄存器)
-//   decode_branch.go  — 分支/系统
-//   decode_ldst.go    — 加载/存储
+// Pattern tables defined in following files:
+//   decode_dp_imm.go  — data processing (immediate)
+//   decode_dp_reg.go  — data processing (register)
+//   decode_branch.go  — branch/system
+//   decode_ldst.go    — load/store
 //
-// 核心引擎:
-//   decode_fields.go  — FieldDef/InstrPattern + 匹配/提取
+// Core engine:
+//   decode_fields.go  — FieldDef/InstrPattern + matching/extraction
 // ============================================================
 
-// Op ARM64 指令操作码
+// Op - ARM64 instruction opcodes
 type Op int
 
 const (
@@ -173,7 +173,7 @@ const (
 	UNSUPPORTED
 )
 
-// 条件码
+// Condition codes
 const (
 	COND_EQ = 0x0
 	COND_NE = 0x1
@@ -192,19 +192,19 @@ const (
 	COND_AL = 0xE
 )
 
-// Decoder ARM64 解码器，实现 vm.Decoder 接口
+// Decoder - ARM64 decoder implementing vm.Decoder interface
 type Decoder struct{}
 
-// NewDecoder 创建 ARM64 解码器
+// NewDecoder creates ARM64 decoder
 func NewDecoder() *Decoder {
 	return &Decoder{}
 }
 
-// Decode 解码一条 ARM64 指令
+// Decode decodes a single ARM64 instruction
 func (d *Decoder) Decode(raw uint32, offset int) vm.Instruction {
 	inst := vm.Instruction{Raw: raw, Op: int(UNKNOWN), Offset: offset, Rd: -1, Rn: -1, Rm: -1}
 
-	// NOP 快速路径
+	// NOP fast path
 	if raw == 0xD503201F {
 		inst.Op = int(NOP)
 		return inst
@@ -235,12 +235,12 @@ func (d *Decoder) Decode(raw uint32, offset int) vm.Instruction {
 	return inst
 }
 
-// InstName 返回指令名称
+// InstName returns instruction name
 func (d *Decoder) InstName(op int) string {
 	return OpName(Op(op))
 }
 
-// SignExtend 符号扩展
+// SignExtend sign extension
 func SignExtend(val uint32, bits int) int64 {
 	sign := uint32(1) << (bits - 1)
 	mask := sign - 1
@@ -250,7 +250,7 @@ func SignExtend(val uint32, bits int) int64 {
 	return int64(val & mask)
 }
 
-// decodeBitmaskImm 解码 ARM64 逻辑立即数的 bitmask 编码
+// decodeBitmaskImm decodes ARM64 logical immediate bitmask encoding
 func decodeBitmaskImm(n, immr, imms uint32, is64 bool) (uint64, bool) {
 	var regSize uint32 = 32
 	if is64 {
@@ -292,7 +292,7 @@ func decodeBitmaskImm(n, immr, imms uint32, is64 bool) (uint64, bool) {
 	return result, true
 }
 
-// OpName 指令名称映射
+// OpName instruction name mapping
 func OpName(op Op) string {
 	names := map[Op]string{
 		ADD_IMM: "ADD(imm)", SUB_IMM: "SUB(imm)",

@@ -6,16 +6,16 @@ import (
 )
 
 // ============================================================
-// VM 字节码反汇编器
+// VM bytecode disassembler
 //
-// 将 VM 字节码解码为可读文本，用于 debug 对照输出。
-// 格式对齐 vm_opcodes.h 注释风格。
+// Decodes VM bytecode into human-readable text for debug mapping output.
+// Format aligned with vm_opcodes.h comment style.
 // ============================================================
 
-// opInfo 操作码信息
+// opInfo - opcode information
 type opInfo struct {
 	Name string
-	Size int // 指令总字节数 (0 = 可变)
+	Size int // total instruction bytes (0 = variable)
 }
 
 var opTable = map[byte]opInfo{
@@ -112,7 +112,7 @@ var opTable = map[byte]opInfo{
 	OpAdc: {"ADC", 4}, // op + d + n + m
 	OpSbc: {"SBC", 4},
 
-	// ---- 栈机器操作码 ----
+	// ---- Stack Machine Opcodes ----
 	OpSVload:     {"S_VLOAD", 2},  // op + r
 	OpSVstore:    {"S_VSTORE", 2}, // op + r
 	OpSPushImm32: {"S_PUSH32", 5}, // op + imm32
@@ -156,7 +156,7 @@ var opTable = map[byte]opInfo{
 	OpSSt32:      {"S_ST32", 1},
 	OpSSt64:      {"S_ST64", 1},
 
-	// SIMD 内存访问
+	// SIMD memory access
 	OpSVLd: {"VLOAD_SIMD", 3}, // op + reg + type
 	OpSVSt: {"VSTORE_SIMD", 3},
 
@@ -179,7 +179,7 @@ var opTable = map[byte]opInfo{
 	OpSFCvt:   {"FCVT", 4},
 }
 
-// InstructionSize 返回指定 opcode 的指令总字节数 (0 = 未知)
+// InstructionSize returns total byte count for the given opcode (0 = unknown)
 func InstructionSize(op byte) int {
 	if info, ok := opTable[op]; ok {
 		return info.Size
@@ -187,7 +187,7 @@ func InstructionSize(op byte) int {
 	return 0
 }
 
-// OpcodeName 操作码→名称
+// OpcodeName returns opcode name
 func OpcodeName(op byte) string {
 	if info, ok := opTable[op]; ok {
 		return info.Name
@@ -195,8 +195,8 @@ func OpcodeName(op byte) string {
 	return fmt.Sprintf("UNKNOWN(0x%02X)", op)
 }
 
-// DisasmOne 反汇编一条 VM 指令
-// 返回可读文本和指令字节数
+// DisasmOne disassembles a single VM instruction
+// Returns human-readable text and instruction byte count
 func DisasmOne(code []byte, pc int) (string, int) {
 	if pc >= len(code) {
 		return "EOF", 0
@@ -324,7 +324,7 @@ func DisasmOne(code []byte, pc int) (string, int) {
 	}
 }
 
-// DisasmRange 反汇编指定范围的字节码
+// DisasmRange disassembles bytecode in the specified range
 func DisasmRange(code []byte, start, end int) []string {
 	var lines []string
 	pc := start
@@ -339,7 +339,7 @@ func DisasmRange(code []byte, start, end int) []string {
 	return lines
 }
 
-// DisasmAll 反汇编整段字节码
+// DisasmAll disassembles all bytecode
 func DisasmAll(code []byte) []string {
 	return DisasmRange(code, 0, len(code))
 }

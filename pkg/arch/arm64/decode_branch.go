@@ -3,14 +3,14 @@ package arm64
 import "github.com/vmpacker/pkg/vm"
 
 // ============================================================
-// 分支 / 异常 / 系统 模式表
+// Branch / exception / system pattern table
 //
-// 覆盖: B/BL, BR/BLR/RET, B.cond, CBZ/CBNZ, TBZ/TBNZ, SVC
+// Covers: B/BL, BR/BLR/RET, B.cond, CBZ/CBNZ, TBZ/TBNZ, SVC
 // ============================================================
 
 var branchPatterns = []InstrPattern{
 	// ---- Conditional branch (B.cond) ----
-	// 编码: 0101010:0:imm19:0:cond
+	// Encoding: 0101010:0:imm19:0:cond
 	{
 		Name: "B_COND", Mask: 0xFF000010, Value: 0x54000000, Op: B_COND,
 		Fields: []FieldDef{
@@ -23,7 +23,7 @@ var branchPatterns = []InstrPattern{
 	},
 
 	// ---- Compare and branch (CBZ/CBNZ) ----
-	// 编码: sf:011010:op:imm19:Rt
+	// Encoding: sf:011010:op:imm19:Rt
 	{
 		Name: "CBZ", Mask: 0x7F000000, Value: 0x34000000, Op: CBZ,
 		Fields: []FieldDef{fSF, {Name: "imm19", Hi: 23, Lo: 5, Signed: true}, fRd},
@@ -40,7 +40,7 @@ var branchPatterns = []InstrPattern{
 	},
 
 	// ---- Test and branch (TBZ/TBNZ) ----
-	// 编码: b5:011011:op:b40:imm14:Rt
+	// Encoding: b5:011011:op:b40:imm14:Rt
 	{
 		Name: "TBZ", Mask: 0x7F000000, Value: 0x36000000, Op: TBZ,
 		Fields: []FieldDef{
@@ -69,7 +69,7 @@ var branchPatterns = []InstrPattern{
 	},
 
 	// ---- Unconditional branch (B/BL) ----
-	// 编码: op:00101:imm26
+	// Encoding: op:00101:imm26
 	{
 		Name: "B", Mask: 0xFC000000, Value: 0x14000000, Op: B,
 		Fields: []FieldDef{{Name: "imm26", Hi: 25, Lo: 0, Signed: true}},
@@ -86,7 +86,7 @@ var branchPatterns = []InstrPattern{
 	},
 
 	// ---- Unconditional branch (register): BR/BLR/RET ----
-	// 编码: 1101011:0:opc:11111:000000:Rn:00000
+	// Encoding: 1101011:0:opc:11111:000000:Rn:00000
 	{
 		Name: "BR", Mask: 0xFFFFFC1F, Value: 0xD61F0000, Op: BR,
 		Fields: []FieldDef{fRn},
@@ -101,7 +101,7 @@ var branchPatterns = []InstrPattern{
 	},
 
 	// ---- Supervisor Call ----
-	// 编码: 11010100_000:imm16:00000
+	// Encoding: 11010100_000:imm16:00000
 	{
 		Name: "SVC", Mask: 0xFFE0001F, Value: 0xD4000001, Op: SVC,
 		Fields: []FieldDef{{Name: "imm16", Hi: 20, Lo: 5}},
@@ -111,9 +111,9 @@ var branchPatterns = []InstrPattern{
 	},
 
 	// ---- MRS (system register read) ----
-	// 编码: 1101010100:1:1:op0:op1:CRn:CRm:op2:Rt
-	// Mask: 0xFFF00000 = 0xD5300000 只匹配 MRS（不匹配 MSR）
-	// sysreg 编码: bits[20:5] = op0:op1:CRn:CRm:op2 (15位)
+	// Encoding: 1101010100:1:1:op0:op1:CRn:CRm:op2:Rt
+	// Mask: 0xFFF00000 = 0xD5300000 matches only MRS (not MSR)
+	// sysreg encoding: bits[20:5] = op0:op1:CRn:CRm:op2 (15 bits)
 	{
 		Name: "MRS", Mask: 0xFFF00000, Value: 0xD5300000, Op: MRS,
 		Fields: []FieldDef{
@@ -127,7 +127,7 @@ var branchPatterns = []InstrPattern{
 	},
 
 	// ---- MSR (system register write) ----
-	// 编码: 1101010100:0:1:op0:op1:CRn:CRm:op2:Rt
+	// Encoding: 1101010100:0:1:op0:op1:CRn:CRm:op2:Rt
 	{
 		Name: "MSR", Mask: 0xFFF00000, Value: 0xD5100000, Op: MSR_WRITE,
 		Fields: []FieldDef{
@@ -141,7 +141,7 @@ var branchPatterns = []InstrPattern{
 	},
 
 	// ---- Barriers: DMB/DSB/ISB ----
-	// 编码: 1101_0101_0000_0011_0011_CRm_op2_11111
+	// Encoding: 1101_0101_0000_0011_0011_CRm_op2_11111
 	{Name: "DMB", Mask: 0xFFFFF0FF, Value: 0xD50330BF, Op: DMB},
 	{Name: "DSB", Mask: 0xFFFFF0FF, Value: 0xD503309F, Op: DSB},
 	{Name: "ISB", Mask: 0xFFFFF0FF, Value: 0xD50330DF, Op: ISB},

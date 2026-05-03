@@ -1,24 +1,24 @@
 package vm
 
 // ============================================================
-// VM 字节码操作码（随机映射值）
+// VM bytecode opcodes (randomly mapped values)
 //
-// 逆向者在 IDA 中只能看到这些 hex 值对应的 switch-case，
-// 无法直接识别指令含义。
+// Reverse engineers only see these hex values in IDA's switch-case,
+// making instruction semantics non-obvious.
 // ============================================================
 
-// VM 配置常量
+// VM configuration constants
 const (
-	RegCount   = 32  // 虚拟寄存器数量 (X0-X30 + XZR)
-	StackSize  = 128 // 虚拟栈深度
-	MaxExtFunc = 16  // 最大外部函数数
+	RegCount   = 32  // number of virtual registers (X0-X30 + XZR)
+	StackSize  = 128 // virtual stack depth
+	MaxExtFunc = 16  // maximum number of external functions
 )
 
 const (
-	// 数据操作
-	OpNop      byte = 0xC3 // 空操作                1B: [op]
+	// Data operations
+	OpNop      byte = 0xC3 // no operation            1B: [op]
 	OpMovImm   byte = 0x5A // Rx = imm64            10B: [op][r][imm64_LE]
-	OpMovImm32 byte = 0x49 // Rx = imm32 (零扩展)   6B: [op][r][imm32_LE]
+	OpMovImm32 byte = 0x49 // Rx = imm32 (zero-ext)  6B: [op][r][imm32_LE]
 	OpMovReg   byte = 0x2F // Rx = Ry               3B: [op][dst][src]
 	OpLoad8    byte = 0x91 // Rx = *(u8*)(Ry+imm16) 5B: [op][dst][base][imm16]
 	OpLoad32   byte = 0xA4 // Rx = *(u32*)(Ry+i16)  5B: [op][dst][base][imm16]
@@ -29,7 +29,7 @@ const (
 	OpLoad16   byte = 0xE7 // Rx = *(u16*)(Ry+i16)  5B: [op][dst][base][imm16]
 	OpStore16  byte = 0xE8 // *(u16*)(Rx+i16) = Ry  5B: [op][base][src][imm16]
 
-	// 算术运算 — 三地址: [op][d][a][b] = 4B
+	// Arithmetic - three-address: [op][d][a][b] = 4B
 	OpAdd   byte = 0x37
 	OpSub   byte = 0x6E
 	OpMul   byte = 0x83
@@ -37,13 +37,13 @@ const (
 	OpAnd   byte = 0x4D
 	OpOr    byte = 0x72
 	OpShl   byte = 0xAE
-	OpShr   byte = 0xF1 // 逻辑右移
-	OpAsr   byte = 0xDA // 算术右移
+	OpShr   byte = 0xF1 // logical shift right
+	OpAsr   byte = 0xDA // arithmetic shift right
 	OpUmulh byte = 0xF2 // UMULH Xd,Xn,Xm  4B: [op][d][n][m]
 	OpNot   byte = 0x08 // NOT Rx, Ry — 3B
-	OpRor   byte = 0x3D // 循环右移
+	OpRor   byte = 0x3D // rotate right
 
-	// 立即数算术: [op][d][s][imm32] = 7B
+	// Immediate arithmetic: [op][d][s][imm32] = 7B
 	OpAddImm byte = 0xE5
 	OpSubImm byte = 0x78
 	OpXorImm byte = 0x3C
@@ -54,39 +54,39 @@ const (
 	OpShrImm byte = 0x8C
 	OpAsrImm byte = 0x9D
 
-	// 比较
+	// Comparison
 	OpCmp    byte = 0x9F // CMP Rx, Ry          3B
 	OpCmpImm byte = 0xA1 // CMP Rx, imm32       6B
 
-	// 跳转
+	// Branching
 	OpJmp byte = 0x44 // JMP imm32           5B
 	OpJe  byte = 0x58 // JE  imm32 (ZF=1)    5B
 	OpJne byte = 0xBB // JNE imm32 (ZF=0)    5B
-	OpJl  byte = 0x15 // JL  imm32 (SF=1)    5B (有符号小于)
-	OpJge byte = 0x29 // JGE imm32 (SF=0)    5B (有符号大于等于)
+	OpJl  byte = 0x15 // JL  imm32 (SF=1)    5B (signed less than)
+	OpJge byte = 0x29 // JGE imm32 (SF=0)    5B (signed greater or equal)
 	OpJgt byte = 0x36 // JGT imm32           5B
 	OpJle byte = 0x47 // JLE imm32           5B
-	// 无符号比较跳转
-	OpJb  byte = 0x52 // JB  (无符号小于, CF)
-	OpJae byte = 0x64 // JAE (无符号大于等于)
-	OpJbe byte = 0x53 // JBE (无符号小于等于, CF||ZF)  B.LS
-	OpJa  byte = 0x65 // JA  (无符号大于, !CF&&!ZF)    B.HI
-	// 溢出跳转
+	// Unsigned comparison branches
+	OpJb  byte = 0x52 // JB  (unsigned less than, CF)
+	OpJae byte = 0x64 // JAE (unsigned greater or equal)
+	OpJbe byte = 0x53 // JBE (unsigned less or equal, CF||ZF)  B.LS
+	OpJa  byte = 0x65 // JA  (unsigned greater, !CF&&!ZF)    B.HI
+	// Overflow branches
 	OpJvs byte = 0x76 // JVS imm32 (OF=1, overflow set)   B.VS
 	OpJvc byte = 0x77 // JVC imm32 (OF=0, overflow clear)  B.VC
 
-	// 栈操作
+	// Stack operations
 	OpPush byte = 0x63 // PUSH Rx             2B
 	OpPop  byte = 0x27 // POP  Rx             2B
 
-	// 特殊
-	OpCallNative byte = 0xAB // 调用原生函数地址    9B: [op][imm64] (BL到绝对地址)
-	OpCallReg    byte = 0xBC // BLR Xn 寄存器间接调用 2B: [op][rn]
-	OpBrReg      byte = 0xCD // BR  Xn 寄存器间接跳转 2B: [op][rn]
+	// Special
+	OpCallNative byte = 0xAB // call native function address    9B: [op][imm64] (BL to absolute address)
+	OpCallReg    byte = 0xBC // BLR Xn register indirect call 2B: [op][rn]
+	OpBrReg      byte = 0xCD // BR  Xn register indirect jump 2B: [op][rn]
 	OpRet        byte = 0xEE // RET Rx             2B
-	OpHalt       byte = 0x00 // 停机               1B
+	OpHalt       byte = 0x00 // halt               1B
 
-	// SIMD 加载/存储: [op][rn][len] = 3B
+	// SIMD load/store: [op][rn][len] = 3B
 	OpVld16 byte = 0xC1 // vtmp ← mem[R[rn]], len bytes
 	OpVst16 byte = 0xC2 // mem[R[rn]] ← vtmp, len bytes
 
@@ -106,7 +106,7 @@ const (
 	// SVC: [op][imm16_lo][imm16_hi] = 3B
 	OpSvc byte = 0x1E // SVC #imm16
 
-	// UDIV/SDIV: [op][d][n][m] = 4B (和 MUL 格式一样)
+	// UDIV/SDIV: [op][d][n][m] = 4B (same format as MUL)
 	OpUdiv byte = 0x1F // UDIV Xd, Xn, Xm
 	OpSdiv byte = 0x21 // SDIV Xd, Xn, Xm
 
@@ -122,28 +122,28 @@ const (
 	OpRev16 byte = 0x28 // REV16 Xd, Xn             3B: [op][d][n]
 	OpRev32 byte = 0x2B // REV32 Xd, Xn             3B: [op][d][n]
 
-	// ADC/SBC (带进位加减)
+	// ADC/SBC (add/sub with carry)
 	OpAdc byte = 0x2C // ADC Xd, Xn, Xm            4B: [op][d][n][m]
 	OpSbc byte = 0x2D // SBC Xd, Xn, Xm            4B: [op][d][n][m]
 
 	// ============================================================
-	// 栈机器操作码 (Stack Machine Opcodes)
-	// 操作 eval_stk[] 操作栈，彻底消除寄存器冲突
-	// 值域选择: 仅使用与旧操作码不冲突的空闲字节值
+	// Stack Machine Opcodes
+	// Operates on eval_stk[] evaluation stack, eliminates register conflicts
+	// Value range: only uses free byte values that don't conflict with old opcodes
 	// ============================================================
 
-	// 栈 ↔ 寄存器传输
+	// Stack <-> register transfer
 	OpSVload     byte = 0x01 // push R[r]             2B: [op][r]
 	OpSVstore    byte = 0x02 // pop → R[r]            2B: [op][r]
 	OpSPushImm32 byte = 0x03 // push imm32            5B: [op][imm32]
 	OpSPushImm64 byte = 0x04 // push imm64            9B: [op][imm64]
 
-	// 栈控制
-	OpSDup  byte = 0x05 // dup 栈顶    1B
-	OpSSwap byte = 0x06 // swap 栈顶   1B
-	OpSDrop byte = 0x07 // pop 丢弃    1B
+	// Stack control
+	OpSDup  byte = 0x05 // dup top of stack    1B
+	OpSSwap byte = 0x06 // swap top of stack   1B
+	OpSDrop byte = 0x07 // pop and discard    1B
 
-	// 栈 ALU (二元)
+	// Stack ALU (binary)
 	OpSAdd   byte = 0x09 // pop b,a → push a+b    1B
 	OpSSub   byte = 0x0A // pop b,a → push a-b    1B
 	OpSMul   byte = 0x0B // pop b,a → push a*b    1B
@@ -161,7 +161,7 @@ const (
 	OpSAdc   byte = 0x7D // pop b,a → push a+b+C  1B
 	OpSSbc   byte = 0x7E // pop b,a → push sbc    1B
 
-	// 栈 ALU (一元)
+	// Stack ALU (unary)
 	OpSNot   byte = 0x4A // pop a → push ~a       1B
 	OpSNeg   byte = 0x4B // pop a → push -a       1B
 	OpSClz   byte = 0x4C // pop a → push clz(a)   1B
@@ -174,10 +174,10 @@ const (
 	OpSTrunc32 byte = 0x87 // pop a → push a&FFFFFFFF 1B
 	OpSSext32  byte = 0x88 // pop a → push sext32   1B
 
-	// 栈比较
+	// Stack comparison
 	OpSCmp byte = 0x89 // pop b,a → set flags   1B
 
-	// 栈内存访问
+	// Stack memory access
 	OpSLd8  byte = 0x8A // pop addr → push *(u8*)   1B
 	OpSLd16 byte = 0x8B // pop addr → push *(u16*)  1B
 	OpSLd32 byte = 0x92 // pop addr → push *(u32*)  1B
@@ -187,7 +187,7 @@ const (
 	OpSSt32 byte = 0x96 // pop val,addr → st32       1B
 	OpSSt64 byte = 0x97 // pop val,addr → st64       1B
 
-	// SIMD 内存访问
+	// SIMD memory access
 	OpSVLd byte = 0x30 // LD SIMD: [op][reg][size_type] (8/16/32/64/128b)
 	OpSVSt byte = 0x31 // ST SIMD: [op][reg][size_type]
 
@@ -208,9 +208,9 @@ const (
 	OpSFMovRV byte = 0x43 // R[n] -> V[d]: [op][d][n][type]
 	OpSFMovVR byte = 0x45 // V[n] -> R[d]: [op][d][n][type]
 	OpSFCvt   byte = 0x46 // FP FCVT: [op][d][n][type]
-	)
+)
 
-// 标志位
+// Flags
 const (
 	FlagZero  uint32 = 1 << 0
 	FlagSign  uint32 = 1 << 1

@@ -3,36 +3,36 @@ package arm64
 import "github.com/vmpacker/pkg/vm"
 
 // ============================================================
-// ARM64 表驱动解码引擎
+// ARM64 table-driven decoding engine
 //
-// FieldDef  — 描述一个位域的 Hi/Lo 位置，消除手工移位歧义
-// InstrPattern — Mask/Value 匹配 + Fields 自动提取 + Post 回调
+// FieldDef - describes a bit field's Hi/Lo position, eliminating manual shift ambiguity
+// InstrPattern - Mask/Value match + Fields auto-extract + Post callback
 // ============================================================
 
-// FieldDef 位域定义
+// FieldDef - bit field definition
 type FieldDef struct {
-	Name   string // 字段名: "sf", "Rd", "Rn", "imm7" ...
-	Hi     int    // 高位（含），例如 bit31 → Hi=31
-	Lo     int    // 低位（含），例如 bit0  → Lo=0
-	Signed bool   // 是否有符号扩展
+	Name   string // field name: "sf", "Rd", "Rn", "imm7" ...
+	Hi     int    // high bit (inclusive), e.g. bit31 → Hi=31
+	Lo     int    // low bit (inclusive), e.g. bit0 → Lo=0
+	Signed bool   // whether it has sign extension
 }
 
-// PostFunc 后处理回调：处理表无法表达的逻辑（XZR替换、offset缩放等）
+// PostFunc - post-processing callback: handles logic that tables can't express (XZR replacement, offset scaling, etc.)
 type PostFunc func(fields map[string]int64, inst *vm.Instruction)
 
-// InstrPattern 指令模式定义
+// InstrPattern - instruction pattern definition
 type InstrPattern struct {
-	Name   string     // 调试用名称，如 "ADD_IMM"
-	Mask   uint32     // 固定位掩码
-	Value  uint32     // 固定位期望值
-	Op     Op         // 解码后的指令类型
-	Fields []FieldDef // 位域定义列表
-	Post   PostFunc   // 可选后处理
+	Name   string     // debug name, e.g. "ADD_IMM"
+	Mask   uint32     // fixed bit mask
+	Value  uint32     // expected fixed bit value
+	Op     Op         // decoded instruction type
+	Fields []FieldDef // bit field definitions
+	Post   PostFunc   // optional post-processing
 }
 
-// ---- 位域提取 ----
+// ---- Bit field extraction ----
 
-// extractField 从 raw 中提取单个位域
+// extractField extracts a single bit field from raw
 func extractField(raw uint32, f FieldDef) int64 {
 	width := f.Hi - f.Lo + 1
 	mask := uint32((1 << width) - 1)
@@ -43,7 +43,7 @@ func extractField(raw uint32, f FieldDef) int64 {
 	return int64(val)
 }
 
-// extractFields 从 raw 中提取所有位域，返回 name→value 映射
+// extractFields extracts all bit fields from raw, returns name→value map
 func extractFields(raw uint32, fields []FieldDef) map[string]int64 {
 	result := make(map[string]int64, len(fields))
 	for _, f := range fields {
@@ -52,14 +52,14 @@ func extractFields(raw uint32, fields []FieldDef) map[string]int64 {
 	return result
 }
 
-// ---- 通用字段映射 ----
+// ---- Common field mapping ----
 
-// applyCommonFields 将常见字段名映射到 vm.Instruction
+// applyCommonFields maps common field names to vm.Instruction
 //
-// 约定: Rd→inst.Rd, Rn→inst.Rn, Rm→inst.Rm, sf→inst.SF,
+// Convention: Rd→inst.Rd, Rn→inst.Rn, Rm→inst.Rm, sf→inst.SF,
 //       cond→inst.Cond, wb→inst.WB, shift→inst.Shift
 //
-// inst.Imm 由各指令的 Post 回调设置（因为 imm 宽度/缩放各不相同）
+// inst.Imm is set by each instruction's Post callback (imm width/scale varies)
 func applyCommonFields(fields map[string]int64, inst *vm.Instruction) {
 	if v, ok := fields["Rd"]; ok {
 		inst.Rd = int(v)
@@ -84,10 +84,10 @@ func applyCommonFields(fields map[string]int64, inst *vm.Instruction) {
 	}
 }
 
-// ---- 模式匹配 ----
+// ---- Pattern matching ----
 
-// matchAndDecode 在 patterns 中查找第一个匹配的模式，解码并填充 inst
-// 返回是否匹配成功
+// matchAndDecode finds the first matching pattern in patterns, decodes and fills inst
+// Returns whether a match was found
 func matchAndDecode(raw uint32, patterns []InstrPattern, inst *vm.Instruction) bool {
 	for i := range patterns {
 		p := &patterns[i]
@@ -104,9 +104,9 @@ func matchAndDecode(raw uint32, patterns []InstrPattern, inst *vm.Instruction) b
 	return false
 }
 
-// ---- 辅助函数 ----
+// ---- Helper functions ----
 
-// xzrReplace ARM64 XZR 标记: reg==31 → REG_XZR
+// xzrReplace ARM64 XZR marker: reg==31 → REG_XZR
 func xzrReplace(reg *int) {
 	if *reg == 31 {
 		*reg = vm.REG_XZR
