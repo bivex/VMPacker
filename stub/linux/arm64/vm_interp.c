@@ -16,6 +16,7 @@
 
 #include "vm_decode.h"
 #include "vm_opcodes.h"
+#include "vm_opcodes_dynamic.h"
 #include "vm_types.h"
 #include "vm_crc.h"
 #include "vm_security.h"
@@ -129,11 +130,11 @@ vm_entry_token_inner(u64 *args, u32 token) {
   u8 xor_key = (u8)TOKEN_XOR_KEY(token);
   u32 func_id = TOKEN_FUNC_ID(token);
 
-  /* PIE 兼容: _token_table_va 存储的是相对于自身地址的偏移
-   * 用 ADR 获取 _token_table_va 的运行时地址 (PC-relative, ±1MB)
-   * 然后加上偏移得到 token 描述符表的实际地址 */
+  /* PIE 兼容: _token_table_va 存储的是相对于 stub 基址的偏移
+   * 用 ADR 获取 stub 基址 (PC-relative, ±1MB) */
+  extern u8 _vmp_stub_base;
   u64 self_va;
-  __asm__ volatile("adr %0, _token_table_va" : "=r"(self_va));
+  __asm__ volatile("adr %0, _vmp_stub_base" : "=r"(self_va));
   u64 tbl_off = *(volatile u64 *)&_token_table_va;
   if (__builtin_expect(tbl_off == 0, 0))
     return 0; /* 表未初始化, 安全退出 */
@@ -168,7 +169,7 @@ __attribute__((section(".text.entry"))) u64
 vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_ptr,
          u32 func_id) {
   u64 ret = 0;
-
+  
   /* ---- 1. 动态分配字节码缓冲区 (mmap, 替代栈上 64KB) ---- */
   if (bc_len > VM_BYTECODE_MAX)
     bc_len = VM_BYTECODE_MAX;
@@ -234,8 +235,8 @@ if (bc_off <= (u64)bc_len - 8) {
   sec_protect_memory(vm, ctx_alloc);
 
   /* ---- Anti-Debug: Initial Checks ---- */
-  if (sec_check_tracerpid()) { goto cleanup; }
-  if (sec_check_ptrace()) { goto cleanup; }
+  if (sec_check_tracerpid()) { return 101; }
+  if (sec_check_ptrace()) { return 102; }
   
   /* Anti-Debug: Basic Timing Check (measure start time) */
   unsigned long long start_time = sec_get_timer();
@@ -299,7 +300,7 @@ if (bc_off <= (u64)bc_len - 8) {
         u32 bc_crc_len = bc_len - map_data_size - CRC_SECTION_SIZE;
         u32 actual_bc_crc = crc32_calc(bc_buf, bc_crc_len);
         if (expected_bc_crc != actual_bc_crc) {
-          goto cleanup; /* Integrity check failed, abort execution */
+          return 103; /* Integrity check failed, abort execution */
         }
         /* Update actual bc_len to exclude the CRC section */
         vm->bc_len = bc_crc_len;
@@ -311,20 +312,20 @@ if (bc_off <= (u64)bc_len - 8) {
 
 /* ---- Anti-Hook: Inline Hook Detection ---- */
 /* Detect inline hooks on some common targets */
-if (sec_scan_inline_hook((void *)memcpy)) { goto cleanup; }
-if (sec_scan_inline_hook((void *)vm_entry)) { goto cleanup; }
-if (sec_scan_inline_hook((void *)sys_mmap)) { goto cleanup; }
-if (sec_scan_inline_hook((void *)sys_ptrace)) { goto cleanup; }
+if (sec_scan_inline_hook((void *)memcpy)) { return 104; }
+if (sec_scan_inline_hook((void *)vm_entry)) { return 105; }
+if (sec_scan_inline_hook((void *)sys_mmap)) { return 106; }
+if (sec_scan_inline_hook((void *)sys_ptrace)) { return 107; }
 
 /* ---- Anti-Debug: Timing Check (Verify execution time hasn't been delayed) ---- */
 unsigned long long end_time = sec_get_timer();
-if (end_time - start_time > 500000) { 
-  /* Heuristic: Initialization shouldn't take this long (tuned for Release builds) */
-  /* goto cleanup; */ /* Optional: enable when strictly tuned */
+if (end_time - start_time > 1000000) { 
+  /* Heuristic: Initialization shouldn't take this long */
+  return 108;
 }
 
 /* ---- Anti-Debug: Breakpoint Scanning ---- */
-if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { goto cleanup; }
+if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
 
 /* ---- OpcodeCryptor 解密宏 (两种模式共用) ---- */
 #define OC_DECRYPT(pc, key) ((u8)((key) ^ ((pc) * 0x9E3779B9u)))
@@ -349,7 +350,9 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { goto cleanup; }
   /* ---- 间接 Dispatch 主循环 ---- */
   for (;;) {
     /* -- Runtime Security Periodic Check -- */
-    if (__builtin_expect(sec_runtime_check(vm), 0)) {
+    int sec_res = sec_runtime_check(vm);
+    if (__builtin_expect(sec_res != 0, 0)) {
+      ret = (u64)sec_res;
       goto cleanup;
     }
 
@@ -575,8 +578,11 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { goto cleanup; }
  * 步骤: pc--; size = bc[pc]; pc -= size; 现在 pc 指向指令起始 */
 #define DISPATCH()                                                             \
   do {                                                                         \
-    if (__builtin_expect(sec_runtime_check(vm), 0))                            \
+    int _sec_res = sec_runtime_check(vm);                                      \
+    if (__builtin_expect(_sec_res != 0, 0)) {                                  \
+      ret = (u64)_sec_res;                                                     \
       goto cleanup;                                                            \
+    }                                                                          \
     if (vm->reverse) {                                                         \
       if (__builtin_expect((i64)vm->pc <= 0, 0))                               \
         goto cleanup;                                                          \

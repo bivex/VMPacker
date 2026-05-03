@@ -3,9 +3,14 @@ package arm64
 import (
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 
 	"github.com/vmpacker/pkg/vm"
 )
+
+func crc32_calc(data []byte) uint32 {
+	return crc32.ChecksumIEEE(data)
+}
 
 // ============================================================
 // ARM64 → VM bytecode translator
@@ -218,6 +223,17 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 
 	// record pure bytecode length (before trailer)
 	result.CodeLen = t.pos()
+
+	// ---- append CRC section (24 bytes) ----
+	// Format: [stub_va:8][stub_size:4][stub_crc:4][bc_crc:4][magic:4]
+	// Note: stub_va, stub_size, stub_crc are filled by packer or left as 0
+	// Here we only fill bc_crc and magic.
+	bcCrc := crc32_calc(t.code[:result.CodeLen])
+	t.emitU64(0)          // stub_va placeholder
+	t.emitU32(0)          // stub_size placeholder
+	t.emitU32(0)          // stub_crc placeholder
+	t.emitU32(bcCrc)      // bc_crc
+	t.emitU32(0x43524332) // CRC_MAGIC ("CRC2")
 
 	// ---- append trailer (BR indirect jump mapping table + reverse + oc_key placeholder + op_map) ----
 	// First append the op_map (256 bytes) so C interpreter can read it

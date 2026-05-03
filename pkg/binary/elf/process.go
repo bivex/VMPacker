@@ -6,6 +6,7 @@ import (
 	"debug/elf"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"os"
 
 	"github.com/vmpacker/pkg/arch/arm32"
@@ -422,6 +423,11 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 			result.Relocations[i].BcOffset = newOff
 		}
 	}
+
+	// ---- CRC32: Calculate checksum of pure bytecode (opcode encrypted) ----
+	bcCrc := crc32.ChecksumIEEE(result.Bytecode[:result.CodeLen])
+	// CRC Section is at result.CodeLen. bc_crc is at offset 16 within that section.
+	binary.LittleEndian.PutUint32(result.Bytecode[result.CodeLen+16:], bcCrc)
 
 	// ---- XOR chain encryption (whole bytecode segment) ----
 	xorKey := byte(0xA5)

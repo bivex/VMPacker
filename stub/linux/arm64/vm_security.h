@@ -201,13 +201,13 @@ static inline int sec_runtime_check(vm_ctx_t *vm) {
     /* 1. Bytecode Integrity Check */
     if (vm->expected_bc_crc != 0) {
       if (crc32_calc(vm->bc, vm->bc_crc_len) != vm->expected_bc_crc) {
-        return 1; /* Tampering detected */
+        return 110; /* Tampering detected during runtime */
       }
     }
 
-    /* 2. Anti-Debug: Basic Ptrace/TracerPid (less frequent if needed, but here every interval) */
-    if (sec_check_ptrace()) return 1;
-    if (sec_check_tracerpid()) return 1;
+    /* 2. Anti-Debug: Basic Ptrace/TracerPid */
+    if (sec_check_ptrace()) return 111;
+    if (sec_check_tracerpid()) return 112;
   }
   return 0;
 }

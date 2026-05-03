@@ -2,6 +2,7 @@
 SECTIONS {
   . = 0;
   .text : {
+    *vm_entry.o(.text.entry)
     *(.text.entry)
     *(.text.vm_alu)
     *(.text.vm_mem)

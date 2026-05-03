@@ -148,7 +148,7 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 	}
 	tokenTableOff := len(payload)
 	tokenTableVA := payloadVA + uint64(tokenTableOff)
-	selfVA := payloadVA + tokenTableVAOff
+	selfVA := payloadVA // Base of interpreter stub
 
 	for i := range funcs {
 		bcVA := payloadVA + uint64(records[i].payloadOff)

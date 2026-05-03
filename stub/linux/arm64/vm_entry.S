@@ -1,4 +1,7 @@
 .section .text.entry
+.global _vmp_stub_base
+_vmp_stub_base:
+
 .global vm_entry_token
 .type vm_entry_token, %function
 
