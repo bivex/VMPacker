@@ -9,7 +9,13 @@ import (
 	"debug/elf"
 )
 
-// injectVMPBatch — 批量 PT_NOTE hijack 注入
+// bcRecord tracks bytecode position within the payload
+type bcRecord struct {
+	payloadOff int
+	bcLen      int
+}
+
+// injectVMPBatch dispatches to arch-specific injection
 func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 	if p.isARM32 {
 		return p.injectVMPBatch32(funcs)
@@ -17,34 +23,21 @@ func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
 	return p.injectVMPBatch64(funcs)
 }
 
-// injectVMPBatch64 — ARM64 ELF64 注入
-func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
-	ehdr := readEhdr64(p.data)
+// ---- Shared payload construction ----
 
-	if len(p.interpBlob) < 24 {
-		return fmt.Errorf("token mode requires extended blob header (24 bytes), got %d", len(p.interpBlob))
-	}
-	entryOff := binary.LittleEndian.Uint64(p.interpBlob[:8])
-	tokenEntryOff := binary.LittleEndian.Uint64(p.interpBlob[8:16])
-	tokenTableVAOff := binary.LittleEndian.Uint64(p.interpBlob[16:24])
-	interpCode := p.interpBlob[24:]
-
-	// 1. 构造 payload: [interpCode][8B RTLr gap][bc0][pad][bc1][pad][...]
+// buildPayload constructs [interpCode][padding][bc0][pad][bc1][pad][...]
+func buildPayload(interpCode []byte, funcs []FuncBytecode, extraGap int) ([]byte, []bcRecord) {
 	payload := make([]byte, 0, len(interpCode)+1024)
 	payload = append(payload, interpCode...)
-	// Reserve 8 bytes after code for RTLr offset patch (_token_table_va + 16)
-	// so it doesn't overlap with the first bytecode
-	payload = append(payload, make([]byte, 8)...)
+
+	if extraGap > 0 {
+		payload = append(payload, make([]byte, extraGap)...)
+	}
 	for len(payload)%4 != 0 {
 		payload = append(payload, 0x00)
 	}
 
-	type bcRecord struct {
-		payloadOff int
-		bcLen      int
-	}
 	records := make([]bcRecord, len(funcs))
-
 	for i, fb := range funcs {
 		records[i].payloadOff = len(payload)
 		records[i].bcLen = len(fb.Encrypted)
@@ -53,56 +46,85 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 			payload = append(payload, 0x00)
 		}
 	}
+	return payload, records
+}
 
-	// 2. 追加到文件末尾 (页对齐)
-	appendOff := uint64(len(p.data))
+// pageAlignAppend pads data to page boundary and appends payload, returns (payloadFileOff, payloadVA)
+func pageAlignAppend(data []byte, payload []byte, maxVA uint64, is64 bool) ([]byte, uint64, uint64) {
+	appendOff := uint64(len(data))
 	padLen := (0x1000 - (appendOff % 0x1000)) % 0x1000
 	for i := uint64(0); i < padLen; i++ {
-		p.data = append(p.data, 0x00)
+		data = append(data, 0x00)
 	}
-	payloadFileOff := uint64(len(p.data))
-	var maxVA uint64
-	for i := 0; i < int(ehdr.Phnum); i++ {
-		phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
-		ph := readPhdr64(p.data, phOff)
-		if ph.Type == uint32(elf.PT_LOAD) {
-			end := ph.Vaddr + ph.Memsz
-			if end > maxVA {
-				maxVA = end
-			}
-		}
-	}
+	payloadFileOff := uint64(len(data))
 	payloadVA := (maxVA + 0xFFFF) &^ 0xFFFF
+	data = append(data, payload...)
+	return data, payloadFileOff, payloadVA
+}
 
-	p.data = append(p.data, payload...)
+// writeTrampolines writes token trampolines and fills remaining bytes with garbage
+func writeTrampolines(data []byte, funcs []FuncBytecode, vmEntryTokenVA uint64, tokenVA uint32, buildFn func(int, FuncBytecode) []byte) error {
+	for i, fb := range funcs {
+		funcID := uint32(i)
+		token := (uint32(fb.XorKey) << 24) | (0 << 12) | (funcID & 0xFFF)
 
-	interpVA := payloadVA + entryOff
-	_ = interpVA
+		trampoline := buildFn(i, fb)
+		if uint64(len(trampoline)) > fb.FI.Size {
+			return fmt.Errorf("token trampoline for %s (%d bytes) exceeds function size (%d bytes)",
+				fb.FI.Name, len(trampoline), fb.FI.Size)
+		}
+
+		for j := 0; j < len(trampoline); j++ {
+			data[fb.FI.Offset+uint64(j)] = trampoline[j]
+		}
+
+		garbageLen := int(fb.FI.Size) - len(trampoline)
+		if garbageLen > 0 {
+			garbage := make([]byte, garbageLen)
+			rand.Read(garbage)
+			copy(data[fb.FI.Offset+uint64(len(trampoline)):], garbage)
+		}
+
+		fmt.Printf("    [TOKEN] %s: func_id=%d, token=0x%08X, trampoline=%d bytes\n",
+			fb.FI.Name, funcID, token, len(trampoline))
+	}
+	return nil
+}
+
+// ---- ARM64 (ELF64) injection ----
+
+// injectVMPBatch64 — ARM64 ELF64 注入
+func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
+	ehdr := readEhdr64(p.data)
+
+	if len(p.interpBlob) < 24 {
+		return fmt.Errorf("token mode requires extended blob header (24 bytes), got %d", len(p.interpBlob))
+	}
+	_ = binary.LittleEndian.Uint64(p.interpBlob[:8])
+	tokenEntryOff := binary.LittleEndian.Uint64(p.interpBlob[8:16])
+	tokenTableVAOff := binary.LittleEndian.Uint64(p.interpBlob[16:24])
+	interpCode := p.interpBlob[24:]
+
+	// 1. Build payload with 8-byte RTLr gap
+	payload, records := buildPayload(interpCode, funcs, 8)
+
+	// 2. Page-align and append
+	maxVA := findMaxVA64(p.data, ehdr)
+	var payloadFileOff, payloadVA uint64
+	p.data, payloadFileOff, payloadVA = pageAlignAppend(p.data, payload, maxVA, true)
 
 	fmt.Printf("    Payload at file offset: 0x%X, VA: 0x%X, size: %d\n",
 		payloadFileOff, payloadVA, len(payload))
-
 	for i, fb := range funcs {
 		bcVA := payloadVA + uint64(records[i].payloadOff)
-		fmt.Printf("    [%s] bytecode VA: 0x%X, len: %d\n",
-			fb.FI.Name, bcVA, records[i].bcLen)
+		fmt.Printf("    [%s] bytecode VA: 0x%X, len: %d\n", fb.FI.Name, bcVA, records[i].bcLen)
 	}
 
-	// 3. 找到 PT_NOTE 段并劫持为 PT_LOAD
-	noteIdx := -1
-	for i := 0; i < int(ehdr.Phnum); i++ {
-		phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
-		ph := readPhdr64(p.data, phOff)
-		if ph.Type == uint32(elf.PT_NOTE) {
-			noteIdx = i
-			break
-		}
+	// 3. Hijack PT_NOTE → PT_LOAD
+	noteIdx, err := findPTNOTE64(p.data, ehdr)
+	if err != nil {
+		return err
 	}
-	if noteIdx < 0 {
-		return fmt.Errorf("PT_NOTE segment not found")
-	}
-
-	// 4. PT_NOTE → PT_LOAD (RX)
 	notePhdrOff := ehdr.Phoff + uint64(noteIdx)*uint64(ehdr.Phentsize)
 	newPhdr := elf64Phdr{
 		Type:   uint32(elf.PT_LOAD),
@@ -115,68 +137,22 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 		Align:  0x1000,
 	}
 	writePhdr64(p.data, notePhdrOff, newPhdr)
-
 	fmt.Printf("    PT_NOTE[%d] -> PT_LOAD RX: off=0x%X va=0x%X sz=0x%X\n",
 		noteIdx, payloadFileOff, payloadVA, len(payload))
 
-	// 4b. 按 Vaddr 升序重排所有 PT_LOAD 段
-	{
-		type phdrSlot struct {
-			idx  int
-			phdr elf64Phdr
-		}
-		var loads []phdrSlot
-		for i := 0; i < int(ehdr.Phnum); i++ {
-			off := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
-			ph := readPhdr64(p.data, off)
-			if ph.Type == uint32(elf.PT_LOAD) {
-				loads = append(loads, phdrSlot{idx: i, phdr: ph})
-			}
-		}
-		needSort := false
-		for k := 1; k < len(loads); k++ {
-			if loads[k].phdr.Vaddr < loads[k-1].phdr.Vaddr {
-				needSort = true
-				break
-			}
-		}
-		if needSort {
-			sort.Slice(loads, func(a, b int) bool {
-				return loads[a].phdr.Vaddr < loads[b].phdr.Vaddr
-			})
-			slotIndices := make([]int, len(loads))
-			for k := range loads {
-				slotIndices[k] = loads[k].idx
-			}
-			sort.Ints(slotIndices)
-			for k, si := range slotIndices {
-				off := ehdr.Phoff + uint64(si)*uint64(ehdr.Phentsize)
-				writePhdr64(p.data, off, loads[k].phdr)
-			}
-			fmt.Printf("    [PHDR] Reordered %d PT_LOAD segments by Vaddr ascending\n", len(loads))
-			for i := 0; i < int(ehdr.Phnum); i++ {
-				off := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
-				ph := readPhdr64(p.data, off)
-				if ph.Type == uint32(elf.PT_LOAD) && ph.Vaddr == payloadVA {
-					notePhdrOff = off
-					break
-				}
-			}
-		}
-	}
+	notePhdrOff = reorderPTLoads64(p.data, ehdr, payloadVA, notePhdrOff)
 
-	// 5. Token 跳板
+	// 4. Token descriptor table (16 bytes per entry)
 	for len(payload)%8 != 0 {
 		payload = append(payload, 0x00)
 	}
 	tokenTableOff := len(payload)
 	tokenTableVA := payloadVA + uint64(tokenTableOff)
-
 	selfVA := payloadVA + tokenTableVAOff
+
 	for i := range funcs {
 		bcVA := payloadVA + uint64(records[i].payloadOff)
 		bcLen := uint32(records[i].bcLen)
-
 		var desc [16]byte
 		binary.LittleEndian.PutUint64(desc[0:], bcVA-selfVA)
 		binary.LittleEndian.PutUint32(desc[8:], bcLen)
@@ -184,34 +160,11 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 		payload = append(payload, desc[:]...)
 	}
 
-	// 6. RTLR 重定位表 (主要用于 Android .so ASLR 修复)
-	// 格式: [Magic:4B "RTLR"][Count:4B][{func_id:8B, bc_off:8B, target_addr:8B}...]
-	rtlrOff := len(payload)
-	payload = append(payload, "RTLR"...)
+	// 5. RTLR relocation table
+	rtlrOff := buildRTLrTable(&payload, funcs)
 	totalRelocs := 0
 	for _, fb := range funcs {
 		totalRelocs += len(fb.Relocations)
-	}
-	tmp32 := make([]byte, 4)
-	binary.LittleEndian.PutUint32(tmp32, uint32(totalRelocs))
-	payload = append(payload, tmp32...)
-
-	if totalRelocs > 0 {
-		fmt.Printf("    [RELOC] Appending %d relocations to RTLR table\n", totalRelocs)
-		for i, fb := range funcs {
-			for _, rel := range fb.Relocations {
-				tmp64 := make([]byte, 8)
-				// func_id
-				binary.LittleEndian.PutUint64(tmp64, uint64(i))
-				payload = append(payload, tmp64...)
-				// bc_off
-				binary.LittleEndian.PutUint64(tmp64, uint64(rel.BcOffset))
-				payload = append(payload, tmp64...)
-				// target_addr
-				binary.LittleEndian.PutUint64(tmp64, rel.TargetAddr)
-				payload = append(payload, tmp64...)
-			}
-		}
 	}
 
 	newPhdr.Filesz = uint64(len(payload))
@@ -221,17 +174,7 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 	p.data = p.data[:payloadFileOff]
 	p.data = append(p.data, payload...)
 
-	tblRelOff := tokenTableVA - selfVA
-	binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff:], tblRelOff)
-
-	// Patch _link_time_self_va (u64 right after _token_table_va) with link-time VA
-	// so the stub can compute ASLR slide = runtime_self_va - link_time_self_va
-	binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff+8:], selfVA)
-
-	// Patch RTLR offset into the descriptor table area (fixed position relative to selfVA)
-	// so the stub can find it.
-	// Actually, let's put the RTLR offset in the 3rd u64 of the header (at offset 24)
-	binary.LittleEndian.PutUint64(p.data[payloadFileOff+tokenTableVAOff+16:], uint64(rtlrOff)-(tokenTableVAOff))
+	patchTokenHeader64(p.data, payloadFileOff, tokenTableVAOff, selfVA, tokenTableVA, rtlrOff)
 
 	fmt.Printf("    [TOKEN] descriptor table VA: 0x%X, entries: %d\n", tokenTableVA, len(funcs))
 	fmt.Printf("    [TOKEN] RTLR table at offset 0x%X in payload, %d relocs\n", rtlrOff, totalRelocs)
@@ -239,118 +182,49 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 	vmEntryTokenVA := payloadVA + tokenEntryOff
 	fmt.Printf("    [TOKEN] vm_entry_token VA: 0x%X\n", vmEntryTokenVA)
 
-	for i, fb := range funcs {
-		funcID := uint32(i)
-		token := (uint32(fb.XorKey) << 24) | (0 << 12) | (funcID & 0xFFF)
-
-		trampoline := BuildTokenTrampoline(fb.FI.Addr, vmEntryTokenVA, token)
-		if uint64(len(trampoline)) > fb.FI.Size {
-			return fmt.Errorf("token trampoline for %s (%d bytes) exceeds function size (%d bytes)",
-				fb.FI.Name, len(trampoline), fb.FI.Size)
-		}
-
-		for j := 0; j < len(trampoline); j++ {
-			p.data[fb.FI.Offset+uint64(j)] = trampoline[j]
-		}
-
-		garbageLen := int(fb.FI.Size) - len(trampoline)
-		if garbageLen > 0 {
-			garbage := make([]byte, garbageLen)
-			rand.Read(garbage)
-			copy(p.data[fb.FI.Offset+uint64(len(trampoline)):], garbage)
-		}
-
-		fmt.Printf("    [TOKEN] %s: func_id=%d, token=0x%08X, trampoline=%d bytes\n",
-			fb.FI.Name, funcID, token, len(trampoline))
-	}
-
-	return nil
+	return writeTrampolines(p.data, funcs, vmEntryTokenVA, 0, func(_ int, fb FuncBytecode) []byte {
+		token := (uint32(fb.XorKey) << 24) | (0 << 12)
+		return BuildTokenTrampoline(fb.FI.Addr, vmEntryTokenVA, token)
+	})
 }
+
+// ---- ARM32 (ELF32) injection ----
 
 // injectVMPBatch32 — ARM32 ELF32 注入
 func (p *Packer) injectVMPBatch32(funcs []FuncBytecode) error {
 	ehdr := readEhdr32(p.data)
 	blob := p.interpBlobARM32
 
-	// ARM32 blob header: 3 x uint32 = 12 bytes (entryOff, tokenEntryOff, tokenTableVAOff)
 	if len(blob) < 12 {
 		return fmt.Errorf("ARM32 interp blob too small: %d bytes", len(blob))
 	}
-	entryOff := uint64(binary.LittleEndian.Uint32(blob[:4]))
+	_ = uint64(binary.LittleEndian.Uint32(blob[:4]))
 	tokenEntryOff := uint64(binary.LittleEndian.Uint32(blob[4:8]))
 	tokenTableVAOff := uint64(binary.LittleEndian.Uint32(blob[8:12]))
 	interpCode := blob[12:]
-	_ = entryOff
 
-	// 1. payload
-	payload := make([]byte, 0, len(interpCode)+1024)
-	payload = append(payload, interpCode...)
-	for len(payload)%4 != 0 {
-		payload = append(payload, 0x00)
-	}
+	// 1. Build payload (no RTLr gap for ARM32)
+	payload, records := buildPayload(interpCode, funcs, 0)
 
-	type bcRecord struct {
-		payloadOff int
-		bcLen      int
-	}
-	records := make([]bcRecord, len(funcs))
-	for i, fb := range funcs {
-		records[i].payloadOff = len(payload)
-		records[i].bcLen = len(fb.Encrypted)
-		payload = append(payload, fb.Encrypted...)
-		for len(payload)%4 != 0 {
-			payload = append(payload, 0x00)
-		}
-	}
-
-	// 2. 页对齐追加
-	appendOff := uint64(len(p.data))
-	padLen := (0x1000 - (appendOff % 0x1000)) % 0x1000
-	for i := uint64(0); i < padLen; i++ {
-		p.data = append(p.data, 0x00)
-	}
-	payloadFileOff := uint32(len(p.data))
-
-	// 动态计算 payloadVA (ELF32 uses 32-bit addresses)
-	var maxVA uint32
-	for i := 0; i < int(ehdr.Phnum); i++ {
-		phOff := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
-		ph := readPhdr32(p.data, phOff)
-		if ph.Type == uint32(elf.PT_LOAD) {
-			end := ph.Vaddr + ph.Memsz
-			if end > maxVA {
-				maxVA = end
-			}
-		}
-	}
-	payloadVA := (maxVA + 0xFFFF) &^ 0xFFFF
-
-	p.data = append(p.data, payload...)
+	// 2. Page-align and append
+	maxVA := findMaxVA32(p.data, ehdr)
+	var payloadFileOffU, payloadVAU uint64
+	p.data, payloadFileOffU, payloadVAU = pageAlignAppend(p.data, payload, maxVA, false)
+	payloadFileOff := uint32(payloadFileOffU)
+	payloadVA := uint32(payloadVAU)
 
 	fmt.Printf("    Payload at file offset: 0x%X, VA: 0x%X, size: %d\n",
 		payloadFileOff, payloadVA, len(payload))
-
 	for i, fb := range funcs {
 		bcVA := payloadVA + uint32(records[i].payloadOff)
-		fmt.Printf("    [%s] bytecode VA: 0x%X, len: %d\n",
-			fb.FI.Name, bcVA, records[i].bcLen)
+		fmt.Printf("    [%s] bytecode VA: 0x%X, len: %d\n", fb.FI.Name, bcVA, records[i].bcLen)
 	}
 
-	// 3. 找到 PT_NOTE
-	noteIdx := -1
-	for i := 0; i < int(ehdr.Phnum); i++ {
-		phOff := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
-		ph := readPhdr32(p.data, phOff)
-		if ph.Type == uint32(elf.PT_NOTE) {
-			noteIdx = i
-			break
-		}
+	// 3. Hijack PT_NOTE → PT_LOAD
+	noteIdx, err := findPTNOTE32(p.data, ehdr)
+	if err != nil {
+		return err
 	}
-	if noteIdx < 0 {
-		return fmt.Errorf("PT_NOTE segment not found")
-	}
-
-	// 4. PT_NOTE → PT_LOAD (RX)
 	notePhdrOff := ehdr.Phoff + uint32(noteIdx)*uint32(ehdr.Phentsize)
 	newPhdr := elf32Phdr{
 		Type:   uint32(elf.PT_LOAD),
@@ -363,69 +237,22 @@ func (p *Packer) injectVMPBatch32(funcs []FuncBytecode) error {
 		Align:  0x1000,
 	}
 	writePhdr32(p.data, notePhdrOff, newPhdr)
-
 	fmt.Printf("    PT_NOTE[%d] -> PT_LOAD RX: off=0x%X va=0x%X sz=0x%X\n",
 		noteIdx, payloadFileOff, payloadVA, len(payload))
 
-	// 4b. 按 Vaddr 升序重排 PT_LOAD
-	{
-		type phdrSlot struct {
-			idx  int
-			phdr elf32Phdr
-		}
-		var loads []phdrSlot
-		for i := 0; i < int(ehdr.Phnum); i++ {
-			off := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
-			ph := readPhdr32(p.data, off)
-			if ph.Type == uint32(elf.PT_LOAD) {
-				loads = append(loads, phdrSlot{idx: i, phdr: ph})
-			}
-		}
-		needSort := false
-		for k := 1; k < len(loads); k++ {
-			if loads[k].phdr.Vaddr < loads[k-1].phdr.Vaddr {
-				needSort = true
-				break
-			}
-		}
-		if needSort {
-			sort.Slice(loads, func(a, b int) bool {
-				return loads[a].phdr.Vaddr < loads[b].phdr.Vaddr
-			})
-			slotIndices := make([]int, len(loads))
-			for k := range loads {
-				slotIndices[k] = loads[k].idx
-			}
-			sort.Ints(slotIndices)
-			for k, si := range slotIndices {
-				off := ehdr.Phoff + uint32(si)*uint32(ehdr.Phentsize)
-				writePhdr32(p.data, off, loads[k].phdr)
-			}
-			fmt.Printf("    [PHDR] Reordered %d PT_LOAD segments by Vaddr ascending\n", len(loads))
-			for i := 0; i < int(ehdr.Phnum); i++ {
-				off := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
-				ph := readPhdr32(p.data, off)
-				if ph.Type == uint32(elf.PT_LOAD) && ph.Vaddr == payloadVA {
-					notePhdrOff = off
-					break
-				}
-			}
-		}
-	}
+	notePhdrOff = reorderPTLoads32(p.data, ehdr, payloadVA, notePhdrOff)
 
-	// 5. Token 跳板 (ARM32)
+	// 4. Token descriptor table (8 bytes per entry for ARM32)
 	for len(payload)%4 != 0 {
 		payload = append(payload, 0x00)
 	}
 	tokenTableOff := len(payload)
 	tokenTableVA32 := payloadVA + uint32(tokenTableOff)
-
-	// ARM32 token_desc_t: bc_off(u32) + bc_len(u32) = 8 bytes per entry
 	selfVA32 := payloadVA + uint32(tokenTableVAOff)
+
 	for i := range funcs {
 		bcVA := payloadVA + uint32(records[i].payloadOff)
 		bcLen := uint32(records[i].bcLen)
-
 		var desc [8]byte
 		binary.LittleEndian.PutUint32(desc[0:], bcVA-selfVA32)
 		binary.LittleEndian.PutUint32(desc[4:], bcLen)
@@ -439,54 +266,219 @@ func (p *Packer) injectVMPBatch32(funcs []FuncBytecode) error {
 	p.data = p.data[:payloadFileOff]
 	p.data = append(p.data, payload...)
 
-	tblRelOff := tokenTableVA32 - selfVA32
-	binary.LittleEndian.PutUint32(p.data[payloadFileOff+uint32(tokenTableVAOff):], tblRelOff)
-
-	// Patch _link_time_self_va (word right after _token_table_va) with link-time VA
-	// so the stub can compute ASLR slide = runtime_self_va - link_time_self_va
-	binary.LittleEndian.PutUint32(p.data[payloadFileOff+uint32(tokenTableVAOff)+4:], selfVA32)
+	patchTokenHeader32(p.data, payloadFileOff, uint32(tokenTableVAOff), selfVA32, tokenTableVA32)
 
 	fmt.Printf("    [TOKEN] descriptor table VA: 0x%X, entries: %d\n", tokenTableVA32, len(funcs))
-	fmt.Printf("    [TOKEN] _token_table_va patched at blob offset 0x%X → relative offset 0x%X (PIE)\n", tokenTableVAOff, tblRelOff)
+	fmt.Printf("    [TOKEN] _token_table_va patched at blob offset 0x%X → relative offset 0x%X (PIE)\n", tokenTableVAOff, tokenTableVA32-selfVA32)
 	fmt.Printf("    [TOKEN] _link_time_self_va patched → 0x%X\n", selfVA32)
 
 	vmEntryTokenVA := payloadVA + uint32(tokenEntryOff)
 	fmt.Printf("    [TOKEN] vm_entry_token VA: 0x%X\n", vmEntryTokenVA)
 
-	for i, fb := range funcs {
-		funcID := uint32(i)
-		token := (uint32(fb.XorKey) << 24) | (0 << 12) | (funcID & 0xFFF)
+	return writeTrampolines(p.data, funcs, uint64(vmEntryTokenVA), 0, func(_ int, fb FuncBytecode) []byte {
+		token := (uint32(fb.XorKey) << 24) | (0 << 12)
+		if p.thumbFuncs[fb.FI.Addr] {
+			return BuildTokenTrampolineThumb(uint32(fb.FI.Addr), vmEntryTokenVA, token)
+		}
+		return BuildTokenTrampolineARM32(uint32(fb.FI.Addr), vmEntryTokenVA, token)
+	})
+}
 
-		isThumb := p.thumbFuncs[fb.FI.Addr]
-		var trampoline []byte
-		if isThumb {
-			trampoline = BuildTokenTrampolineThumb(uint32(fb.FI.Addr), vmEntryTokenVA, token)
-		} else {
-			trampoline = BuildTokenTrampolineARM32(uint32(fb.FI.Addr), vmEntryTokenVA, token)
-		}
-		if uint64(len(trampoline)) > fb.FI.Size {
-			return fmt.Errorf("token trampoline for %s (%d bytes) exceeds function size (%d bytes)",
-				fb.FI.Name, len(trampoline), fb.FI.Size)
-		}
+// ---- ELF64 helpers ----
 
-		for j := 0; j < len(trampoline); j++ {
-			p.data[fb.FI.Offset+uint64(j)] = trampoline[j]
+func findMaxVA64(data []byte, ehdr elf64Ehdr) uint64 {
+	var maxVA uint64
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
+		ph := readPhdr64(data, phOff)
+		if ph.Type == uint32(elf.PT_LOAD) {
+			end := ph.Vaddr + ph.Memsz
+			if end > maxVA {
+				maxVA = end
+			}
 		}
+	}
+	return maxVA
+}
 
-		garbageLen := int(fb.FI.Size) - len(trampoline)
-		if garbageLen > 0 {
-			garbage := make([]byte, garbageLen)
-			rand.Read(garbage)
-			copy(p.data[fb.FI.Offset+uint64(len(trampoline)):], garbage)
+func findPTNOTE64(data []byte, ehdr elf64Ehdr) (int, error) {
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		phOff := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
+		ph := readPhdr64(data, phOff)
+		if ph.Type == uint32(elf.PT_NOTE) {
+			return i, nil
 		}
+	}
+	return -1, fmt.Errorf("PT_NOTE segment not found")
+}
 
-		mode := "ARM"
-		if isThumb {
-			mode = "Thumb"
+func reorderPTLoads64(data []byte, ehdr elf64Ehdr, payloadVA uint64, notePhdrOff uint64) uint64 {
+	type phdrSlot struct {
+		idx  int
+		phdr elf64Phdr
+	}
+	var loads []phdrSlot
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		off := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
+		ph := readPhdr64(data, off)
+		if ph.Type == uint32(elf.PT_LOAD) {
+			loads = append(loads, phdrSlot{idx: i, phdr: ph})
 		}
-		fmt.Printf("    [TOKEN] %s: func_id=%d, token=0x%08X, trampoline=%d bytes (%s)\n",
-			fb.FI.Name, funcID, token, len(trampoline), mode)
 	}
 
-	return nil
+	needSort := false
+	for k := 1; k < len(loads); k++ {
+		if loads[k].phdr.Vaddr < loads[k-1].phdr.Vaddr {
+			needSort = true
+			break
+		}
+	}
+	if !needSort {
+		return notePhdrOff
+	}
+
+	sort.Slice(loads, func(a, b int) bool {
+		return loads[a].phdr.Vaddr < loads[b].phdr.Vaddr
+	})
+	slotIndices := make([]int, len(loads))
+	for k := range loads {
+		slotIndices[k] = loads[k].idx
+	}
+	sort.Ints(slotIndices)
+	for k, si := range slotIndices {
+		off := ehdr.Phoff + uint64(si)*uint64(ehdr.Phentsize)
+		writePhdr64(data, off, loads[k].phdr)
+	}
+
+	fmt.Printf("    [PHDR] Reordered %d PT_LOAD segments by Vaddr ascending\n", len(loads))
+
+	// Find updated notePhdrOff after reordering
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		off := ehdr.Phoff + uint64(i)*uint64(ehdr.Phentsize)
+		ph := readPhdr64(data, off)
+		if ph.Type == uint32(elf.PT_LOAD) && ph.Vaddr == payloadVA {
+			return off
+		}
+	}
+	return notePhdrOff
+}
+
+func buildRTLrTable(payload *[]byte, funcs []FuncBytecode) int {
+	rtlrOff := len(*payload)
+	*payload = append(*payload, "RTLR"...)
+
+	totalRelocs := 0
+	for _, fb := range funcs {
+		totalRelocs += len(fb.Relocations)
+	}
+	tmp32 := make([]byte, 4)
+	binary.LittleEndian.PutUint32(tmp32, uint32(totalRelocs))
+	*payload = append(*payload, tmp32...)
+
+	if totalRelocs > 0 {
+		fmt.Printf("    [RELOC] Appending %d relocations to RTLR table\n", totalRelocs)
+		tmp64 := make([]byte, 8)
+		for i, fb := range funcs {
+			for _, rel := range fb.Relocations {
+				binary.LittleEndian.PutUint64(tmp64, uint64(i))
+				*payload = append(*payload, tmp64...)
+				binary.LittleEndian.PutUint64(tmp64, uint64(rel.BcOffset))
+				*payload = append(*payload, tmp64...)
+				binary.LittleEndian.PutUint64(tmp64, rel.TargetAddr)
+				*payload = append(*payload, tmp64...)
+			}
+		}
+	}
+	return rtlrOff
+}
+
+func patchTokenHeader64(data []byte, payloadFileOff uint64, tokenTableVAOff uint64, selfVA uint64, tokenTableVA uint64, rtlrOff int) {
+	tblRelOff := tokenTableVA - selfVA
+	binary.LittleEndian.PutUint64(data[payloadFileOff+tokenTableVAOff:], tblRelOff)
+	binary.LittleEndian.PutUint64(data[payloadFileOff+tokenTableVAOff+8:], selfVA)
+	binary.LittleEndian.PutUint64(data[payloadFileOff+tokenTableVAOff+16:], uint64(rtlrOff)-tokenTableVAOff)
+}
+
+// ---- ELF32 helpers ----
+
+func findMaxVA32(data []byte, ehdr elf32Ehdr) uint64 {
+	var maxVA uint32
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		phOff := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
+		ph := readPhdr32(data, phOff)
+		if ph.Type == uint32(elf.PT_LOAD) {
+			end := ph.Vaddr + ph.Memsz
+			if end > maxVA {
+				maxVA = end
+			}
+		}
+	}
+	return uint64(maxVA)
+}
+
+func findPTNOTE32(data []byte, ehdr elf32Ehdr) (int, error) {
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		phOff := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
+		ph := readPhdr32(data, phOff)
+		if ph.Type == uint32(elf.PT_NOTE) {
+			return i, nil
+		}
+	}
+	return -1, fmt.Errorf("PT_NOTE segment not found")
+}
+
+func reorderPTLoads32(data []byte, ehdr elf32Ehdr, payloadVA uint32, notePhdrOff uint32) uint32 {
+	type phdrSlot struct {
+		idx  int
+		phdr elf32Phdr
+	}
+	var loads []phdrSlot
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		off := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
+		ph := readPhdr32(data, off)
+		if ph.Type == uint32(elf.PT_LOAD) {
+			loads = append(loads, phdrSlot{idx: i, phdr: ph})
+		}
+	}
+
+	needSort := false
+	for k := 1; k < len(loads); k++ {
+		if loads[k].phdr.Vaddr < loads[k-1].phdr.Vaddr {
+			needSort = true
+			break
+		}
+	}
+	if !needSort {
+		return notePhdrOff
+	}
+
+	sort.Slice(loads, func(a, b int) bool {
+		return loads[a].phdr.Vaddr < loads[b].phdr.Vaddr
+	})
+	slotIndices := make([]int, len(loads))
+	for k := range loads {
+		slotIndices[k] = loads[k].idx
+	}
+	sort.Ints(slotIndices)
+	for k, si := range slotIndices {
+		off := ehdr.Phoff + uint32(si)*uint32(ehdr.Phentsize)
+		writePhdr32(data, off, loads[k].phdr)
+	}
+
+	fmt.Printf("    [PHDR] Reordered %d PT_LOAD segments by Vaddr ascending\n", len(loads))
+
+	for i := 0; i < int(ehdr.Phnum); i++ {
+		off := ehdr.Phoff + uint32(i)*uint32(ehdr.Phentsize)
+		ph := readPhdr32(data, off)
+		if ph.Type == uint32(elf.PT_LOAD) && ph.Vaddr == payloadVA {
+			return off
+		}
+	}
+	return notePhdrOff
+}
+
+func patchTokenHeader32(data []byte, payloadFileOff uint32, tokenTableVAOff uint32, selfVA32 uint32, tokenTableVA32 uint32) {
+	tblRelOff := tokenTableVA32 - selfVA32
+	binary.LittleEndian.PutUint32(data[payloadFileOff+tokenTableVAOff:], tblRelOff)
+	binary.LittleEndian.PutUint32(data[payloadFileOff+tokenTableVAOff+4:], selfVA32)
 }
