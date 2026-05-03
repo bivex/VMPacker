@@ -157,39 +157,7 @@ vm_entry_token_inner(u64 *args, u32 token) {
 }
 
 /* Naked 汇编入口: 保存调用方寄存器, 调用 C 内部函数 */
-/* 栈帧 304B: FP/LR(16) + X0-X7(64) + callerFP/LR(16) + V0-V7(128) + X19-X28(80) */
-__attribute__((naked, section(".text.entry"), used)) void vm_entry_token(void) {
-  __asm__ volatile(
-      "mov x9, x29\n"               /* 暂存 caller FP */
-      "mov x10, x30\n"              /* 暂存 caller LR */
-      "stp x29, x30, [sp, #-304]!\n" /* 保存 FP/LR + 分配 304B 栈帧 */
-      "mov x29, sp\n"               /* 建立栈帧 */
-      "stp x0, x1, [sp, #16]\n"     /* args[0..1] = X0, X1 */
-      "stp x2, x3, [sp, #32]\n"     /* args[2..3] = X2, X3 */
-      "stp x4, x5, [sp, #48]\n"     /* args[4..5] = X4, X5 */
-      "stp x6, x7, [sp, #64]\n"     /* args[6..7] = X6, X7 */
-      "stp x9, x10, [sp, #80]\n"    /* args[8..9] = callerFP, callerLR */
-      "stp q0, q1, [sp, #96]\n"     /* args[10..13] = V0, V1 (128-bit each) */
-      "stp q2, q3, [sp, #128]\n"    /* args[14..17] = V2, V3 */
-      "stp q4, q5, [sp, #160]\n"    /* args[18..21] = V4, V5 */
-      "stp q6, q7, [sp, #192]\n"    /* args[22..25] = V6, V7 */
-      "stp x19, x20, [sp, #224]\n"  /* args[26..27] = X19, X20 */
-      "stp x21, x22, [sp, #240]\n"  /* args[28..29] = X21, X22 */
-      "stp x23, x24, [sp, #256]\n"  /* args[30..31] = X23, X24 */
-      "stp x25, x26, [sp, #272]\n"  /* args[32..33] = X25, X26 */
-      "stp x27, x28, [sp, #288]\n"  /* args[34..35] = X27, X28 */
-      "add x0, sp, #16\n"           /* X0 = args 指针 */
-      "mov w1, w16\n"               /* X1 = token (从 X16/IP0 传入) */
-      "bl vm_entry_token_inner\n"   /* 调用 C 内部函数, 返回值在 X0 */
-      "ldp x19, x20, [sp, #224]\n"  /* 恢复 callee-saved X19, X20 */
-      "ldp x21, x22, [sp, #240]\n"  /* 恢复 X21, X22 */
-      "ldp x23, x24, [sp, #256]\n"  /* 恢复 X23, X24 */
-      "ldp x25, x26, [sp, #272]\n"  /* 恢复 X25, X26 */
-      "ldp x27, x28, [sp, #288]\n"  /* 恢复 X27, X28 */
-      "ldp x29, x30, [sp], #304\n"  /* 恢复 FP/LR + 释放栈帧 */
-      "ret\n"                       /* 返回 (结果在 X0, 未被覆写) */
-  );
-}
+/* vm_entry_token moved to vm_entry.S to avoid naked attribute issues with GCC */
 
 /* end TOKEN_ONLY */
 
@@ -899,26 +867,6 @@ L_S_TRUNC32:
   NEXT(h_s_trunc32(vm));
 L_S_SEXT32:
   NEXT(h_s_sext32(vm));
-L_S_CMP:
-  NEXT(h_s_cmp(vm));
-
-/* ---- 未知指令 ---- */
-L_UNKNOWN:
-  ret = vm->R[0]; /* fall through to cleanup */
-
-#undef DISPATCH
-#undef NEXT
-#undef NEXT0
-
-#endif /* VM_INDIRECT_DISPATCH */
-
-  /* ---- 统一退出: 释放 mmap 防止泄漏 ---- */
-cleanup:
-  /* sys_munmap(vm, ctx_alloc); */
-  /* sys_munmap(bc_buf, alloc_size); */
-  return ret;
-}
-T(h_s_sext32(vm));
 L_S_CMP:
   NEXT(h_s_cmp(vm));
 

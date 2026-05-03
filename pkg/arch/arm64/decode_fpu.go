@@ -7,6 +7,20 @@ import "github.com/vmpacker/pkg/vm"
 // ============================================================
 
 var fpuPatterns = []InstrPattern{
+	{
+		Name: "SCVTF_GENERIC", Mask: 0x5F3F0C00, Value: 0x1E220000, Op: SCVTF,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd += vm.REG_V_BASE
+		},
+	},
+	{
+		Name: "UCVTF_GENERIC", Mask: 0x5F3F0C00, Value: 0x1E230000, Op: UCVTF,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd += vm.REG_V_BASE
+		},
+	},
 	// ---- FP Data Processing (2-source) ----
 	// Encoding: 0:0:S:11110:type:1:Rm:0010:opcode:Rn:Rd
 	{
@@ -64,7 +78,7 @@ var fpuPatterns = []InstrPattern{
 		Post:   postFP2,
 	},
 	{
-		Name: "FCVT", Mask: 0x5F3F0C00, Value: 0x1E220000, Op: FCVT,
+		Name: "FCVT", Mask: 0x5F3F4C00, Value: 0x1E224000, Op: FCVT,
 		Fields: []FieldDef{{Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
 		Post:   postFP2,
 	},
@@ -152,6 +166,24 @@ var fpuPatterns = []InstrPattern{
 		Post: func(f map[string]int64, inst *vm.Instruction) {
 			inst.Rn += vm.REG_V_BASE
 			inst.SF = true
+		},
+	},
+	{
+		Name: "FCVTZU_SIMD_SCALAR", Mask: 0xFFFFFC00, Value: 0x7EE1B800, Op: FCVTZU,
+		Fields: []FieldDef{fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd += vm.REG_V_BASE
+			inst.Rn += vm.REG_V_BASE
+			inst.SF = true // double
+		},
+	},
+	{
+		Name: "FCVTZS_SIMD_SCALAR", Mask: 0xFFFFFC00, Value: 0x5EE1B800, Op: FCVTZS,
+		Fields: []FieldDef{fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd += vm.REG_V_BASE
+			inst.Rn += vm.REG_V_BASE
+			inst.SF = true // double
 		},
 	},
 	{

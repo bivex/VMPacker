@@ -100,7 +100,7 @@ func (t *Translator) trFCvt(inst vm.Instruction, vmOp byte) error {
 		return err
 	}
 
-	// Combined type byte: bit 2: Unsigned (FCVTZU/UCVTF), bit 1: SF, bit 0: FPType
+	// Combined type byte: bit 3: DestIsV, bit 2: Unsigned (FCVTZU/UCVTF), bit 1: SF, bit 0: FPType
 	// SF: 0=32-bit int, 1=64-bit int
 	// FPType: 0=float, 1=double
 	typeByte := byte(0)
@@ -115,6 +115,11 @@ func (t *Translator) trFCvt(inst vm.Instruction, vmOp byte) error {
 	// Add Unsigned flag check
 	if Op(inst.Op) == FCVTZU || Op(inst.Op) == UCVTF {
 		typeByte |= 0x4
+	}
+
+	// Add DestIsV flag if Rd is a V register
+	if inst.Rd >= vm.REG_V_BASE {
+		typeByte |= 0x8
 	}
 
 	t.emit(vmOp, rd, rn, typeByte)
@@ -140,6 +145,25 @@ func (t *Translator) trFMoveRV(inst vm.Instruction) error {
 	return nil
 }
 
+func (t *Translator) trFMoveVR(inst vm.Instruction) error {
+	rd, err := t.mapReg(inst.Rd)
+	if err != nil {
+		return err
+	}
+	rn, err := t.mapReg(inst.Rn)
+	if err != nil {
+		return err
+	}
+
+	typeByte := byte(0)
+	if inst.SF {
+		typeByte = 1
+	}
+
+	t.emit(vm.OpSFMovVR, rd, rn, typeByte)
+	return nil
+}
+
 // Proxy methods to translator.go dispatch
 func (t *Translator) translateFP(inst vm.Instruction) (int, error) {
 	op := Op(inst.Op)
@@ -160,6 +184,9 @@ func (t *Translator) translateFP(inst vm.Instruction) (int, error) {
 		// Check if it's general-to-SIMD move (like DUP scalar)
 		if inst.Rd >= vm.REG_V_BASE && inst.Rn < vm.REG_V_BASE {
 			return 0, t.trFMoveRV(inst)
+		}
+		if inst.Rd < vm.REG_V_BASE && inst.Rn >= vm.REG_V_BASE {
+			return 0, t.trFMoveVR(inst)
 		}
 		return 0, t.trFMov(inst)
 	case FCMP:

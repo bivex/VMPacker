@@ -196,25 +196,32 @@ static inline u32 h_fcvt_fi(vm_ctx_t *vm) {
   u8 sf = (type >> 1) & 1;
   u8 fp_type = type & 1;
   u8 is_unsigned = (type >> 2) & 1;
+  u8 dest_is_v = (type >> 3) & 1;
 
   if (fp_type == 0) { /* From float */
     float f; __builtin_memcpy(&f, &vm->V[n & 63][0], 4);
+    u64 res;
     if (is_unsigned) {
-      if (sf) vm->R[d & 63] = (u64)f;
-      else vm->R[d & 63] = (u64)(u32)f;
+      if (sf) res = (u64)f;
+      else res = (u64)(u32)f;
     } else {
-      if (sf) vm->R[d & 63] = (u64)(i64)f;
-      else vm->R[d & 63] = (u64)(u32)(i32)f;
+      if (sf) res = (u64)(i64)f;
+      else res = (u64)(u32)(i32)f;
     }
+    if (dest_is_v) __builtin_memcpy(&vm->V[d & 63][0], &res, sf ? 8 : 4);
+    else vm->R[d & 63] = res;
   } else { /* From double */
     double db; __builtin_memcpy(&db, &vm->V[n & 63][0], 8);
+    u64 res;
     if (is_unsigned) {
-      if (sf) vm->R[d & 63] = (u64)db;
-      else vm->R[d & 63] = (u64)(u32)db;
+      if (sf) res = (u64)db;
+      else res = (u64)(u32)db;
     } else {
-      if (sf) vm->R[d & 63] = (u64)(i64)db;
-      else vm->R[d & 63] = (u64)(u32)(i32)db;
+      if (sf) res = (u64)(i64)db;
+      else res = (u64)(u32)(i32)db;
     }
+    if (dest_is_v) __builtin_memcpy(&vm->V[d & 63][0], &res, sf ? 8 : 4);
+    else vm->R[d & 63] = res;
   }
   return 4;
 }

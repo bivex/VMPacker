@@ -374,17 +374,30 @@ var dpRegPatterns = []InstrPattern{
 	},
 
 	// ---- Floating-point <-> Fixed-point/Integer conversion ----
-	// SCVTF (scalar, integer): sf:0:0:11110:type:1:00110:000000:Rn:Rd
-	// bits[20:16]=00110
+	// FP <-> Integer conversion (general register)
 	{
-		Name: "SCVTF_INT", Mask: 0x7F3F0C00, Value: 0x1E260000, Op: SCVTF,
+		Name: "SCVTF_INT", Mask: 0x7F3F0C00, Value: 0x1E220000, Op: SCVTF,
 		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
 		Post: func(f map[string]int64, inst *vm.Instruction) {
 			inst.Rd += vm.REG_V_BASE
 		},
 	},
 	{
-		Name: "UCVTF_INT", Mask: 0x7F3F0C00, Value: 0x1E270000, Op: UCVTF,
+		Name: "UCVTF_INT", Mask: 0x7F3F0C00, Value: 0x1E230000, Op: UCVTF,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rd += vm.REG_V_BASE
+		},
+	},
+	{
+		Name: "FMOV_VR", Mask: 0x7F3F0C00, Value: 0x1E260000, Op: FMOV,
+		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
+		Post: func(f map[string]int64, inst *vm.Instruction) {
+			inst.Rn += vm.REG_V_BASE
+		},
+	},
+	{
+		Name: "FMOV_RV", Mask: 0x7F3F0C00, Value: 0x1E270000, Op: FMOV,
 		Fields: []FieldDef{fSF, {Name: "type", Hi: 23, Lo: 22}, fRn, fRd},
 		Post: func(f map[string]int64, inst *vm.Instruction) {
 			inst.Rd += vm.REG_V_BASE

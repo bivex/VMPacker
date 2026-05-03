@@ -41,8 +41,10 @@ BUILD_DIR  = build
 
 # ------ VM Interpreter blob ------
 STUB_SRC   = $(STUB_DIR)/vm_interp.c
+STUB_ASM   = $(STUB_DIR)/vm_entry.S
 STUB_LDS   = $(STUB_DIR)/vm_interp.lds
 STUB_O     = $(BUILD_DIR)/stub/vm_interp.o
+STUB_O_ASM = $(BUILD_DIR)/stub/vm_entry.o
 STUB_ELF   = $(BUILD_DIR)/stub/vm_interp.elf
 STUB_BIN   = $(CMD_DIR)/vm_interp.bin
 
@@ -80,8 +82,11 @@ endif
 $(STUB_O): $(STUB_SRC) | $(BUILD_DIR)/stub
 	$(CC) $(STUB_CFLAGS) $< -o $@
 
-$(STUB_ELF): $(STUB_O) $(STUB_LDS)
-	$(LD) -T $(STUB_LDS) -o $@ $(STUB_O)
+$(STUB_O_ASM): $(STUB_ASM) | $(BUILD_DIR)/stub
+	$(CC) $(STUB_CFLAGS) $< -o $@
+
+$(STUB_ELF): $(STUB_O) $(STUB_O_ASM) $(STUB_LDS)
+	$(LD) -T $(STUB_LDS) -o $@ $(STUB_O) $(STUB_O_ASM)
 
 $(STUB_BIN): $(STUB_ELF) | $(BUILD_DIR)
 	$(OBJCOPY) -O binary $< $(BUILD_DIR)/vm_interp_raw.bin
