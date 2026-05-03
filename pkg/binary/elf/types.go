@@ -4,14 +4,14 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// AddrSpec 按地址指定函数
+// AddrSpec specifies a function by address
 type AddrSpec struct {
 	Addr uint64
-	End  uint64 // 0 = 自动检测
-	Name string // 可选名称
+	End  uint64 // 0 = auto-detect
+	Name string // optional name
 }
 
-// FuncBytecode 保存单个函数的加密字节码和元信息
+// FuncBytecode stores the encrypted bytecode and meta-information for a single function
 type FuncBytecode struct {
 	FI          *vm.FuncInfo
 	Encrypted   []byte
@@ -19,7 +19,7 @@ type FuncBytecode struct {
 	Relocations []vm.Relocation
 }
 
-// Packer ELF VMP 打包器
+// Packer is an ELF VMP packer
 type Packer struct {
 	inputPath       string
 	outputPath      string
@@ -28,11 +28,11 @@ type Packer struct {
 	verbose         bool
 	stripSymbols    bool
 	debug           bool
-	tokenEntry      bool // Token 化入口模式
+	tokenEntry      bool // Token entry mode
 	data            []byte
 	interpBlob      []byte          // ARM64 blob
 	interpBlobARM32 []byte          // ARM32 blob (optional)
 	isARM32         bool            // detected at Process() time
 	thumbFuncs      map[uint64]bool // Thumb-mode function addresses (bit0 stripped)
-	relocations     []vm.Relocation // 运行时待修复的重定位 (主要是 .so ASLR)
+	relocations     []vm.Relocation // relocations to be fixed at runtime (mainly for .so ASLR)
 }

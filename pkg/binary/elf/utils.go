@@ -10,7 +10,7 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// NewPacker 创建 ELF 打包器
+// NewPacker creates an ELF packer
 func NewPacker(input, output string, funcs []string, addrSpecs []AddrSpec, verbose, strip, debug, tokenEntry bool, interpBlob []byte) *Packer {
 	return &Packer{
 		inputPath:    input,
@@ -30,7 +30,7 @@ func (p *Packer) SetInterpBlobARM32(blob []byte) {
 	p.interpBlobARM32 = blob
 }
 
-// PrintELFInfo 打印 ELF 信息
+// PrintELFInfo prints ELF information
 func PrintELFInfo(path string) error {
 	f, err := elf.Open(path)
 	if err != nil {
@@ -105,10 +105,10 @@ func PrintELFInfo(path string) error {
 	return nil
 }
 
-// branchTargetOffset 返回分支指令中 target32 相对于 pc 的字节偏移
-// 标准分支: [op(1B)][target32(4B)] = 5B → offset=1
+// branchTargetOffset returns the byte offset of target32 relative to pc in a branch instruction.
+// Standard branch: [op(1B)][target32(4B)] = 5B → offset=1
 // TBZ/TBNZ: [op(1B)][reg(1B)][bit(1B)][target32(4B)] = 7B → offset=3
-// 非分支指令返回 0
+// Non-branch instructions return 0.
 func branchTargetOffset(op byte) int {
 	switch op {
 	case vm.OpJmp, vm.OpJe, vm.OpJne, vm.OpJl, vm.OpJge,
@@ -164,10 +164,10 @@ func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int, map
 	return output, offsetMap, byteMap
 }
 
-// remapBranchTargets 重映射反转后字节码中的分支目标
+// remapBranchTargets remaps branch targets in reversed bytecode.
 //
-// 扫描 reversed bytecode，找到所有分支指令，
-// 将其 target32 从旧偏移替换为新偏移 (使用 offsetMap)
+// Scans reversed bytecode to find all branch instructions,
+// replaces target32 from old offset to new offset (using offsetMap).
 func remapBranchTargets(bytecode []byte, codeLen int, offsetMap map[int]int, verbose bool) {
 	pc := 0
 	for pc < codeLen {
@@ -189,33 +189,33 @@ func remapBranchTargets(bytecode []byte, codeLen int, offsetMap map[int]int, ver
 					pc, op, oldTarget)
 			}
 		}
-		// 跳过指令 + size 标记 (反转后每条指令后有 1B size)
+		// Skip instruction + size marker (every instruction has a 1B size marker after reversal)
 		pc += sz + 1
 	}
 }
 
-// encryptOpcodes 逐指令加密 opcode 字节 (OpcodeCryptor)
+// encryptOpcodes encrypts the opcode byte of each instruction (OpcodeCryptor).
 //
-// 遍历 bytecode[0:codeLen]，使用 vm.InstructionSize 确定每条指令的大小，
-// 只加密每条指令的第一个字节 (opcode)，操作数不变。
+// Iterates through bytecode[0:codeLen], uses vm.InstructionSize to determine size of each instruction,
+// encrypts only the first byte (opcode), leaving operands untouched.
 //
-// reversed=true 时，每条指令后有 1B size 标记，步进为 size+1
+// When reversed=true, each instruction has a 1B size marker, step size is size+1.
 //
-// 加密公式: encrypted_opcode[pc] = opcode[pc] ^ (u8)(ocKey ^ (pc * 0x9E3779B9))
+// Encryption formula: encrypted_opcode[pc] = opcode[pc] ^ (u8)(ocKey ^ (pc * 0x9E3779B9))
 func encryptOpcodes(bytecode []byte, codeLen int, ocKey uint32, reversed bool) {
 	pc := 0
 	for pc < codeLen {
 		op := bytecode[pc]
 		size := vm.InstructionSize(op)
 		if size == 0 {
-			// 未知 opcode，跳过 1 字节 (不应发生)
+			// unknown opcode, skip 1 byte (should not happen)
 			pc++
 			continue
 		}
-		// 加密 opcode 字节
+		// Encrypt opcode byte
 		mask := byte(ocKey ^ (uint32(pc) * 0x9E3779B9))
 		bytecode[pc] = op ^ mask
-		// 跳到下一条指令
+		// Go to next instruction
 		if reversed {
 			pc += size + 1 // +1 for size marker byte
 		} else {

@@ -1,27 +1,27 @@
 /*
- * demo_license.c — VMP 端到端测试 demo
+ * demo_license.c — VMP end-to-end test demo
  *
- * 编译:  aarch64-linux-gnu-gcc -O1 -o demo_license demo_license.c
- * 保护:  vmpacker -func check_license -v -o demo_license.vmp demo_license
- * 运行:  ./demo_license.vmp 12345678
- *        ./demo_license.vmp 00000000
+ * Compile: aarch64-linux-gnu-gcc -O1 -o demo_license demo_license.c
+ * Protect: vmpacker -func check_license -v -o demo_license.vmp demo_license
+ * Run:     ./demo_license.vmp 12345678
+ *          ./demo_license.vmp 00000000
  */
 
 #include <stdio.h>
 #include <string.h>
 
 /*
- * check_license — 简单的许可证验证函数
+ * check_license — Simple license verification function
  *
- * 这个函数将被 VMP 保护。它使用了翻译器已支持的指令:
+ * This function will be protected by VMP. It uses instructions already supported by the translator:
  *   - MOV (MOVZ/MOVK)
  *   - ADD/SUB/MUL/XOR/AND/OR/LSL/LSR
  *   - CMP + B.cond
- *   - LDR/STR (字节加载)
- *   - 循环
+ *   - LDR/STR (byte load)
+ *   - Loops
  *   - RET
  *
- * 算法: 对输入 key 的每个字节做 hash，与期望值比较
+ * Algorithm: Hash each byte of the input key and compare with the expected value.
  *   hash = 0
  *   for each byte b in key:
  *       hash = (hash * 31 + b) ^ 0x5A
@@ -34,24 +34,24 @@ int check_license(const char *key) {
   unsigned long hash = 0;
   int len = 0;
 
-  /* 计算长度 (不用 strlen 避免外部调用) */
+  /* Calculate length (avoid strlen to prevent external calls) */
   const char *p = key;
   while (*p != 0) {
     len++;
     p++;
   }
 
-  /* 密钥长度必须为 8 */
+  /* Key length must be 8 */
   if (len != 8)
     return 0;
 
-  /* 计算 hash */
+  /* Calculate hash */
   for (int i = 0; i < 8; i++) {
     unsigned char b = (unsigned char)key[i];
     hash = (hash * 31 + b) ^ 0x5A;
   }
 
-  /* 期望值: check_license("12345678") == 1 */
+  /* Expected value: check_license("12345678") == 1 */
   unsigned long expected = 0;
   const char *valid = "12345678";
   for (int i = 0; i < 8; i++) {

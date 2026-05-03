@@ -1,12 +1,12 @@
 /*
- * vm_types.h — VM 类型定义 + CPU 上下文结构体
+ * vm_types.h — VM type definitions + CPU context struct
  *
- * 所有 VM 状态封装在 vm_ctx_t 中，方便传递和扩展。
+ * All VM states are encapsulated in vm_ctx_t for easy passing and extension.
  */
 #ifndef VM_TYPES_H
 #define VM_TYPES_H
 
-/* ---- 基础类型 ---- */
+/* ---- Basic Types ---- */
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
@@ -15,86 +15,86 @@ typedef int i32;
 typedef long long i64;
 typedef short i16;
 
-/* ---- VM 配置常量 ---- */
+/* ---- VM Configuration Constants ---- */
 #define VM_REG_COUNT 64        /* X0-X30, X31=SP, 32+=XZR/Temp */
-#define VM_STACK_SIZE 64       /* PUSH/POP 操作栈深度 */
-#define VM_EVAL_STACK_SIZE 2048 /* 栈机器操作栈深度 */
-#define VM_MEM_STACK 262144    /* 内存栈 (SP 指向的空间, 256KB) */
-#define VM_BYTECODE_MAX 65536  /* 最大字节码长度 (64KB, 含映射表) */
-#define VM_SIMD_BUF 64         /* SIMD 临时缓冲大小 */
+#define VM_STACK_SIZE 64       /* PUSH/POP operation stack depth */
+#define VM_EVAL_STACK_SIZE 2048 /* Stack machine evaluation stack depth */
+#define VM_MEM_STACK 262144    /* Memory stack (space pointed by SP, 256KB) */
+#define VM_BYTECODE_MAX 65536  /* Max bytecode length (64KB, including mapping table) */
+#define VM_SIMD_BUF 64         /* SIMD temporary buffer size */
 
-/* ---- 标志位 (NZCV 简化) ---- */
-#define FL_ZERO 1  /* Z: 结果为零 */
-#define FL_SIGN 2  /* N: 有符号小于 */
-#define FL_CARRY 4 /* C: 无符号小于 */
+/* ---- Flags (NZCV simplified) ---- */
+#define FL_ZERO 1  /* Z: Result is zero */
+#define FL_SIGN 2  /* N: Signed less than */
+#define FL_CARRY 4 /* C: Unsigned less than */
 
-/* ---- 原生函数指针类型 ---- */
+/* ---- Native Function Pointer Type ---- */
 typedef u64 (*native_fn_t)(u64, u64, u64, u64, u64, u64, u64, u64);
 
-/* ---- BR 间接跳转映射表条目 ---- */
+/* ---- BR Indirect Jump Mapping Table Entry ---- */
 typedef struct {
-  u32 arm64_off; /* ARM64 函数内偏移 */
-  u32 vm_off;    /* 对应的 VM 字节码偏移 */
+  u32 arm64_off; /* Offset within ARM64 function */
+  u32 vm_off;    /* Corresponding VM bytecode offset */
 } addr_map_entry_t;
 
-/* ---- VM CPU 上下文 ---- */
+/* ---- VM CPU Context ---- */
 typedef struct {
-  /* 寄存器文件: R[0]-R[30] = X0-X30, R[31] = SP */
+  /* Register File: R[0]-R[30] = X0-X30, R[31] = SP */
   u64 R[VM_REG_COUNT];
 
-  /* SIMD/FP 寄存器: V[0]-V[31], 每个 128-bit (2 x u64) */
+  /* SIMD/FP Registers: V[0]-V[31], 128-bit each (2 x u64) */
   u64 V[32][2] __attribute__((aligned(16)));
 
-  /* 条件标志 */
+  /* Condition Flags */
   u32 FL;
 
-  /* 虚拟程序计数器 */
+  /* Virtual Program Counter */
   u32 pc;
 
-  /* 字节码 (解密后) */
+  /* Bytecode (decrypted) */
   u8 *bc;
   u32 bc_len;
 
-  /* PUSH/POP 操作栈 (旧 register-based 兼容) */
+  /* PUSH/POP operation stack (old register-based compatible) */
   u64 stk[VM_STACK_SIZE];
   int sp;
 
-  /* 栈机器操作栈 (Stack Machine eval stack) */
+  /* Stack machine evaluation stack (Stack Machine eval stack) */
   u64 eval_stk[VM_EVAL_STACK_SIZE] __attribute__((aligned(16)));
-  int eval_sp; /* 栈顶指针, 0 = 空 */
+  int eval_sp; /* Stack pointer, 0 = empty */
 
-  /* 内存栈 (R[31] 指向这里的末尾) */
+  /* Memory stack (R[31] points to the end of this space) */
   u8 vm_stk[VM_MEM_STACK] __attribute__((aligned(16)));
 
-  /* SIMD 临时缓冲 */
+  /* SIMD temporary buffer */
   u8 vtmp[VM_SIMD_BUF] __attribute__((aligned(16)));
 
 
-  /* BR 间接跳转支持 */
-  u64 func_addr;              /* 被保护函数的原始起始地址 */
-  u32 func_size;              /* 被保护函数的大小 */
-  addr_map_entry_t *addr_map; /* ARM64偏移→VM偏移 映射表 */
-  u32 map_count;              /* 映射表条目数 */
+  /* BR indirect jump support */
+  u64 func_addr;              /* Original starting address of the protected function */
+  u32 func_size;              /* Size of the protected function */
+  addr_map_entry_t *addr_map; /* ARM64 offset → VM offset mapping table */
+  u32 map_count;              /* Mapping table entry count */
 
-  /* OpcodeCryptor: 逐指令 opcode 加密 */
-  u32 oc_key; /* opcode 加密密钥 (4B, 从 trailer 读取) */
+  /* OpcodeCryptor: Instruction-level opcode encryption */
+  u32 oc_key; /* Opcode encryption key (4B, read from trailer) */
 
-  /* PC 反向遍历 */
-  u8 reverse; /* 1=反向执行 (pc 递减), 0=正向 */
+  /* PC reverse traversal */
+  u8 reverse; /* 1=reverse execution (pc decrementing), 0=forward */
 
   /* PIE/ASLR: runtime load base slide for CALL_NAT absolute addresses.
    * slide = runtime_base - link_time_base.  0 for ET_EXEC. */
   u64 slide;
 } vm_ctx_t;
 
-/* ---- SP 栈边界检查 ---- */
-/* 检查地址是否在 vm_stk 范围内 (仅对 SP 相关访问使用) */
+/* ---- SP Stack Boundary Check ---- */
+/* Check if address is within vm_stk range (only for SP-related access) */
 #define VM_STK_LO(vm) ((u64)(vm)->vm_stk)
 #define VM_STK_HI(vm) ((u64)(vm)->vm_stk + VM_MEM_STACK)
 
-/* ---- VM 初始化 ---- */
+/* ---- VM Initialization ---- */
 static inline void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
-  /* 清零所有寄存器 */
+  /* Zero all registers */
   for (int i = 0; i < VM_REG_COUNT; i++)
     vm->R[i] = 0;
 
@@ -103,51 +103,52 @@ static inline void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
     vm->V[i][1] = 0;
   }
 
-  /* 从 args 指针恢复参数寄存器 X0-X7 */
+  /* Restore parameter registers X0-X7 from args pointer */
   for (int i = 0; i < 8; i++)
     vm->R[i] = args[i];
 
   vm->R[29] = args[8]; /* X29 = caller FP */
   vm->R[30] = args[9]; /* X30 = caller LR */
 
-  /* 从 args[10..25] 恢复 V0-V7 (每个 128-bit = 2x u64) */
+  /* Restore V0-V7 from args[10..25] (128-bit each = 2x u64) */
   for (int i = 0; i < 8; i++) {
     vm->V[i][0] = args[10 + i * 2];
     vm->V[i][1] = args[10 + i * 2 + 1];
   }
 
-  /* 从 args[26..35] 恢复 callee-saved X19-X28 */
+  /* Restore callee-saved X19-X28 from args[26..35] */
   for (int i = 0; i < 10; i++)
     vm->R[19 + i] = args[26 + i];
 
-  /* 设置初始 SP */
+  /* Set initial SP */
 
   vm->R[31] = (u64)&vm->vm_stk[VM_MEM_STACK];
 
-  /* 字节码 */
+  /* Bytecode */
   vm->bc = bytecode;
   vm->bc_len = len;
 
-  /* 状态初始化 */
+  /* State initialization */
   vm->FL = 0;
   vm->pc = 0;
   vm->sp = 0;
-  vm->eval_sp = 0; /* 栈机器操作栈初始为空 */
+  vm->eval_sp = 0; /* Stack machine evaluation stack initially empty */
 
-  /* BR 间接跳转映射表：默认无 */
+  /* BR indirect jump mapping table: default none */
   vm->func_addr = 0;
   vm->func_size = 0;
   vm->addr_map = 0;
   vm->map_count = 0;
 
-  /* OpcodeCryptor: 默认无加密 (key=0 时解密为恒等) */
+  /* OpcodeCryptor: no encryption by default (key=0 means identity decryption) */
   vm->oc_key = 0;
 
-  /* PC 反向遍历: 默认正向 */
+  /* PC reverse traversal: default forward */
   vm->reverse = 0;
 
-  /* PIE/ASLR slide: 默认 0 (ET_EXEC) */
+  /* PIE/ASLR slide: default 0 (ET_EXEC) */
   vm->slide = 0;
 }
 
 #endif /* VM_TYPES_H */
+

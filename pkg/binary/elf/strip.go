@@ -33,7 +33,7 @@ var stripNames = map[string]bool{
 	".note.GNU-stack": true, ".note.gnu.build-id": true,
 }
 
-// stripSections 就地清除符号/调试 section
+// stripSections clears symbol/debug sections in-place
 func (p *Packer) stripSections() {
 	if p.isARM32 {
 		p.stripSectionsImpl(shLayout32)
