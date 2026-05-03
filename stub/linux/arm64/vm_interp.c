@@ -241,6 +241,8 @@ if (bc_off <= (u64)bc_len - 8) {
   /* Anti-Debug: Basic Timing Check (measure start time) */
   unsigned long long start_time = sec_get_timer();
 
+  u8 *op_map = 0;
+
   /* ---- 2c. Parse bytecode trailer ---- */
   /* Trailer format (stripped backwards from the end):
    *   [...bytecode...][BR map entries][reverse(1B)][oc_key(4B)]
@@ -263,6 +265,8 @@ if (bc_off <= (u64)bc_len - 8) {
     /* Set OpcodeCryptor key + reverse flag */
     vm->oc_key = trail_oc_key;
     vm->reverse = trail_reverse;
+
+    op_map = &bc_buf[bc_len - map_data_size];
 
     if (trail_func_addr != 0 && trail_map_count > 0 &&
         map_data_size <= bc_len) {
@@ -340,7 +344,18 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
 
   /* ---- Runtime initialization of jump table (stack allocation, RX blob non-writable BSS) ---- */
   vm_handler_fn vm_jump_table[256];
-  vm_init_jump_table(vm_jump_table);
+  
+  if (op_map) {
+    vm_handler_fn handlers[OP_ID_COUNT];
+    vm_init_jump_table(handlers);
+    for (int i = 0; i < 256; i++)
+      vm_jump_table[i] = hw_unknown;
+    for (int i = 0; i < OP_ID_COUNT; i++) {
+      vm_jump_table[op_map[i]] = handlers[i];
+    }
+  } else {
+    vm_init_jump_table(vm_jump_table);
+  }
 
   /* ---- PC initialization: reverse mode starts from bc_len ---- */
   if (vm->reverse) {
@@ -446,133 +461,320 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   const void *dtab[256];
   for (int _i = 0; _i < 256; _i++)
     dtab[_i] = &&L_UNKNOWN;
-  /* System */
-  dtab[OP_NOP] = &&L_NOP;
-  dtab[OP_HALT] = &&L_HALT;
-  dtab[OP_RET] = &&L_RET;
-  /* Data Movement */
-  dtab[OP_MOV_IMM] = &&L_MOV_IMM;
-  dtab[OP_MOV_IMM32] = &&L_MOV_IMM32;
-  dtab[OP_MOV_REG] = &&L_MOV_REG;
-  /* Memory */
-  dtab[OP_LOAD8] = &&L_LOAD8;
-  dtab[OP_LOAD32] = &&L_LOAD32;
-  dtab[OP_LOAD64] = &&L_LOAD64;
-  dtab[OP_STORE8] = &&L_STORE8;
-  dtab[OP_STORE32] = &&L_STORE32;
-  dtab[OP_STORE64] = &&L_STORE64;
-  dtab[OP_LOAD16] = &&L_LOAD16;
-  dtab[OP_STORE16] = &&L_STORE16;
-  /* ALU Three-Register */
-  dtab[OP_ADD] = &&L_ADD;
-  dtab[OP_SUB] = &&L_SUB;
-  dtab[OP_MUL] = &&L_MUL;
-  dtab[OP_XOR] = &&L_XOR;
-  dtab[OP_AND] = &&L_AND;
-  dtab[OP_OR] = &&L_OR;
-  dtab[OP_SHL] = &&L_SHL;
-  dtab[OP_SHR] = &&L_SHR;
-  dtab[OP_ASR] = &&L_ASR;
-  dtab[OP_NOT] = &&L_NOT;
-  dtab[OP_ROR] = &&L_ROR;
-  dtab[OP_UMULH] = &&L_UMULH;
-  /* ALU Immediate */
-  dtab[OP_ADD_IMM] = &&L_ADD_IMM;
-  dtab[OP_SUB_IMM] = &&L_SUB_IMM;
-  dtab[OP_XOR_IMM] = &&L_XOR_IMM;
-  dtab[OP_AND_IMM] = &&L_AND_IMM;
-  dtab[OP_OR_IMM] = &&L_OR_IMM;
-  dtab[OP_MUL_IMM] = &&L_MUL_IMM;
-  dtab[OP_SHL_IMM] = &&L_SHL_IMM;
-  dtab[OP_SHR_IMM] = &&L_SHR_IMM;
-  dtab[OP_ASR_IMM] = &&L_ASR_IMM;
-  /* Comparison */
-  dtab[OP_CMP] = &&L_CMP;
-  dtab[OP_CMP_IMM] = &&L_CMP_IMM;
-  /* Branch */
-  dtab[OP_JMP] = &&L_JMP;
-  dtab[OP_JE] = &&L_JE;
-  dtab[OP_JNE] = &&L_JNE;
-  dtab[OP_JL] = &&L_JL;
-  dtab[OP_JGE] = &&L_JGE;
-  dtab[OP_JGT] = &&L_JGT;
-  dtab[OP_JLE] = &&L_JLE;
-  dtab[OP_JB] = &&L_JB;
-  dtab[OP_JAE] = &&L_JAE;
-  dtab[OP_JBE] = &&L_JBE;
-  dtab[OP_JA] = &&L_JA;
-  /* Stack Operations */
-  dtab[OP_PUSH] = &&L_PUSH;
-  dtab[OP_POP] = &&L_POP;
-  /* Native Call */
-  dtab[OP_CALL_NAT] = &&L_CALL_NAT;
-  dtab[OP_CALL_REG] = &&L_CALL_REG;
-  dtab[OP_BR_REG] = &&L_BR_REG;
-  /* SIMD */
-  dtab[OP_VLD16] = &&L_VLD16;
-  dtab[OP_VST16] = &&L_VST16;
-  /* TBZ/TBNZ */
-  dtab[OP_TBZ] = &&L_TBZ;
-  dtab[OP_TBNZ] = &&L_TBNZ;
-  /* CCMP/CCMN */
-  dtab[OP_CCMP_REG] = &&L_CCMP_REG;
-  dtab[OP_CCMP_IMM] = &&L_CCMP_IMM;
-  dtab[OP_CCMN_REG] = &&L_CCMN_REG;
-  dtab[OP_CCMN_IMM] = &&L_CCMN_IMM;
-  /* SVC */
-  dtab[OP_SVC] = &&L_SVC;
-  /* UDIV/SDIV */
-  dtab[OP_UDIV] = &&L_UDIV;
-  dtab[OP_SDIV] = &&L_SDIV;
-  /* MRS */
-  dtab[OP_MRS] = &&L_MRS;
 
-  /* ---- Stack Machine Opcodes ---- */
-  dtab[OP_S_VLOAD] = &&L_S_VLOAD;
-  dtab[OP_S_VSTORE] = &&L_S_VSTORE;
-  dtab[OP_S_PUSH_IMM32] = &&L_S_PUSH32;
-  dtab[OP_S_PUSH_IMM64] = &&L_S_PUSH64;
-  dtab[OP_S_DUP] = &&L_S_DUP;
-  dtab[OP_S_SWAP] = &&L_S_SWAP;
-  dtab[OP_S_DROP] = &&L_S_DROP;
-  dtab[OP_S_ADD] = &&L_S_ADD;
-  dtab[OP_S_SUB] = &&L_S_SUB;
-  dtab[OP_S_MUL] = &&L_S_MUL;
-  dtab[OP_S_XOR] = &&L_S_XOR;
-  dtab[OP_S_AND] = &&L_S_AND;
-  dtab[OP_S_OR] = &&L_S_OR;
-  dtab[OP_S_SHL] = &&L_S_SHL;
-  dtab[OP_S_SHR] = &&L_S_SHR;
-  dtab[OP_S_ASR] = &&L_S_ASR;
-  dtab[OP_S_NOT] = &&L_S_NOT;
-  dtab[OP_S_NEG] = &&L_S_NEG;
-  dtab[OP_S_ROR] = &&L_S_ROR;
-  dtab[OP_S_UMULH] = &&L_S_UMULH;
-  dtab[OP_S_SMULH] = &&L_S_SMULH;
-  dtab[OP_S_UDIV] = &&L_S_UDIV;
-  dtab[OP_S_SDIV] = &&L_S_SDIV;
-  dtab[OP_S_ADC] = &&L_S_ADC;
-  dtab[OP_S_SBC] = &&L_S_SBC;
-  dtab[OP_S_CLZ] = &&L_S_CLZ;
-  dtab[OP_S_CLS] = &&L_S_CLS;
-  dtab[OP_S_RBIT] = &&L_S_RBIT;
-  dtab[OP_S_REV] = &&L_S_REV;
-  dtab[OP_S_REV16] = &&L_S_REV16;
-  dtab[OP_S_REV32] = &&L_S_REV32;
-  dtab[OP_S_TRUNC32] = &&L_S_TRUNC32;
-  dtab[OP_S_SEXT32] = &&L_S_SEXT32;
-  dtab[OP_S_CMP] = &&L_S_CMP;
-  dtab[OP_S_LD8] = &&L_S_LD8;
-  dtab[OP_S_LD16] = &&L_S_LD16;
-  dtab[OP_S_LD32] = &&L_S_LD32;
-  dtab[OP_S_LD64] = &&L_S_LD64;
-  dtab[OP_S_ST8] = &&L_S_ST8;
-  dtab[OP_S_ST16] = &&L_S_ST16;
-  dtab[OP_S_ST32] = &&L_S_ST32;
-  dtab[OP_S_ST64] = &&L_S_ST64;
-  dtab[OP_S_LOAD_SLIDE] = &&L_S_LDSIDE;
-  dtab[OP_SVLD] = &&L_SVLD;
-  dtab[OP_SVST] = &&L_SVST;
+  if (op_map) {
+    const void *labels[OP_ID_COUNT];
+    for (int _i = 0; _i < OP_ID_COUNT; _i++)
+      labels[_i] = &&L_UNKNOWN;
+
+    /* System */
+    labels[OP_ID_NOP] = &&L_NOP;
+    labels[OP_ID_HALT] = &&L_HALT;
+    labels[OP_ID_RET] = &&L_RET;
+    /* Data Movement */
+    labels[OP_ID_MOVIMM] = &&L_MOV_IMM;
+    labels[OP_ID_MOVIMM32] = &&L_MOV_IMM32;
+    labels[OP_ID_MOVREG] = &&L_MOV_REG;
+    /* Memory */
+    labels[OP_ID_LOAD8] = &&L_LOAD8;
+    labels[OP_ID_LOAD32] = &&L_LOAD32;
+    labels[OP_ID_LOAD64] = &&L_LOAD64;
+    labels[OP_ID_STORE8] = &&L_STORE8;
+    labels[OP_ID_STORE32] = &&L_STORE32;
+    labels[OP_ID_STORE64] = &&L_STORE64;
+    labels[OP_ID_LOAD16] = &&L_LOAD16;
+    labels[OP_ID_STORE16] = &&L_STORE16;
+    /* ALU Three-Register */
+    labels[OP_ID_ADD] = &&L_ADD;
+    labels[OP_ID_SUB] = &&L_SUB;
+    labels[OP_ID_MUL] = &&L_MUL;
+    labels[OP_ID_XOR] = &&L_XOR;
+    labels[OP_ID_AND] = &&L_AND;
+    labels[OP_ID_OR] = &&L_OR;
+    labels[OP_ID_SHL] = &&L_SHL;
+    labels[OP_ID_SHR] = &&L_SHR;
+    labels[OP_ID_ASR] = &&L_ASR;
+    labels[OP_ID_NOT] = &&L_NOT;
+    labels[OP_ID_ROR] = &&L_ROR;
+    labels[OP_ID_UMULH] = &&L_UMULH;
+    /* ALU Immediate */
+    labels[OP_ID_ADDIMM] = &&L_ADD_IMM;
+    labels[OP_ID_SUBIMM] = &&L_SUB_IMM;
+    labels[OP_ID_XORIMM] = &&L_XOR_IMM;
+    labels[OP_ID_ANDIMM] = &&L_AND_IMM;
+    labels[OP_ID_ORIMM] = &&L_OR_IMM;
+    labels[OP_ID_MULIMM] = &&L_MUL_IMM;
+    labels[OP_ID_SHLIMM] = &&L_SHL_IMM;
+    labels[OP_ID_SHRIMM] = &&L_SHR_IMM;
+    labels[OP_ID_ASRIMM] = &&L_ASR_IMM;
+    /* Comparison */
+    labels[OP_ID_CMP] = &&L_CMP;
+    labels[OP_ID_CMPIMM] = &&L_CMP_IMM;
+    /* Branch */
+    labels[OP_ID_JMP] = &&L_JMP;
+    labels[OP_ID_JE] = &&L_JE;
+    labels[OP_ID_JNE] = &&L_JNE;
+    labels[OP_ID_JL] = &&L_JL;
+    labels[OP_ID_JGE] = &&L_JGE;
+    labels[OP_ID_JGT] = &&L_JGT;
+    labels[OP_ID_JLE] = &&L_JLE;
+    labels[OP_ID_JB] = &&L_JB;
+    labels[OP_ID_JAE] = &&L_JAE;
+    labels[OP_ID_JBE] = &&L_JBE;
+    labels[OP_ID_JA] = &&L_JA;
+    /* Stack Operations */
+    labels[OP_ID_PUSH] = &&L_PUSH;
+    labels[OP_ID_POP] = &&L_POP;
+    /* Native Call */
+    labels[OP_ID_CALLNATIVE] = &&L_CALL_NAT;
+    labels[OP_ID_CALLREG] = &&L_CALL_REG;
+    labels[OP_ID_BRREG] = &&L_BR_REG;
+    /* SIMD */
+    labels[OP_ID_VLD16] = &&L_VLD16;
+    labels[OP_ID_VST16] = &&L_VST16;
+    /* TBZ/TBNZ */
+    labels[OP_ID_TBZ] = &&L_TBZ;
+    labels[OP_ID_TBNZ] = &&L_TBNZ;
+    /* CCMP/CCMN */
+    labels[OP_ID_CCMPREG] = &&L_CCMP_REG;
+    labels[OP_ID_CCMPIMM] = &&L_CCMP_IMM;
+    labels[OP_ID_CCMNREG] = &&L_CCMN_REG;
+    labels[OP_ID_CCMNIMM] = &&L_CCMN_IMM;
+    /* SVC */
+    labels[OP_ID_SVC] = &&L_SVC;
+    /* UDIV/SDIV */
+    labels[OP_ID_UDIV] = &&L_UDIV;
+    labels[OP_ID_SDIV] = &&L_SDIV;
+    /* MRS */
+    labels[OP_ID_MRS] = &&L_MRS;
+    /* SMULH/CLZ/CLS/RBIT/REV */
+    labels[OP_ID_SMULH] = &&L_SMULH;
+    labels[OP_ID_CLZ] = &&L_CLZ;
+    labels[OP_ID_CLS] = &&L_CLS;
+    labels[OP_ID_RBIT] = &&L_RBIT;
+    labels[OP_ID_REV] = &&L_REV;
+    labels[OP_ID_REV16] = &&L_REV16;
+    labels[OP_ID_REV32] = &&L_REV32;
+    /* ADC/SBC */
+    labels[OP_ID_ADC] = &&L_ADC;
+    labels[OP_ID_SBC] = &&L_SBC;
+
+    /* ---- FP ALU ---- */
+    labels[OP_ID_SFADD] = &&L_SFADD;
+    labels[OP_ID_SFSUB] = &&L_SFSUB;
+    labels[OP_ID_SFMUL] = &&L_SFMUL;
+    labels[OP_ID_SFDIV] = &&L_SFDIV;
+    labels[OP_ID_SFMOV] = &&L_SFMOV;
+    labels[OP_ID_SFCMP] = &&L_SFCMP;
+    labels[OP_ID_SFNEG] = &&L_SFNEG;
+    labels[OP_ID_SFABS] = &&L_SFABS;
+    labels[OP_ID_SFSQRT] = &&L_SFSQRT;
+    labels[OP_ID_SFMAX] = &&L_SFMAX;
+    labels[OP_ID_SFMIN] = &&L_SFMIN;
+    labels[OP_ID_SFCVTIF] = &&L_SFCVTIF;
+    labels[OP_ID_SFCVTFI] = &&L_SFCVTFI;
+    labels[OP_ID_SFMOVRV] = &&L_SFMOVRV;
+    labels[OP_ID_SFMOVVR] = &&L_SFMOVVR;
+    labels[OP_ID_SFCVT] = &&L_SFCVT;
+
+    /* ---- Stack Machine Opcodes ---- */
+    labels[OP_ID_SVLOAD] = &&L_S_VLOAD;
+    labels[OP_ID_SVSTORE] = &&L_S_VSTORE;
+    labels[OP_ID_SPUSHIMM32] = &&L_S_PUSH32;
+    labels[OP_ID_SPUSHIMM64] = &&L_S_PUSH64;
+    labels[OP_ID_SDUP] = &&L_S_DUP;
+    labels[OP_ID_SSWAP] = &&L_S_SWAP;
+    labels[OP_ID_SDROP] = &&L_S_DROP;
+    labels[OP_ID_SADD] = &&L_S_ADD;
+    labels[OP_ID_SSUB] = &&L_S_SUB;
+    labels[OP_ID_SMUL] = &&L_S_MUL;
+    labels[OP_ID_SXOR] = &&L_S_XOR;
+    labels[OP_ID_SAND] = &&L_S_AND;
+    labels[OP_ID_SOR] = &&L_S_OR;
+    labels[OP_ID_SSHL] = &&L_S_SHL;
+    labels[OP_ID_SSHR] = &&L_S_SHR;
+    labels[OP_ID_SASR] = &&L_S_ASR;
+    labels[OP_ID_SNOT] = &&L_S_NOT;
+    labels[OP_ID_SNEG] = &&L_S_NEG;
+    labels[OP_ID_SROR] = &&L_S_ROR;
+    labels[OP_ID_SUMULH] = &&L_S_UMULH;
+    labels[OP_ID_SSMULH] = &&L_S_SMULH;
+    labels[OP_ID_SUDIV] = &&L_S_UDIV;
+    labels[OP_ID_SSDIV] = &&L_S_SDIV;
+    labels[OP_ID_SADC] = &&L_S_ADC;
+    labels[OP_ID_SSBC] = &&L_S_SBC;
+    labels[OP_ID_SCLZ] = &&L_S_CLZ;
+    labels[OP_ID_SCLS] = &&L_S_CLS;
+    labels[OP_ID_SRBIT] = &&L_S_RBIT;
+    labels[OP_ID_SREV] = &&L_S_REV;
+    labels[OP_ID_SREV16] = &&L_S_REV16;
+    labels[OP_ID_SREV32] = &&L_S_REV32;
+    labels[OP_ID_STRUNC32] = &&L_S_TRUNC32;
+    labels[OP_ID_SSEXT32] = &&L_S_SEXT32;
+    labels[OP_ID_SCMP] = &&L_S_CMP;
+    labels[OP_ID_SLD8] = &&L_S_LD8;
+    labels[OP_ID_SLD16] = &&L_S_LD16;
+    labels[OP_ID_SLD32] = &&L_S_LD32;
+    labels[OP_ID_SLD64] = &&L_S_LD64;
+    labels[OP_ID_SST8] = &&L_S_ST8;
+    labels[OP_ID_SST16] = &&L_S_ST16;
+    labels[OP_ID_SST32] = &&L_S_ST32;
+    labels[OP_ID_SST64] = &&L_S_ST64;
+    labels[OP_ID_SLOADSLIDE] = &&L_S_LDSIDE;
+    labels[OP_ID_SVLD] = &&L_SVLD;
+    labels[OP_ID_SVST] = &&L_SVST;
+
+    for (int i = 0; i < OP_ID_COUNT; i++) {
+      dtab[op_map[i]] = labels[i];
+    }
+  } else {
+    /* Fallback (no op_map): use hardcoded OP_xxx values as indices */
+    /* System */
+    dtab[OP_NOP] = &&L_NOP;
+    dtab[OP_HALT] = &&L_HALT;
+    dtab[OP_RET] = &&L_RET;
+    /* Data Movement */
+    dtab[OP_MOV_IMM] = &&L_MOV_IMM;
+    dtab[OP_MOV_IMM32] = &&L_MOV_IMM32;
+    dtab[OP_MOV_REG] = &&L_MOV_REG;
+    /* Memory */
+    dtab[OP_LOAD8] = &&L_LOAD8;
+    dtab[OP_LOAD32] = &&L_LOAD32;
+    dtab[OP_LOAD64] = &&L_LOAD64;
+    dtab[OP_STORE8] = &&L_STORE8;
+    dtab[OP_STORE32] = &&L_STORE32;
+    dtab[OP_STORE64] = &&L_STORE64;
+    dtab[OP_LOAD16] = &&L_LOAD16;
+    dtab[OP_STORE16] = &&L_STORE16;
+    /* ALU Three-Register */
+    dtab[OP_ADD] = &&L_ADD;
+    dtab[OP_SUB] = &&L_SUB;
+    dtab[OP_MUL] = &&L_MUL;
+    dtab[OP_XOR] = &&L_XOR;
+    dtab[OP_AND] = &&L_AND;
+    dtab[OP_OR] = &&L_OR;
+    dtab[OP_SHL] = &&L_SHL;
+    dtab[OP_SHR] = &&L_SHR;
+    dtab[OP_ASR] = &&L_ASR;
+    dtab[OP_NOT] = &&L_NOT;
+    dtab[OP_ROR] = &&L_ROR;
+    dtab[OP_UMULH] = &&L_UMULH;
+    /* ALU Immediate */
+    dtab[OP_ADD_IMM] = &&L_ADD_IMM;
+    dtab[OP_SUB_IMM] = &&L_SUB_IMM;
+    dtab[OP_XOR_IMM] = &&L_XOR_IMM;
+    dtab[OP_AND_IMM] = &&L_AND_IMM;
+    dtab[OP_OR_IMM] = &&L_OR_IMM;
+    dtab[OP_MUL_IMM] = &&L_MUL_IMM;
+    dtab[OP_SHL_IMM] = &&L_SHL_IMM;
+    dtab[OP_SHR_IMM] = &&L_SHR_IMM;
+    dtab[OP_ASR_IMM] = &&L_ASR_IMM;
+    /* Comparison */
+    dtab[OP_CMP] = &&L_CMP;
+    dtab[OP_CMP_IMM] = &&L_CMP_IMM;
+    /* Branch */
+    dtab[OP_JMP] = &&L_JMP;
+    dtab[OP_JE] = &&L_JE;
+    dtab[OP_JNE] = &&L_JNE;
+    dtab[OP_JL] = &&L_JL;
+    dtab[OP_JGE] = &&L_JGE;
+    dtab[OP_JGT] = &&L_JGT;
+    dtab[OP_JLE] = &&L_JLE;
+    dtab[OP_JB] = &&L_JB;
+    dtab[OP_JAE] = &&L_JAE;
+    dtab[OP_JBE] = &&L_JBE;
+    dtab[OP_JA] = &&L_JA;
+    /* Stack Operations */
+    dtab[OP_PUSH] = &&L_PUSH;
+    dtab[OP_POP] = &&L_POP;
+    /* Native Call */
+    dtab[OP_CALL_NAT] = &&L_CALL_NAT;
+    dtab[OP_CALL_REG] = &&L_CALL_REG;
+    dtab[OP_BR_REG] = &&L_BR_REG;
+    /* SIMD */
+    dtab[OP_VLD16] = &&L_VLD16;
+    dtab[OP_VST16] = &&L_VST16;
+    /* TBZ/TBNZ */
+    dtab[OP_TBZ] = &&L_TBZ;
+    dtab[OP_TBNZ] = &&L_TBNZ;
+    /* CCMP/CCMN */
+    dtab[OP_CCMP_REG] = &&L_CCMP_REG;
+    dtab[OP_CCMP_IMM] = &&L_CCMP_IMM;
+    dtab[OP_CCMN_REG] = &&L_CCMN_REG;
+    dtab[OP_CCMN_IMM] = &&L_CCMN_IMM;
+    /* SVC */
+    dtab[OP_SVC] = &&L_SVC;
+    /* UDIV/SDIV */
+    dtab[OP_UDIV] = &&L_UDIV;
+    dtab[OP_SDIV] = &&L_SDIV;
+    /* MRS */
+    dtab[OP_MRS] = &&L_MRS;
+
+    /* ---- FP ALU ---- */
+    dtab[OP_SFADD] = &&L_SFADD;
+    dtab[OP_SFSUB] = &&L_SFSUB;
+    dtab[OP_SFMUL] = &&L_SFMUL;
+    dtab[OP_SFDIV] = &&L_SFDIV;
+    dtab[OP_SFMOV] = &&L_SFMOV;
+    dtab[OP_SFCMP] = &&L_SFCMP;
+    dtab[OP_SFNEG] = &&L_SFNEG;
+    dtab[OP_SFABS] = &&L_SFABS;
+    dtab[OP_SFSQRT] = &&L_SFSQRT;
+    dtab[OP_SFMAX] = &&L_SFMAX;
+    dtab[OP_SFMIN] = &&L_SFMIN;
+    dtab[OP_SFCVTIF] = &&L_SFCVTIF;
+    dtab[OP_SFCVTFI] = &&L_SFCVTFI;
+    dtab[OP_SFMOVRV] = &&L_SFMOVRV;
+    dtab[OP_SFMOVVR] = &&L_SFMOVVR;
+    dtab[OP_SFCVT] = &&L_SFCVT;
+
+    /* ---- Stack Machine Opcodes ---- */
+    dtab[OP_S_VLOAD] = &&L_S_VLOAD;
+    dtab[OP_S_VSTORE] = &&L_S_VSTORE;
+    dtab[OP_S_PUSH_IMM32] = &&L_S_PUSH32;
+    dtab[OP_S_PUSH_IMM64] = &&L_S_PUSH64;
+    dtab[OP_S_DUP] = &&L_S_DUP;
+    dtab[OP_S_SWAP] = &&L_S_SWAP;
+    dtab[OP_S_DROP] = &&L_S_DROP;
+    dtab[OP_S_ADD] = &&L_S_ADD;
+    dtab[OP_S_SUB] = &&L_S_SUB;
+    dtab[OP_S_MUL] = &&L_S_MUL;
+    dtab[OP_S_XOR] = &&L_S_XOR;
+    dtab[OP_S_AND] = &&L_S_AND;
+    dtab[OP_S_OR] = &&L_S_OR;
+    dtab[OP_S_SHL] = &&L_S_SHL;
+    dtab[OP_S_SHR] = &&L_S_SHR;
+    dtab[OP_S_ASR] = &&L_S_ASR;
+    dtab[OP_S_NOT] = &&L_S_NOT;
+    dtab[OP_S_NEG] = &&L_S_NEG;
+    dtab[OP_S_ROR] = &&L_S_ROR;
+    dtab[OP_S_UMULH] = &&L_S_UMULH;
+    dtab[OP_S_SMULH] = &&L_S_SMULH;
+    dtab[OP_S_UDIV] = &&L_S_UDIV;
+    dtab[OP_S_SDIV] = &&L_S_SDIV;
+    dtab[OP_S_ADC] = &&L_S_ADC;
+    dtab[OP_S_SBC] = &&L_S_SBC;
+    dtab[OP_S_CLZ] = &&L_S_CLZ;
+    dtab[OP_S_CLS] = &&L_S_CLS;
+    dtab[OP_S_RBIT] = &&L_S_RBIT;
+    dtab[OP_S_REV] = &&L_S_REV;
+    dtab[OP_S_REV16] = &&L_S_REV16;
+    dtab[OP_S_REV32] = &&L_S_REV32;
+    dtab[OP_S_TRUNC32] = &&L_S_TRUNC32;
+    dtab[OP_S_SEXT32] = &&L_S_SEXT32;
+    dtab[OP_S_CMP] = &&L_S_CMP;
+    dtab[OP_S_LD8] = &&L_S_LD8;
+    dtab[OP_S_LD16] = &&L_S_LD16;
+    dtab[OP_S_LD32] = &&L_S_LD32;
+    dtab[OP_S_LD64] = &&L_S_LD64;
+    dtab[OP_S_ST8] = &&L_S_ST8;
+    dtab[OP_S_ST16] = &&L_S_ST16;
+    dtab[OP_S_ST32] = &&L_S_ST32;
+    dtab[OP_S_ST64] = &&L_S_ST64;
+    dtab[OP_S_LOAD_SLIDE] = &&L_S_LDSIDE;
+    dtab[OP_SVLD] = &&L_SVLD;
+    dtab[OP_SVST] = &&L_SVST;
+  }
 
 /* Reverse mode: pc points after the size marker at the end of instruction
  * Steps: pc--; size = bc[pc]; pc -= size; now pc points to instruction start */
