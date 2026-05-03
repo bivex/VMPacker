@@ -5,221 +5,174 @@ import (
 	"fmt"
 )
 
+// shLayout describes the section header field layout for ELF32 or ELF64
+type shLayout struct {
+	entrySize   int  // section header entry size (40 or 64)
+	offsetOff   int  // sh_offset field offset within entry
+	sizeOff     int  // sh_size field offset within entry
+	linkOff     int  // sh_link field offset within entry
+	clearFields []int // field offsets to zero when stripping
+}
+
+var (
+	shLayout64 = shLayout{
+		entrySize:   64,
+		offsetOff: 24, sizeOff: 32, linkOff: 40,
+		clearFields: []int{4, 8, 16, 24, 32, 40, 44, 48, 56},
+	}
+	shLayout32 = shLayout{
+		entrySize:   40,
+		offsetOff: 16, sizeOff: 20, linkOff: 24,
+		clearFields: []int{4, 8, 12, 16, 20, 24, 28, 32, 36},
+	}
+)
+
+// stripNames lists sections to remove (equivalent to strip -s)
+var stripNames = map[string]bool{
+	".symtab": true, ".strtab": true, ".comment": true,
+	".note.GNU-stack": true, ".note.gnu.build-id": true,
+}
+
 // stripSections 就地清除符号/调试 section
-// 不改变文件布局和 section header 数量，只将目标 section 置空
-// 同时修复其他 section 对被删除 section 的 sh_link 引用
 func (p *Packer) stripSections() {
 	if p.isARM32 {
-		p.stripSections32()
-		return
+		p.stripSectionsImpl(shLayout32)
+	} else {
+		p.stripSectionsImpl(shLayout64)
 	}
-	p.stripSections64()
 }
 
-func (p *Packer) stripSections64() {
-	if len(p.data) < 64 {
+// stripContext holds parsed section header state for the strip operation
+type stripContext struct {
+	data     []byte
+	verbose  bool
+	shNum    uint32
+	shOff    uint64
+	shEntSz  uint64
+	layout   shLayout
+	strOff   uint64 // shstrtab section offset in file
+	strSz    uint64 // shstrtab section size
+	readU64  func(uint64) uint64
+	readU32  func(uint64) uint32
+	putU32   func(uint64, uint32)
+	putU64   func(uint64, uint64)
+}
+
+func (p *Packer) stripSectionsImpl(layout shLayout) {
+	shNum, shOff, shEntSz, shstrndx, readU64, readU32, putU32, putU64 := p.stripParams()
+	if shNum == 0 {
 		return
 	}
-	ehdr := readEhdr64(p.data)
 
-	// Validate section header table bounds
-	shTableEnd := ehdr.Shoff + uint64(ehdr.Shnum)*uint64(ehdr.Shentsize)
-	if ehdr.Shoff == 0 || shTableEnd > uint64(len(p.data)) {
+	shTableEnd := shOff + uint64(shNum)*uint64(shEntSz)
+	if shOff == 0 || shTableEnd > uint64(len(p.data)) {
 		if p.verbose {
-			fmt.Printf("    [strip] Section header table missing or truncated (shoff=0x%X, shnum=%d), skipping strip\n",
-				ehdr.Shoff, ehdr.Shnum)
+			fmt.Printf("    [strip] Section header table missing or truncated, skipping strip\n")
 		}
 		return
 	}
-
-	if uint32(ehdr.Shstrndx) >= uint32(ehdr.Shnum) {
+	if uint32(shstrndx) >= uint32(shNum) {
 		return
 	}
 
-	shstrOff := ehdr.Shoff + uint64(ehdr.Shstrndx)*uint64(ehdr.Shentsize)
-	shstrSecOff := binary.LittleEndian.Uint64(p.data[shstrOff+24:])
-	shstrSecSz := binary.LittleEndian.Uint64(p.data[shstrOff+32:])
-
-	if shstrSecOff+shstrSecSz > uint64(len(p.data)) {
+	shstrEntryOff := shOff + uint64(shstrndx)*uint64(shEntSz)
+	strOff := readU64(shstrEntryOff + uint64(layout.offsetOff))
+	strSz := readU64(shstrEntryOff + uint64(layout.sizeOff))
+	if strOff+strSz > uint64(len(p.data)) {
 		return
 	}
 
-	getSectionName := func(nameOff uint32) string {
-		start := shstrSecOff + uint64(nameOff)
-		if start >= uint64(len(p.data)) || start >= shstrSecOff+shstrSecSz {
-			return ""
-		}
-		end := start
-		for end < shstrSecOff+shstrSecSz && end < uint64(len(p.data)) && p.data[end] != 0 {
-			end++
-		}
-		return string(p.data[start:end])
+	ctx := &stripContext{
+		data: p.data, verbose: p.verbose,
+		shNum: shNum, shOff: shOff, shEntSz: shEntSz,
+		layout: layout, strOff: strOff, strSz: strSz,
+		readU64: readU64, readU32: readU32, putU32: putU32, putU64: putU64,
 	}
 
-	// 要清除的 section 名称
-	stripNames := map[string]bool{
-		".symtab":            true,
-		".strtab":            true,
-		".comment":           true,
-		".note.GNU-stack":    true,
-		".note.gnu.build-id": true,
-	}
+	stripped := ctx.collectStripped()
+	ctx.applyStripping(stripped)
+}
 
-	// 第一遍: 收集被删除的 section index
+// sectionName reads a null-terminated section name from the shstrtab
+func (ctx *stripContext) sectionName(nameOff uint32) string {
+	start := ctx.strOff + uint64(nameOff)
+	if start >= uint64(len(ctx.data)) || start >= ctx.strOff+ctx.strSz {
+		return ""
+	}
+	end := start
+	for end < ctx.strOff+ctx.strSz && end < uint64(len(ctx.data)) && ctx.data[end] != 0 {
+		end++
+	}
+	return string(ctx.data[start:end])
+}
+
+// collectStripped scans all sections and returns indices of those to strip
+func (ctx *stripContext) collectStripped() map[int]bool {
 	stripped := make(map[int]bool)
-	for i := 0; i < int(ehdr.Shnum); i++ {
-		shOff := ehdr.Shoff + uint64(i)*uint64(ehdr.Shentsize)
-		nameOff := binary.LittleEndian.Uint32(p.data[shOff:])
-		name := getSectionName(nameOff)
+	for i := 0; i < int(ctx.shNum); i++ {
+		entryOff := ctx.shOff + uint64(i)*uint64(ctx.shEntSz)
+		name := ctx.sectionName(ctx.readU32(entryOff))
 		if stripNames[name] {
 			stripped[i] = true
 		}
 	}
+	return stripped
+}
 
-	// 第二遍: 清零被删除的 section，修复 sh_link 引用
-	for i := 0; i < int(ehdr.Shnum); i++ {
-		shOff := ehdr.Shoff + uint64(i)*uint64(ehdr.Shentsize)
+// applyStripping zeroes stripped section content/headers and fixes sh_link references
+func (ctx *stripContext) applyStripping(stripped map[int]bool) {
+	for i := 0; i < int(ctx.shNum); i++ {
+		entryOff := ctx.shOff + uint64(i)*uint64(ctx.shEntSz)
 
 		if stripped[i] {
-			// 读取 section 的文件偏移和大小
-			secOff := binary.LittleEndian.Uint64(p.data[shOff+24:])
-			secSz := binary.LittleEndian.Uint64(p.data[shOff+32:])
+			secOff := ctx.readU64(entryOff + uint64(ctx.layout.offsetOff))
+			secSz := ctx.readU64(entryOff + uint64(ctx.layout.sizeOff))
 
-			// 用 0x00 清零 section 内容（等效 strip -s）
-			if secOff+secSz <= uint64(len(p.data)) {
+			if secOff+secSz <= uint64(len(ctx.data)) {
 				for j := uint64(0); j < secSz; j++ {
-					p.data[secOff+j] = 0
+					ctx.data[secOff+j] = 0
 				}
 			}
 
-			nameOff := binary.LittleEndian.Uint32(p.data[shOff:])
-			name := getSectionName(nameOff)
-
-			// 清零整个 section header entry（保留 sh_name 用于调试）
-			// sh_type = SHT_NULL
-			binary.LittleEndian.PutUint32(p.data[shOff+4:], 0)
-			// sh_flags = 0
-			binary.LittleEndian.PutUint64(p.data[shOff+8:], 0)
-			// sh_addr = 0
-			binary.LittleEndian.PutUint64(p.data[shOff+16:], 0)
-			// sh_offset = 0
-			binary.LittleEndian.PutUint64(p.data[shOff+24:], 0)
-			// sh_size = 0
-			binary.LittleEndian.PutUint64(p.data[shOff+32:], 0)
-			// sh_link = 0
-			binary.LittleEndian.PutUint32(p.data[shOff+40:], 0)
-			// sh_info = 0
-			binary.LittleEndian.PutUint32(p.data[shOff+44:], 0)
-			// sh_addralign = 0
-			binary.LittleEndian.PutUint64(p.data[shOff+48:], 0)
-			// sh_entsize = 0
-			binary.LittleEndian.PutUint64(p.data[shOff+56:], 0)
-
-			if p.verbose {
+			if ctx.verbose {
+				name := ctx.sectionName(ctx.readU32(entryOff))
 				fmt.Printf("    [strip] %s cleared (off=0x%X, sz=%d)\n", name, secOff, secSz)
 			}
+
+			for _, fieldOff := range ctx.layout.clearFields {
+				ctx.putU64(entryOff+uint64(fieldOff), 0)
+			}
 		} else {
-			// 非被删除的 section: 检查 sh_link 是否指向被删除的 section
-			shLink := binary.LittleEndian.Uint32(p.data[shOff+40:])
-			if shLink > 0 && stripped[int(shLink)] {
-				binary.LittleEndian.PutUint32(p.data[shOff+40:], 0) // 清零 sh_link
-				if p.verbose {
-					nameOff := binary.LittleEndian.Uint32(p.data[shOff:])
-					name := getSectionName(nameOff)
-					fmt.Printf("    [strip] %s: sh_link %d → 0 (target stripped)\n", name, shLink)
+			linkVal := ctx.readU32(entryOff + uint64(ctx.layout.linkOff))
+			if linkVal > 0 && stripped[int(linkVal)] {
+				ctx.putU32(entryOff+uint64(ctx.layout.linkOff), 0)
+				if ctx.verbose {
+					name := ctx.sectionName(ctx.readU32(entryOff))
+					fmt.Printf("    [strip] %s: sh_link %d → 0 (target stripped)\n", name, linkVal)
 				}
 			}
 		}
 	}
 }
 
-func (p *Packer) stripSections32() {
-	if len(p.data) < 52 {
-		return
-	}
-	ehdr := readEhdr32(p.data)
+// stripParams returns arch-specific section header parameters and read/write helpers
+func (p *Packer) stripParams() (shNum uint32, shOff uint64, shEntSize uint64, shstrndx uint32,
+	readU64 func(uint64) uint64, readU32 func(uint64) uint32,
+	putU32 func(uint64, uint32), putU64 func(uint64, uint64)) {
 
-	// Validate section header table bounds
-	shTableEnd := uint64(ehdr.Shoff) + uint64(ehdr.Shnum)*uint64(ehdr.Shentsize)
-	if ehdr.Shoff == 0 || shTableEnd > uint64(len(p.data)) {
-		if p.verbose {
-			fmt.Printf("    [strip] Section header table missing or truncated (shoff=0x%X, shnum=%d), skipping strip\n",
-				ehdr.Shoff, ehdr.Shnum)
-		}
-		return
+	if p.isARM32 {
+		ehdr := readEhdr32(p.data)
+		return ehdr.Shnum, uint64(ehdr.Shoff), uint64(ehdr.Shentsize), ehdr.Shstrndx,
+			func(off uint64) uint64 { return uint64(binary.LittleEndian.Uint32(p.data[off:])) },
+			func(off uint64) uint32 { return binary.LittleEndian.Uint32(p.data[off:]) },
+			func(off uint64, v uint32) { binary.LittleEndian.PutUint32(p.data[off:], v) },
+			func(off uint64, v uint64) { binary.LittleEndian.PutUint32(p.data[off:], uint32(v)) }
 	}
 
-	if uint32(ehdr.Shstrndx) >= uint32(ehdr.Shnum) {
-		return
-	}
-
-	shstrOff := uint32(ehdr.Shoff) + uint32(ehdr.Shstrndx)*uint32(ehdr.Shentsize)
-	shstrSecOff := binary.LittleEndian.Uint32(p.data[shstrOff+16:])
-	shstrSecSz := binary.LittleEndian.Uint32(p.data[shstrOff+20:])
-
-	if uint64(shstrSecOff)+uint64(shstrSecSz) > uint64(len(p.data)) {
-		return
-	}
-
-	getSectionName := func(nameOff uint32) string {
-		start := shstrSecOff + nameOff
-		if start >= uint32(len(p.data)) || start >= shstrSecOff+shstrSecSz {
-			return ""
-		}
-		end := start
-		for end < shstrSecOff+shstrSecSz && end < uint32(len(p.data)) && p.data[end] != 0 {
-			end++
-		}
-		return string(p.data[start:end])
-	}
-
-	stripNames := map[string]bool{
-		".symtab": true, ".strtab": true, ".comment": true,
-		".note.GNU-stack": true, ".note.gnu.build-id": true,
-	}
-
-	stripped := make(map[int]bool)
-	for i := 0; i < int(ehdr.Shnum); i++ {
-		shOff := ehdr.Shoff + uint32(i)*uint32(ehdr.Shentsize)
-		nameOff := binary.LittleEndian.Uint32(p.data[shOff:])
-		name := getSectionName(nameOff)
-		if stripNames[name] {
-			stripped[i] = true
-		}
-	}
-
-	// ELF32 section header layout (40 bytes):
-	// +0: sh_name(4), +4: sh_type(4), +8: sh_flags(4), +12: sh_addr(4),
-	// +16: sh_offset(4), +20: sh_size(4), +24: sh_link(4), +28: sh_info(4),
-	// +32: sh_addralign(4), +36: sh_entsize(4)
-	for i := 0; i < int(ehdr.Shnum); i++ {
-		shOff := ehdr.Shoff + uint32(i)*uint32(ehdr.Shentsize)
-
-		if stripped[i] {
-			secOff := binary.LittleEndian.Uint32(p.data[shOff+16:])
-			secSz := binary.LittleEndian.Uint32(p.data[shOff+20:])
-
-			if uint64(secOff)+uint64(secSz) <= uint64(len(p.data)) {
-				for j := uint32(0); j < secSz; j++ {
-					p.data[secOff+j] = 0
-				}
-			}
-
-			// Clear section header fields (except sh_name)
-			binary.LittleEndian.PutUint32(p.data[shOff+4:], 0)  // sh_type = SHT_NULL
-			binary.LittleEndian.PutUint32(p.data[shOff+8:], 0)  // sh_flags
-			binary.LittleEndian.PutUint32(p.data[shOff+12:], 0) // sh_addr
-			binary.LittleEndian.PutUint32(p.data[shOff+16:], 0) // sh_offset
-			binary.LittleEndian.PutUint32(p.data[shOff+20:], 0) // sh_size
-			binary.LittleEndian.PutUint32(p.data[shOff+24:], 0) // sh_link
-			binary.LittleEndian.PutUint32(p.data[shOff+28:], 0) // sh_info
-			binary.LittleEndian.PutUint32(p.data[shOff+32:], 0) // sh_addralign
-			binary.LittleEndian.PutUint32(p.data[shOff+36:], 0) // sh_entsize
-		} else {
-			shLink := binary.LittleEndian.Uint32(p.data[shOff+24:])
-			if shLink > 0 && stripped[int(shLink)] {
-				binary.LittleEndian.PutUint32(p.data[shOff+24:], 0)
-			}
-		}
-	}
+	ehdr := readEhdr64(p.data)
+	return ehdr.Shnum, ehdr.Shoff, uint64(ehdr.Shentsize), ehdr.Shstrndx,
+		func(off uint64) uint64 { return binary.LittleEndian.Uint64(p.data[off:]) },
+		func(off uint64) uint32 { return binary.LittleEndian.Uint32(p.data[off:]) },
+		func(off uint64, v uint32) { binary.LittleEndian.PutUint32(p.data[off:], v) },
+		func(off uint64, v uint64) { binary.LittleEndian.PutUint64(p.data[off:], v) }
 }
