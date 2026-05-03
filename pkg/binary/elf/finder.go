@@ -10,6 +10,15 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
+// execSection holds info about an executable code region (.text or LOAD_X segment)
+type execSection struct {
+	name   string
+	addr   uint64
+	offset uint64
+	size   uint64
+	data   []byte
+}
+
 // ParseAddrSpec 解析地址规格: "0xADDR", "0xSTART-0xEND", "0xSTART-0xEND:name"
 func ParseAddrSpec(s string) (AddrSpec, error) {
 	var spec AddrSpec
@@ -76,149 +85,60 @@ func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 				Size: sym.Size,
 			}
 
-			// 优先使用 Program Headers 定位文件偏移 (Android .so 必备)
-			foundOffset := false
-			for _, ph := range f.Progs {
-				if ph.Type == elf.PT_LOAD && (ph.Flags&elf.PF_X != 0) {
-					if addr >= ph.Vaddr && addr < ph.Vaddr+ph.Memsz {
-						info.Offset = ph.Off + (addr - ph.Vaddr)
-						info.Section = "__LOAD_X"
-						foundOffset = true
-						break
-					}
-				}
-			}
-
-			// 如果段信息找不到，回退到 Section Headers
-			if !foundOffset && int(sym.Section) < len(f.Sections) {
-				sec := f.Sections[sym.Section]
-				if addr >= sec.Addr {
-					info.Section = sec.Name
-					info.Offset = sec.Offset + (addr - sec.Addr)
-					foundOffset = true
-				}
-			}
-
-			if !foundOffset {
+			offset, secName, found := resolveFileOffset(f, addr, sym.Section)
+			if !found {
 				return nil, fmt.Errorf("could not determine file offset for function %s at 0x%X", name, addr)
 			}
+			info.Offset = offset
+			info.Section = secName
 			return info, nil
 		}
 	}
 	return nil, fmt.Errorf("function '%s' not found", name)
 }
 
-// FindFunctionByAddr 通过地址查找函数
-func (p *Packer) FindFunctionByAddr(f *elf.File, spec AddrSpec) (*vm.FuncInfo, error) {
-	// 优先在 .text 段中定位
-	textSec := f.Section(".text")
-
-	var secName string
-	var secAddr, secOffset, secSize uint64
-	var secData []byte
-
-	if textSec != nil {
-		secName = ".text"
-		secAddr = textSec.Addr
-		secOffset = textSec.Offset
-		secSize = textSec.Size
-		d, err := textSec.Data()
-		if err != nil {
-			return nil, fmt.Errorf("reading .text failed: %v", err)
-		}
-		secData = d
-	} else {
-		// Fallback: 在可执行 LOAD segment 中查找
-		found := false
-		for _, prog := range f.Progs {
-			if prog.Type != elf.PT_LOAD {
-				continue
+// resolveFileOffset finds file offset for a virtual address, checking PT_LOAD first then sections
+func resolveFileOffset(f *elf.File, addr uint64, secIdx elf.SectionIndex) (uint64, string, bool) {
+	// 优先使用 Program Headers (Android .so 必备)
+	for _, ph := range f.Progs {
+		if ph.Type == elf.PT_LOAD && (ph.Flags&elf.PF_X != 0) {
+			if addr >= ph.Vaddr && addr < ph.Vaddr+ph.Memsz {
+				return ph.Off + (addr - ph.Vaddr), "__LOAD_X", true
 			}
-			if prog.Flags&elf.PF_X == 0 {
-				continue
-			}
-			segEnd := prog.Vaddr + prog.Memsz
-			if spec.Addr >= prog.Vaddr && spec.Addr < segEnd {
-				secName = "__LOAD_X"
-				secAddr = prog.Vaddr
-				secOffset = prog.Off
-				secSize = prog.Filesz
-				d := make([]byte, prog.Filesz)
-				if _, err := prog.ReadAt(d, 0); err != nil {
-					return nil, fmt.Errorf("reading LOAD segment failed: %v", err)
-				}
-				secData = d
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, fmt.Errorf("address 0x%X not in any executable segment", spec.Addr)
 		}
 	}
 
-	// 确认地址在范围内
-	if spec.Addr < secAddr || spec.Addr >= secAddr+secSize {
+	// 回退到 Section Headers
+	if int(secIdx) < len(f.Sections) {
+		sec := f.Sections[secIdx]
+		if addr >= sec.Addr {
+			return sec.Offset + (addr - sec.Addr), sec.Name, true
+		}
+	}
+
+	return 0, "", false
+}
+
+// FindFunctionByAddr 通过地址查找函数
+func (p *Packer) FindFunctionByAddr(f *elf.File, spec AddrSpec) (*vm.FuncInfo, error) {
+	sec, err := findExecSection(f, spec.Addr)
+	if err != nil {
+		return nil, err
+	}
+
+	if spec.Addr < sec.addr || spec.Addr >= sec.addr+sec.size {
 		return nil, fmt.Errorf("address 0x%X not in %s (0x%X-0x%X)",
-			spec.Addr, secName, secAddr, secAddr+secSize)
+			spec.Addr, sec.name, sec.addr, sec.addr+sec.size)
 	}
 
 	var size uint64
 	if spec.End > 0 {
 		size = spec.End - spec.Addr
-	} else if p.isARM32 {
-		// ARM32 RET detection: BX LR (0xE12FFF1E) or POP {..., PC} (0x__BD__xx)
-		startOff := spec.Addr - secAddr
-		isThumb := p.thumbFuncs[spec.Addr]
-		found := false
-		if isThumb {
-			// Thumb: scan 2 bytes at a time for POP {PC} (0xBDxx) or BX LR (0x4770)
-			for i := startOff; i+2 <= uint64(len(secData)); i += 2 {
-				hw := binary.LittleEndian.Uint16(secData[i:])
-				if hw == 0x4770 { // BX LR
-					size = i + 2 - startOff
-					found = true
-					break
-				}
-				if hw&0xFF00 == 0xBD00 { // POP {..., PC}
-					size = i + 2 - startOff
-					found = true
-					break
-				}
-			}
-		} else {
-			for i := startOff; i+4 <= uint64(len(secData)); i += 4 {
-				inst := binary.LittleEndian.Uint32(secData[i:])
-				if inst == 0xE12FFF1E { // BX LR
-					size = i + 4 - startOff
-					found = true
-					break
-				}
-				// POP {..., PC}: cond=AL, 0x08BD8000 mask
-				if inst&0xFFFF8000 == 0xE8BD8000 { // LDMFD SP!, {..., PC}
-					size = i + 4 - startOff
-					found = true
-					break
-				}
-			}
-		}
-		if !found {
-			return nil, fmt.Errorf("cannot detect function size at 0x%X (no BX LR / POP {PC} found)", spec.Addr)
-		}
 	} else {
-		// ARM64: scan for RET (0xD65F03C0)
-		startOff := spec.Addr - secAddr
-		found := false
-		for i := startOff; i+4 <= uint64(len(secData)); i += 4 {
-			inst := binary.LittleEndian.Uint32(secData[i:])
-			if inst == 0xD65F03C0 { // RET
-				size = i + 4 - startOff
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, fmt.Errorf("cannot detect function size at 0x%X (no RET found)", spec.Addr)
+		startOff := spec.Addr - sec.addr
+		size, err = p.detectFunctionSize(sec.data, startOff, spec.Addr)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -226,15 +146,92 @@ func (p *Packer) FindFunctionByAddr(f *elf.File, spec AddrSpec) (*vm.FuncInfo, e
 		Name:    spec.Name,
 		Addr:    spec.Addr,
 		Size:    size,
-		Section: secName,
-		Offset:  secOffset + (spec.Addr - secAddr),
+		Section: sec.name,
+		Offset:  sec.offset + (spec.Addr - sec.addr),
 	}
-	// Final sanity check for file offset
 	if fi.Offset >= uint64(len(p.data)) {
 		return nil, fmt.Errorf("calculated file offset 0x%X for 0x%X is out of bounds (file size 0x%X)",
 			fi.Offset, fi.Addr, len(p.data))
 	}
 	return fi, nil
+}
+
+// findExecSection locates the executable section (.text or LOAD_X segment) containing addr
+func findExecSection(f *elf.File, addr uint64) (*execSection, error) {
+	textSec := f.Section(".text")
+	if textSec != nil {
+		d, err := textSec.Data()
+		if err != nil {
+			return nil, fmt.Errorf("reading .text failed: %v", err)
+		}
+		return &execSection{
+			name: ".text", addr: textSec.Addr,
+			offset: textSec.Offset, size: textSec.Size, data: d,
+		}, nil
+	}
+
+	// Fallback: executable LOAD segment
+	for _, prog := range f.Progs {
+		if prog.Type != elf.PT_LOAD || prog.Flags&elf.PF_X == 0 {
+			continue
+		}
+		segEnd := prog.Vaddr + prog.Memsz
+		if addr >= prog.Vaddr && addr < segEnd {
+			d := make([]byte, prog.Filesz)
+			if _, err := prog.ReadAt(d, 0); err != nil {
+				return nil, fmt.Errorf("reading LOAD segment failed: %v", err)
+			}
+			return &execSection{
+				name: "__LOAD_X", addr: prog.Vaddr,
+				offset: prog.Off, size: prog.Filesz, data: d,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("address 0x%X not in any executable segment", addr)
+}
+
+// detectFunctionSize scans code for the function's return instruction to determine its size
+func (p *Packer) detectFunctionSize(secData []byte, startOff uint64, addr uint64) (uint64, error) {
+	if p.isARM32 {
+		return detectARM32FunctionEnd(secData, startOff, addr, p.thumbFuncs[addr])
+	}
+	return detectARM64FunctionEnd(secData, startOff, addr)
+}
+
+func detectARM64FunctionEnd(secData []byte, startOff uint64, addr uint64) (uint64, error) {
+	for i := startOff; i+4 <= uint64(len(secData)); i += 4 {
+		inst := binary.LittleEndian.Uint32(secData[i:])
+		if inst == 0xD65F03C0 { // RET
+			return i + 4 - startOff, nil
+		}
+	}
+	return 0, fmt.Errorf("cannot detect function size at 0x%X (no RET found)", addr)
+}
+
+func detectARM32FunctionEnd(secData []byte, startOff uint64, addr uint64, isThumb bool) (uint64, error) {
+	if isThumb {
+		for i := startOff; i+2 <= uint64(len(secData)); i += 2 {
+			hw := binary.LittleEndian.Uint16(secData[i:])
+			if hw == 0x4770 { // BX LR
+				return i + 2 - startOff, nil
+			}
+			if hw&0xFF00 == 0xBD00 { // POP {..., PC}
+				return i + 2 - startOff, nil
+			}
+		}
+	} else {
+		for i := startOff; i+4 <= uint64(len(secData)); i += 4 {
+			inst := binary.LittleEndian.Uint32(secData[i:])
+			if inst == 0xE12FFF1E { // BX LR
+				return i + 4 - startOff, nil
+			}
+			if inst&0xFFFF8000 == 0xE8BD8000 { // LDMFD SP!, {..., PC}
+				return i + 4 - startOff, nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("cannot detect function size at 0x%X (no BX LR / POP {PC} found)", addr)
 }
 
 // ExtractFuncCode 提取函数机器码
