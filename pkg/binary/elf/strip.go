@@ -162,7 +162,7 @@ func (p *Packer) stripParams() (shNum uint32, shOff uint64, shEntSize uint64, sh
 
 	if p.isARM32 {
 		ehdr := readEhdr32(p.data)
-		return ehdr.Shnum, uint64(ehdr.Shoff), uint64(ehdr.Shentsize), ehdr.Shstrndx,
+		return uint32(ehdr.Shnum), uint64(ehdr.Shoff), uint64(ehdr.Shentsize), uint32(ehdr.Shstrndx),
 			func(off uint64) uint64 { return uint64(binary.LittleEndian.Uint32(p.data[off:])) },
 			func(off uint64) uint32 { return binary.LittleEndian.Uint32(p.data[off:]) },
 			func(off uint64, v uint32) { binary.LittleEndian.PutUint32(p.data[off:], v) },
@@ -170,7 +170,7 @@ func (p *Packer) stripParams() (shNum uint32, shOff uint64, shEntSize uint64, sh
 	}
 
 	ehdr := readEhdr64(p.data)
-	return ehdr.Shnum, ehdr.Shoff, uint64(ehdr.Shentsize), ehdr.Shstrndx,
+	return uint32(ehdr.Shnum), ehdr.Shoff, uint64(ehdr.Shentsize), uint32(ehdr.Shstrndx),
 		func(off uint64) uint64 { return binary.LittleEndian.Uint64(p.data[off:]) },
 		func(off uint64) uint32 { return binary.LittleEndian.Uint32(p.data[off:]) },
 		func(off uint64, v uint32) { binary.LittleEndian.PutUint32(p.data[off:], v) },
