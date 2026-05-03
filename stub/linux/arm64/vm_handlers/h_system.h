@@ -16,16 +16,15 @@ static inline u32 h_nop(vm_ctx_t *vm) {
 }
 
 /* CALL_NAT: BLR 绝对地址调用  [9B: op | addr64]
- * For PIE/ET_DYN, addr is the link-time VA; add vm->slide to get runtime VA. */
+ * The immediate address has already been patched by RTLR to the final
+ * runtime address (target_va + slide). Do NOT add slide again. */
 static inline u32 h_call_nat(vm_ctx_t *vm) {
-  u64 addr = rd64(&vm->bc[vm->pc + 1]) + vm->slide;
+  u64 addr = rd64(&vm->bc[vm->pc + 1]); /* final runtime address from RTLR */
 #ifdef __aarch64__
   native_fn_t fn = (native_fn_t)addr;
   vm->R[0] = fn(vm->R[0], vm->R[1], vm->R[2], vm->R[3], vm->R[4], vm->R[5],
                 vm->R[6], vm->R[7]);
 #else
-  /* ARM32: args are 32-bit in R0-R3, rest on stack.  Must cast to u32 to
-   * avoid u64 register-pair alignment issues in AAPCS. */
   typedef u32 (*fn32_t)(u32, u32, u32, u32);
   fn32_t fn = (fn32_t)(u32)addr;
   vm->R[0] = (u64)fn((u32)vm->R[0], (u32)vm->R[1], (u32)vm->R[2], (u32)vm->R[3]);

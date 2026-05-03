@@ -684,7 +684,7 @@ func (p *Packer) Process() error {
 
 		// ---- PC 反向遍历: 反转指令顺序 ----
 		// 必须在 OpcodeCryptor 之前执行 (加密使用最终 pc 位置)
-		reversed, offsetMap := reverseInstructions(result.Bytecode, result.CodeLen)
+		reversed, offsetMap, byteMap := reverseInstructions(result.Bytecode, result.CodeLen)
 
 		// 重映射分支目标 (使用反转后的偏移)
 		newCodeLen := len(reversed)
@@ -735,9 +735,9 @@ func (p *Packer) Process() error {
 				ocKey, result.CodeLen, mapCount, reverseOffset, ocKeyOffset)
 		}
 
-		// Remap RTLR relocation offsets through the reversal offsetMap
+		// Remap RTLR relocation offsets through the reversal byteMap
 		for i := range result.Relocations {
-			if newOff, ok := offsetMap[result.Relocations[i].BcOffset]; ok {
+			if newOff, ok := byteMap[result.Relocations[i].BcOffset]; ok {
 				if p.verbose {
 					fmt.Printf("    [RELOC] remap BcOffset %d -> %d\n",
 						result.Relocations[i].BcOffset, newOff)
@@ -1578,7 +1578,7 @@ func branchTargetOffset(op byte) int {
 }
 
 // reverseInstructions reverses the instruction order and appends a size marker.
-func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int) {
+func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int, map[int]int) {
 	type instInfo struct {
 		offset int
 		size   int
@@ -1599,17 +1599,25 @@ func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int) {
 	}
 
 	offsetMap := make(map[int]int)
+	byteMap := make(map[int]int)
 	var output []byte
 	for i := len(insts) - 1; i >= 0; i-- {
 		inst := insts[i]
+		newInstStart := len(output)
 		output = append(output, bytecode[inst.offset:inst.offset+inst.size]...)
 		output = append(output, byte(inst.size))
+
 		// offsetMap points to where this instruction ends (after size marker)
 		// because the reverse DISPATCH will start here to locate the instruction.
 		offsetMap[inst.offset] = len(output)
+
+		// byteMap provides a 1:1 mapping for every byte within the instruction
+		for k := 0; k < inst.size; k++ {
+			byteMap[inst.offset+k] = newInstStart + k
+		}
 	}
 
-	return output, offsetMap
+	return output, offsetMap, byteMap
 }
 
 // remapBranchTargets 重映射反转后字节码中的分支目标

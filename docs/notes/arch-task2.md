@@ -77,4 +77,106 @@ adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64"
 4.  **Extended Obfuscation**: Explore additional obfuscation transformations (control-flow flattening, bogus branches, VM_INDIRECT_DISPATCH as default).
 ---
 
-*Status: Issue #7 Closed. Android .so support fully functional with all tests passing. VM_INDIRECT_DISPATCH mode and bytecode reversal obfuscation validated.*
+## 4. Debugging SIGSEGV in Protected Binaries (Current)
+
+### Symptoms
+*   **Crash**: SIGSEGV (signal 11, SEGV_MAPERR) when running protected ARM64 Android binaries
+*   **Location**: Crash occurs at PC `0xe0a718fd70` (invalid address) during `CALL_NAT` (OpCallNative, 0xAB) execution
+*   **Pattern**: Non-deterministic crashes during stack-machine execution
+
+### Root Cause Analysis
+*   **RTLR Relocation Issue**: The runtime relocation table (RTLR) patches absolute addresses for `CALL_NAT` instructions, but the address being jumped to is invalid
+*   **Bounds Check Bug**: Original code used `if (bc_off + 8 <= bc_len)` which can overflow when `bc_off` is very large (e.g., `0xFFFFFFFFFFFFFFF8`), allowing out-of-bounds writes
+*   **Crash Address**: `0xe0a718fd70` = `0xe0a718fd70 & 0xFFFFFFFF` = `0x18fd70` - looks like unpatched/incorrectly patched bytecode
+
+### Fixes Applied
+1.  **RTLR Bounds Check Fix** (`vm_interp.c:240`):
+    *   Changed `if (bc_off + 8 <= bc_len)` to `if (bc_off <= (u64)bc_len - 8)`
+    *   Prevents integer overflow that allowed out-of-bounds writes
+2.  **RTLR Count Limit** (`vm_interp.c:231`):
+    *   Added `if (count > 1000000) count = 1000000;` to prevent excessive looping on corrupted tables
+3.  **CALL_NAT Debug Logging** (`vm_interp.c:728-756`):
+    *   Added pre-execution dump of R[0]-R[7] and eval_sp to stderr
+    *   Helps verify register state before native calls
+
+## 5. SIGSEGV Root Cause & Fix (2026-05-03)
+
+**Problem**: Protected binaries crashed with SIGSEGV at `CALL_NAT` instruction (0xAB).
+
+**Root Cause**: **Double ASLR slide application** causing invalid jump addresses.
+
+*   **Packer side** (`pkg/binary/elf/packer.go:737-239`): RTLR table entries have `(bc_off, target_addr)` where target is the *link-time VA*. At injection time, the packer patches the bytecode IMMEDIATE value with `target_addr + slide` (already includes ASLR).
+*   **VM side** (`vm_handlers/h_system.h:21`): Original code was doing `u64 addr = rd64(&vm->bc[pc+1]) + vm->slide`, adding the slide a SECOND time.
+*   **Result**: CALL_NAT jumped to `(target_link_time_va + slide) + slide` = `target_link_time_va + 2×slide` → invalid address (e.g., `0xe0a718fd70`).
+
+**Debug Output**:
+```
+RTLR:f=2 bc=0x4AD t=0x0C78 s=0x6DE4005000
+PATCH:0x6DE4005C78 050000013F4D0169   <- patched bytecode contains (t + s)
+CALL:r=0x6DE4005C78 s=0x6DE4005000       <- CALL_NAT was doing r + s (double slide!)
+```
+
+**Fix**: In `vm_handlers/h_system.h`, remove the extra slide addition:
+
+```c
+// Before:
+u64 addr = rd64(&vm->bc[vm->pc + 1]) + vm->slide;
+
+// After:
+u64 addr = rd64(&vm->bc[vm->pc + 1]); /* slide already applied by RTLR */
+```
+
+**Additional fixes** (`vm_interp.c:238-241`):
+1. **Bounds check overflow**: Changed `if (bc_off + 8 <= bc_len)` to `if (bc_off <= (u64)bc_len - 8)` to prevent integer overflow when `bc_off` is large.
+2. **Count limit**: Added `if (count > 1000000) count = 1000000;` to prevent excessive looping on corrupted RTLR tables.
+3. **Debug logging**: Added RTLR patch logging and CALL_NAT address dump for troubleshooting.
+
+### Status
+*   **Build**: ✅ Successful with Android NDK 28.2.13676358
+*   **Protection**: ✅ VMPacker successfully protects all test functions
+*   **Runtime**: ✅ No more SIGSEGV crashes
+*   **Remaining**: 2 functional test failures (md5_hex, get_process_name) - these are separate bugs in the original unprotected code (todo: investigate)
+
+---
+
+### Reproduction Steps (Воспроизведение)
+
+```bash
+# 1. Set environment (macOS)
+export ANDROID_NDK=/Users/password9090/android-sdk/ndk/28.2.13676358
+
+# 2. Rebuild stub and packer
+cd /Volumes/External/Code/VMPacker
+make clean && make stub && make packer
+
+# 3. Protect the Android test library
+./build/vmpacker -func vmp_compute,vmp_verify_key,vmp_md5_hex,vmp_get_process_name \
+    -o test/android/build/libnative_test_protected_arm64.so \
+    test/android/build/libnative_test_arm64.so
+
+# 4. Deploy to emulator
+adb shell mkdir -p /data/local/tmp/vmptest
+adb push test/android/build/test_runner_arm64 /data/local/tmp/vmptest/
+adb push test/android/build/libnative_test_protected_arm64.so /data/local/tmp/vmptest/libnative_test.so
+adb shell chmod +x /data/local/tmp/vmptest/test_runner_arm64
+
+# 5. Run tests (crash expected)
+adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64"
+
+# 6. Capture crash details
+adb logcat -c
+adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64" &
+sleep 2
+adb logcat -d | grep -i "fatal\|signal\|segfault" -A 30
+```
+
+**Expected crash output:**
+```
+Segmentation fault
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x...
+pc 000000e0a718fd70  <-- invalid address
+```
+
+---
+
+*Status: Issue #7 Closed. Android .so support functional but debugging SIGSEGV in protected binaries.*

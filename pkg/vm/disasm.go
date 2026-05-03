@@ -137,6 +137,7 @@ var opTable = map[byte]opInfo{
 	OpSAdc:       {"S_ADC", 1},
 	OpSSbc:       {"S_SBC", 1},
 	OpSNot:       {"S_NOT", 1},
+	OpSNeg:       {"S_NEG", 1},
 	OpSClz:       {"S_CLZ", 1},
 	OpSCls:       {"S_CLS", 1},
 	OpSRbit:      {"S_RBIT", 1},

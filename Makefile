@@ -15,11 +15,22 @@ else
 endif
 
 # Cross-compilation toolchain
-CROSS   ?= aarch64-linux-gnu-
-CC       = $(CROSS)gcc
-LD       = $(CROSS)ld
-NM       = $(CROSS)nm
-OBJCOPY  = $(CROSS)objcopy
+ifdef ANDROID_NDK
+    # Android NDK (macOS: darwin-x86_64, Linux: linux-x86_64)
+    NDK_TOOLCHAIN = $(ANDROID_NDK)/toolchains/llvm/prebuilt/darwin-x86_64/bin
+    CROSS   = $(NDK_TOOLCHAIN)/aarch64-linux-android
+    CC      = $(CROSS)21-clang
+    # NDK uses clang as linker with -nostdlib -nostartfiles for freestanding blobs
+    LD      = $(CROSS)21-clang -nostdlib -nostartfiles -static
+    NM      = $(NDK_TOOLCHAIN)/llvm-nm
+    OBJCOPY = $(NDK_TOOLCHAIN)/llvm-objcopy
+else
+    CROSS   ?= aarch64-linux-gnu-
+    CC       = $(CROSS)gcc
+    LD       = $(CROSS)ld
+    NM       = $(CROSS)nm
+    OBJCOPY  = $(CROSS)objcopy
+endif
 GO       = go
 
 # Directories
@@ -100,7 +111,7 @@ else
 	if [ -z "$$OFF1" ] || [ -z "$$OFF2" ] || [ -z "$$OFF3" ]; then \
 		echo "Error: Symbols not found"; exit 1; \
 	fi; \
-	python3 -c "import struct; h = struct.pack('<QQQ', int('$$OFF1', 16), int('$$OFF2', 16), int('$$OFF3', 16)); r = open('$(BUILD_DIR)/vm_interp_raw.bin', 'rb').read(); open('$(STUB_BIN)', 'wb').write(h + r)"
+	env -i PATH=/usr/bin:/bin /usr/bin/python3 -c "import struct; h = struct.pack('<QQQ', int('$$OFF1', 16), int('$$OFF2', 16), int('$$OFF3', 16)); r = open('$(BUILD_DIR)/vm_interp_raw.bin', 'rb').read(); open('$(STUB_BIN)', 'wb').write(h + r)"
 	@cp $(STUB_BIN) $(BUILD_DIR)/vm_interp.bin
 	@echo "[+] vm_interp.bin created"
 endif

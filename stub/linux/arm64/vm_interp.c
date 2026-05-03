@@ -30,6 +30,8 @@
 #include "vm_handlers/h_fpu.h"    /* FADD, FMUL, FCVT, ... */
 
 
+/* #define VM_DEBUG_TRACE */
+
 /* ---- 间接 Dispatch 跳转表 (条件编译) ---- */
 #ifdef VM_INDIRECT_DISPATCH
 #include "vm_dispatch.h"
@@ -225,6 +227,8 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
     u8 *rtlr_start = (u8 *)rtlr_ptr;
     if (*(u32 *)rtlr_start == 0x524C5452) { /* "RTLR" */
       u32 count = *(u32 *)(rtlr_start + 4);
+      /* 安全检查: 限制最大重定位数量，防止损坏的 RTLR 表导致越界 */
+      if (count > 1000000) count = 1000000;
       u8 *entry = rtlr_start + 8;
       for (u32 i = 0; i < count; i++) {
         u64 e_func_id = *(u64 *)entry;
@@ -232,8 +236,10 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
           u64 bc_off = *(u64 *)(entry + 8);
           u64 target_va = *(u64 *)(entry + 16);
           /* Fixup absolute address: runtime_addr = target_link_time_va + slide */
-          if (bc_off + 8 <= bc_len) {
-            *(u64 *)(bc_buf + bc_off) = target_va + slide;
+          /* 修复: 防止 bc_off + 8 溢出，先检查 bc_off 是否在边界内 */
+          if (bc_off <= (u64)bc_len - 8) {
+            u64 *patch_addr = (u64 *)(bc_buf + bc_off);
+            *patch_addr = target_va + slide;
           }
         } else if (e_func_id > (u64)func_id) {
           break; /* entries sorted by func_id */
