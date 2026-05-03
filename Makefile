@@ -57,7 +57,7 @@ endif
 # 编译选项
 STUB_CFLAGS = -g -c -O2 -mcmodel=tiny -fno-stack-protector \
               -fno-builtin -fno-builtin-memcpy -nostdlib -march=armv8-a \
-              -DVM_TOKEN_ENTRY -DVM_INDIRECT_DISPATCH
+              -DVM_FUNC_SPLIT -DVM_TOKEN_ENTRY
 
 DEMO_CFLAGS = -static -O0 -march=armv8-a
 

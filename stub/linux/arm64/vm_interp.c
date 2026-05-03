@@ -237,10 +237,10 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
           u64 target_va = *(u64 *)(entry + 16);
           /* Fixup absolute address: runtime_addr = target_link_time_va + slide */
           /* 修复: 防止 bc_off + 8 溢出，先检查 bc_off 是否在边界内 */
-          if (bc_off <= (u64)bc_len - 8) {
-            u64 *patch_addr = (u64 *)(bc_buf + bc_off);
-            *patch_addr = target_va + slide;
-          }
+if (bc_off <= (u64)bc_len - 8) {
+             u64 *patch_addr = (u64 *)(bc_buf + bc_off);
+             *patch_addr = target_va + slide;
+           }
         } else if (e_func_id > (u64)func_id) {
           break; /* entries sorted by func_id */
         }
