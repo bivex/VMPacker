@@ -18,7 +18,7 @@ __attribute__((noinline)) int check_ror(void){
 __attribute__((noinline)) int check_ror_w_all(void){
     int out1 = -1, out2 = -1, out3 = -1, out4 = -1;
     
-    // 用例1: 32位循环右移8位
+    // Case 1: 32-bit rotate right by 8 bits
     __asm__ volatile(
         "mov w1, #42\n"           // w1 = 42 (0x2A)
         "mov w2, #8\n"            // w2 = 8
@@ -28,7 +28,7 @@ __attribute__((noinline)) int check_ror_w_all(void){
         :
         : "w1", "w2", "w3", "memory", "cc");
     
-    // 用例2: 32位循环右移0位（应该不变）
+    // Case 2: 32-bit rotate right by 0 bits (should remain unchanged)
     __asm__ volatile(
         "mov w1, #42\n"           // w1 = 42
         "mov w2, #0\n"            // w2 = 0
@@ -38,7 +38,7 @@ __attribute__((noinline)) int check_ror_w_all(void){
         :
         : "w1", "w2", "w3", "memory", "cc");
     
-    // 用例3: 32位循环右移16位
+    // Case 3: 32-bit rotate right by 16 bits
     __asm__ volatile(
         "mov w1, #0x5678\n"
         "movk w1, #0x1234, lsl #16\n"   // w1 = 0x12345678
@@ -49,9 +49,9 @@ __attribute__((noinline)) int check_ror_w_all(void){
         :
         : "w1", "w2", "w3", "memory", "cc");
     
-    // 用例4: 32位循环右移31位（相当于左移1位）
+    // Case 4: 32-bit rotate right by 31 bits (equivalent to rotate left by 1 bit)
     __asm__ volatile(
-        "mov w1, #0x80000000\n"   // w1 = 0x80000000 (最高位为1)
+        "mov w1, #0x80000000\n"   // w1 = 0x80000000 (highest bit is 1)
         "mov w2, #31\n"           // w2 = 31
         "ror w3, w1, w2\n"        // 0x80000000 ROR 31 = 0x00000001
         "mov %w[o4], w3\n"
@@ -61,7 +61,7 @@ __attribute__((noinline)) int check_ror_w_all(void){
     
     __asm__ volatile("nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop;");
     
-    // 验证结果
+    // Verify results
     if (out1 == 0x2A000000) {        // 42 ROR 8 = 0x2A000000
         printf("ROR #8: 0x%08X (PASS)\n", out1);
     } else {

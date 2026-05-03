@@ -1,12 +1,12 @@
 /*
- * demo_all_insn.c — VMP 全指令覆盖测试
+ * demo_all_insn.c — VMP Full Instruction Coverage Test
  *
- * 覆盖 translator.go translateOne() 支持的所有 ARM64 指令。
- * 单一 check_all_insn() 函数，内部调用各子测试。
- * 每个子测试函数使用 __attribute__((noinline)) + NOP padding > 72B。
+ * Covers all ARM64 instructions supported by translator.go translateOne().
+ * A single check_all_insn() function, internally calling each sub-test.
+ * Each sub-test function uses __attribute__((noinline)) + NOP padding > 72B.
  *
- * 编译: aarch64-linux-gnu-gcc -static -O0 -march=armv8-a demo/demo_all_insn.c
- * -o build/demo_all_insn 保护: build/vmpacker.exe -func check_all_insn -v -o
+ * Compilation: aarch64-linux-gnu-gcc -static -O0 -march=armv8-a demo/demo_all_insn.c
+ * -o build/demo_all_insn Protection: build/vmpacker.exe -func check_all_insn -v -o
  * build/demo_all_insn.vmp build/demo_all_insn
  */
 #include <stdint.h>
@@ -33,7 +33,7 @@ static int g_pass = 0, g_fail = 0;
   "nop\n nop\n nop\n nop\n"
 
 /* ============================================================
- * 1. ALU 寄存器: ADD SUB MUL EOR AND ORR LSL LSR ASR MVN ROR UMULH
+ * 1. ALU Register: ADD SUB MUL EOR AND ORR LSL LSR ASR MVN ROR UMULH
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_alu_reg(void) {
   uint64_t r;
@@ -154,7 +154,7 @@ __attribute__((noinline)) uint64_t test_alu_reg(void) {
 }
 
 /* ============================================================
- * 2. ALU 立即数: ADD_IMM SUB_IMM AND_IMM ORR_IMM EOR_IMM
+ * 2. ALU Immediate: ADD_IMM SUB_IMM AND_IMM ORR_IMM EOR_IMM
  *    MUL_IMM(via MADD) SHL_IMM SHR_IMM ASR_IMM
  *    + ADDS_IMM(CMP) SUBS_IMM(CMP) ANDS_IMM(TST)
  * ============================================================ */
@@ -256,7 +256,7 @@ __attribute__((noinline)) uint64_t test_alu_imm(void) {
 }
 
 /* ============================================================
- * 3. MOV 系列: MOVZ MOVK MOVN
+ * 3. MOV Series: MOVZ MOVK MOVN
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_mov(void) {
   uint64_t r;
@@ -294,7 +294,7 @@ __attribute__((noinline)) uint64_t test_mov(void) {
 }
 
 /* ============================================================
- * 4. 加载/存储: LDR STR LDRB STRB LDRH STRH LDRSB LDRSH LDRSW
+ * 4. Load/Store: LDR STR LDRB STRB LDRH STRH LDRSB LDRSH LDRSW
  *    STP LDP
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_load_store(void) {
@@ -390,7 +390,7 @@ __attribute__((noinline)) uint64_t test_load_store(void) {
 }
 
 /* ============================================================
- * 5. 寄存器偏移加载/存储: LDR_REG LDRB_REG STR_REG STRB_REG
+ * 5. Register Offset Load/Store: LDR_REG LDRB_REG STR_REG STRB_REG
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_load_store_reg(void) {
   uint64_t r;
@@ -426,7 +426,7 @@ __attribute__((noinline)) uint64_t test_load_store_reg(void) {
 }
 
 /* ============================================================
- * 6. 分支: B B.cond CBZ CBNZ (BL/BLR/BR/RET tested implicitly)
+ * 6. Branch: B B.cond CBZ CBNZ (BL/BLR/BR/RET tested implicitly)
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_branch(void) {
   uint64_t r;
@@ -507,7 +507,7 @@ __attribute__((noinline)) uint64_t test_branch(void) {
 }
 
 /* ============================================================
- * 7. 条件选择: CSEL CSINC CSINV CSNEG
+ * 7. Conditional Selection: CSEL CSINC CSINV CSNEG
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_csel(void) {
   uint64_t r;
@@ -590,7 +590,7 @@ __attribute__((noinline)) uint64_t test_madd_msub(void) {
 }
 
 /* ============================================================
- * 9. 位域: UBFM(LSL/LSR/UBFX/UXTB/UXTH) SBFM(ASR/SBFX/SXTB/SXTH/SXTW)
+ * 9. Bitfield: UBFM(LSL/LSR/UBFX/UXTB/UXTH) SBFM(ASR/SBFX/SXTB/SXTH/SXTW)
  *    EXTR
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_bitfield(void) {
@@ -683,7 +683,7 @@ __attribute__((noinline)) uint64_t test_bitfield(void) {
 }
 
 /* ============================================================
- * 10. 扩展寄存器加减: ADD_EXT SUB_EXT ADDS_EXT SUBS_EXT
+ * 10. Extended Register Add/Sub: ADD_EXT SUB_EXT ADDS_EXT SUBS_EXT
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_add_sub_ext(void) {
   uint64_t r;
@@ -866,7 +866,7 @@ __attribute__((noinline)) uint64_t test_ccmp_ccmn(void) {
 }
 
 /* ============================================================
- * 14. ADRP / ADR (地址生成 — 通过全局变量间接测试)
+ * 14. ADRP / ADR (Address Generation — tested indirectly via global variables)
  *     编译器访问全局变量时自动生成 ADRP+ADD/LDR
  * ============================================================ */
 static volatile uint64_t g_adrp_val = 0x12345678ABCDEF00ULL;
@@ -892,7 +892,7 @@ __attribute__((noinline)) uint64_t test_simd(void) {
   __asm__ volatile("mov x11, #0\n"
                    "sub sp, sp, #64\n"
 
-                   /* 准备 16 字节数据 */
+                   /* Prepare 16-byte data */
                    "mov x9, #0x0807\n"
                    "movk x9, #0x0605, lsl #16\n"
                    "movk x9, #0x0403, lsl #32\n"
@@ -912,7 +912,7 @@ __attribute__((noinline)) uint64_t test_simd(void) {
                    "add x10, sp, #32\n"
                    "st1 {v0.16b}, [x10]\n"
 
-                   /* 验证: 比较 [sp] 和 [sp+32] */
+                   /* Validation: Compare [sp] and [sp+32] */
                    "ldr x12, [sp, #0]\n"
                    "ldr x13, [sp, #32]\n"
                    "cmp x12, x13\n"
@@ -1051,9 +1051,9 @@ __attribute__((noinline)) uint64_t test_eor_shifted(void) {
 }
 
 /* ============================================================
- * 19. BL / BLR / BR / RET (函数调用 — 通过C函数调用间接测试)
- *     check_all_insn 调用各 test_xxx 就会产生 BL
- *     BLR/BR 通过函数指针测试
+ * 19. BL / BLR / BR / RET (Function Call — tested indirectly via C function calls)
+ *     check_all_insn calls each test_xxx which produces BL
+ *     BLR/BR tested via function pointers
  * ============================================================ */
 static uint64_t __attribute__((noinline)) helper_add(uint64_t a, uint64_t b) {
   __asm__ volatile(NOPS);
@@ -1061,7 +1061,7 @@ static uint64_t __attribute__((noinline)) helper_add(uint64_t a, uint64_t b) {
 }
 
 __attribute__((noinline)) uint64_t test_bl_blr(void) {
-  /* 直接调用 → BL, 函数指针调用 → BLR */
+  /* Direct call → BL, Function pointer call → BLR */
   uint64_t v1 = helper_add(10, 20);
   if (v1 != 30)
     return 1;
@@ -1247,7 +1247,7 @@ __attribute__((noinline)) uint64_t test_adc_sbc(void) {
 }
 
 /* ============================================================
- * 23. DMB / DSB / ISB / YIELD / WFE (Batch 6 — NOP化, 不崩溃即通过)
+ * 23. DMB / DSB / ISB / YIELD / WFE (Batch 6 — converted to NOP, passing if no crash)
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_barriers(void) {
   __asm__ volatile("dmb sy\n"
@@ -1296,9 +1296,9 @@ __attribute__((noinline)) uint64_t test_atomic(void) {
 }
 
 /* ============================================================
- * 主测试入口 — VMP 保护此函数
+ * Main Test Entry — VMP protects this function
  * ============================================================ */
-/* 前向声明 (Batch 8) */
+/* Forward declarations (Batch 8) */
 uint64_t test_prfm(void);
 uint64_t test_ldpsw(void);
 uint64_t test_ldadd_cas(void);
@@ -1307,38 +1307,38 @@ __attribute__((noinline)) int check_all_insn(void) {
   g_pass = 0;
   g_fail = 0;
 
-  printf("=== VMP 全指令覆盖测试 ===\n\n");
+  printf("=== VMP Full Instruction Coverage Test ===\n\n");
 
   printf(
-      "[1] ALU 寄存器 (ADD SUB MUL EOR AND ORR LSL LSR ASR MVN ROR UMULH)\n");
+      "[1] ALU Register (ADD SUB MUL EOR AND ORR LSL LSR ASR MVN ROR UMULH)\n");
   CHK("ALU_REG", test_alu_reg() == 0);
 
-  printf("[2] ALU 立即数 (ADD SUB AND ORR EOR LSL LSR ASR + CMP CMN TST)\n");
+  printf("[2] ALU Immediate (ADD SUB AND ORR EOR LSL LSR ASR + CMP CMN TST)\n");
   CHK("ALU_IMM", test_alu_imm() == 0);
 
-  printf("[3] MOV 系列 (MOVZ MOVK MOVN)\n");
+  printf("[3] MOV Series (MOVZ MOVK MOVN)\n");
   CHK("MOV", test_mov() == 0);
 
-  printf("[4] 加载/存储 (LDR STR LDRB STRB LDRH STRH LDRSB LDRSH LDRSW STP "
+  printf("[4] Load/Store (LDR STR LDRB STRB LDRH STRH LDRSB LDRSH LDRSW STP "
          "LDP)\n");
   CHK("LOAD_STORE", test_load_store() == 0);
 
-  printf("[5] 寄存器偏移加载/存储 (LDR_REG LDRB_REG STR_REG STRB_REG)\n");
+  printf("[5] Register Offset Load/Store (LDR_REG LDRB_REG STR_REG STRB_REG)\n");
   CHK("LOAD_STORE_REG", test_load_store_reg() == 0);
 
-  printf("[6] 分支 (B B.cond CBZ CBNZ)\n");
+  printf("[6] Branch (B B.cond CBZ CBNZ)\n");
   CHK("BRANCH", test_branch() == 0);
 
-  printf("[7] 条件选择 (CSEL CSINC CSINV CSNEG)\n");
+  printf("[7] Conditional Selection (CSEL CSINC CSINV CSNEG)\n");
   CHK("CSEL", test_csel() == 0);
 
   printf("[8] MADD / MSUB\n");
   CHK("MADD_MSUB", test_madd_msub() == 0);
 
-  printf("[9] 位域 (UBFM SBFM EXTR)\n");
+  printf("[9] Bitfield (UBFM SBFM EXTR)\n");
   CHK("BITFIELD", test_bitfield() == 0);
 
-  printf("[10] 扩展寄存器加减 (ADD_EXT SUB_EXT SUBS_EXT)\n");
+  printf("[10] Extended Register Add/Sub (ADD_EXT SUB_EXT SUBS_EXT)\n");
   CHK("ADD_SUB_EXT", test_add_sub_ext() == 0);
 
   printf("[11] EON\n");
@@ -1350,7 +1350,7 @@ __attribute__((noinline)) int check_all_insn(void) {
   printf("[13] CCMP / CCMN\n");
   CHK("CCMP_CCMN", test_ccmp_ccmn() == 0);
 
-  printf("[14] ADRP / ADR (全局变量访问)\n");
+  printf("[14] ADRP / ADR (Global Variable Access)\n");
   CHK("ADRP_ADR", test_adrp_adr() == 0);
 
   printf("[15] SIMD LD1/ST1 16B\n");
@@ -1359,16 +1359,16 @@ __attribute__((noinline)) int check_all_insn(void) {
   printf("[16] SVC (syscall write)\n");
   CHK("SVC", test_svc() == 3);
 
-  printf("[17] ADDS/SUBS/CMP/CMN/TST 寄存器\n");
+  printf("[17] ADDS/SUBS/CMP/CMN/TST Register\n");
   CHK("FLAGS_REG", test_flags_reg() == 0);
 
   printf("[18] EOR shifted register\n");
   CHK("EOR_SHIFTED", test_eor_shifted() == 0);
 
-  printf("[19] BL / BLR (函数调用)\n");
+  printf("[19] BL / BLR (Function Call)\n");
   CHK("BL_BLR", test_bl_blr() == 0);
 
-  /* ---- 新指令测试 (Batch 1-7) ---- */
+  /* ---- New Instruction Testing (Batch 1-7) ---- */
   printf("[20] BIC / BICS / ORN (Batch 1)\n");
   CHK("BIC_ORN", test_bic_orn() == 0);
 
@@ -1378,29 +1378,29 @@ __attribute__((noinline)) int check_all_insn(void) {
   printf("[22] ADC / SBC (Batch 3)\n");
   CHK("ADC_SBC", test_adc_sbc() == 0);
 
-  printf("[23] DMB/DSB/ISB/YIELD 屏障 (Batch 6)\n");
+  printf("[23] DMB/DSB/ISB/YIELD Barriers (Batch 6)\n");
   CHK("BARRIERS", test_barriers() == 0);
 
-  printf("[24] LDAR/STLR/LDAXR/STLXR 原子操作 (Batch 5)\n");
+  printf("[24] LDAR/STLR/LDAXR/STLXR Atomic Operations (Batch 5)\n");
   CHK("ATOMIC", test_atomic() == 0);
 
-  printf("[25] PRFM (Batch 8 — NOP 化)\n");
+  printf("[25] PRFM (Batch 8 — NOP conversion)\n");
   CHK("PRFM", test_prfm() == 0);
 
-  printf("[26] LDPSW — 加载对+符号扩展 (Batch 8)\n");
+  printf("[26] LDPSW — Load Pair + Sign Extension (Batch 8)\n");
   CHK("LDPSW", test_ldpsw() == 0);
 
-  printf("[27] LDADD / CAS — 原子操作 (Batch 8, ARMv8.1)\n");
+  printf("[27] LDADD / CAS — Atomic Operations (Batch 8, ARMv8.1)\n");
   CHK("LDADD_CAS", test_ldadd_cas() == 0);
 
-  printf("\n=== 结果: %d PASS / %d FAIL (共 %d 项) ===\n", g_pass, g_fail,
+  printf("\n=== Result: %d PASS / %d FAIL (Total %d items) ===\n", g_pass, g_fail,
          g_pass + g_fail);
 
   return g_fail;
 }
 
 /* ============================================================
- * 25. PRFM (预取 — NOP 化, 不影响语义)
+ * 25. PRFM (Prefetch — converted to NOP, no semantic effect)
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_prfm(void) {
   volatile uint64_t data[4] = {1, 2, 3, 4};
@@ -1428,12 +1428,12 @@ __attribute__((noinline)) uint64_t test_prfm(void) {
                    :
                    : [p] "r"(data)
                    : "memory");
-  /* PRFM 不改变寄存器或值, 只要不崩就算 PASS */
+  /* PRFM does not change registers or values; if it doesn't crash, it counts as PASS */
   return (data[0] == 1 && data[3] == 4) ? 0 : 1;
 }
 
 /* ============================================================
- * 26. LDPSW (加载一对 32-bit word 并 sign-extend 到 64-bit)
+ * 26. LDPSW (Load a pair of 32-bit words and sign-extend to 64-bit)
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_ldpsw(void) {
   int32_t arr[4] = {-1, 42, -100, 0x7FFFFFFF};
@@ -1491,7 +1491,7 @@ __attribute__((noinline)) uint64_t test_ldpsw(void) {
 }
 
 /* ============================================================
- * 27. LDADD / CAS (ARMv8.1 LSE 原子操作)
+ * 27. LDADD / CAS (ARMv8.1 LSE Atomic Operations)
  * ============================================================ */
 __attribute__((noinline)) uint64_t test_ldadd_cas(void) {
   volatile uint64_t val = 100;
@@ -1552,5 +1552,8 @@ __attribute__((noinline)) uint64_t test_ldadd_cas(void) {
 
 int main(void) {
   int fail = check_all_insn();
+  return fail;
+}
+nt fail = check_all_insn();
   return fail;
 }

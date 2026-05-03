@@ -1,18 +1,18 @@
-# test/Makefile - 编译 VMPacker 测试程序
+# test/Makefile - Compile VMPacker test programs
 #
-# 用法:
-#   make arm64        - 交叉编译 ARM64 可执行文件 (需 aarch64-linux-gnu-gcc)
-#   make arm32        - 交叉编译 ARM32 可执行文件 (需 arm-linux-gnueabihf-gcc)
-#   make protect      - 对 ARM64 版本执行 VMP 保护 (需先 make arm64)
-#   make run          - 使用 qemu 运行保护后的程序 (需 qemu-user)
+# Usage:
+#   make arm64        - Cross-compile ARM64 executable (requires aarch64-linux-gnu-gcc)
+#   make arm32        - Cross-compile ARM32 executable (requires arm-linux-gnueabihf-gcc)
+#   make protect      - Perform VMP protection on the ARM64 version (requires make arm64 first)
+#   make run          - Run the protected program using qemu (requires qemu-user)
 #
-#   make so32         - 编译 ARM32 共享库 + 动态链接测试程序
-#   make so64         - 编译 ARM64 共享库 + 动态链接测试程序
-#   make so32-protect - 保护 ARM32 .so (vmp_compute + vmp_verify_key)
-#   make so64-protect - 保护 ARM64 .so
-#   make so32-run     - Docker ARM32 环境中运行 (保护前 vs 保护后)
+#   make so32         - Compile ARM32 shared library + dynamic link test program
+#   make so64         - Compile ARM64 shared library + dynamic link test program
+#   make so32-protect - Protect ARM32 .so (vmp_compute + vmp_verify_key)
+#   make so64-protect - Protect ARM64 .so
+#   make so32-run     - Run in Docker ARM32 environment (before vs. after protection)
 #
-# macOS 交叉编译 ARM32 可选:
+# macOS cross-compilation for ARM32 optional:
 #   brew install messense/macos-cross-toolchains/armv7-unknown-linux-gnueabihf
 #   make arm32 CROSS_ARM32=scripts/toolchains/armv7-unknown-linux-gnueabihf/bin/armv7-unknown-linux-gnueabihf-
 
@@ -29,15 +29,15 @@ OUT_ARM32 = $(BUILD_DIR)/simple_app_arm32
 PROTECTED = $(BUILD_DIR)/simple_app_protected
 VMPACKER  = go run ../cmd/vmpacker/
 
-# 使用 -O1 避免过度优化导致函数被内联（保护时需要能定位到 log2Console）
-# -fno-lto 避免 macOS 上 LTO 插件代码签名导致链接失败
+# Use -O1 to avoid excessive optimization causing function inlining (needed to locate log2Console during protection)
+# Avoid link failure due to LTO plugin code signing on macOS
 CFLAGS = -O1 -fno-inline-functions -fno-lto
 
-# ARM64 SO 额外加 -mgeneral-regs-only 避免编译器对 memset/memcpy 生成
-# NEON/SIMD 指令 (VMPacker 尚不支持 Advanced SIMD)
+# ARM64 SO additionally adds -mgeneral-regs-only to prevent the compiler from generating
+# NEON/SIMD instructions for memset/memcpy (VMPacker does not yet support Advanced SIMD)
 SO_CFLAGS_ARM64 = $(CFLAGS) -mgeneral-regs-only
 
-# ---------- 共享库相关 ----------
+# ---------- Shared library related ----------
 SO_SRC        = libvmptest.c
 SO_ARM32      = $(BUILD_DIR)/libvmptest_arm32.so
 SO_ARM64      = $(BUILD_DIR)/libvmptest_arm64.so
@@ -53,7 +53,7 @@ $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
 # ============================================================
-# 静态可执行文件 (已有)
+# Static executables (existing)
 # ============================================================
 
 arm64: $(OUT_ARM64)
@@ -90,7 +90,7 @@ run32: protect32
 	qemu-arm -L /usr/arm-linux-gnueabihf/ $(PROTECTED)_arm32
 
 # ============================================================
-# 共享库测试 (.so)
+# Shared library tests (.so)
 # ============================================================
 
 # --- ARM32 ---

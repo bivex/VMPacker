@@ -2,16 +2,16 @@
 #include <stdint.h>
 
 /*
- * demo_insn_ldrh.c — LDRH (16-bit unsigned load) 测试
+ * demo_insn_ldrh.c — LDRH (16-bit unsigned load) test
  *
- * 测试 LDRH 从内存加载 16-bit 无符号值并零扩展到 64-bit
+ * Test LDRH loading 16-bit unsigned value from memory and zero-extending it to 64-bit
  */
 
 __attribute__((noinline)) int64_t check_ldrh(void) {
     uint16_t arr[4] = {0x1234, 0xABCD, 0xFFFF, 0x0001};
     uint64_t r0 = 0, r1 = 0, r2 = 0, r3 = 0;
 
-    /* LDRH 各偏移 */
+    /* LDRH various offsets */
     __asm__ volatile(
         "ldrh %w[o0], [%[base], #0]\n"
         "ldrh %w[o1], [%[base], #2]\n"

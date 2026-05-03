@@ -1,107 +1,107 @@
 # VMPacker Android JNI Test
 
-验证 VMPacker 对 Android `.so` 文件（ARM32 + ARM64）的保护效果。
+Verify VMPacker's protection effect on Android `.so` files (ARM32 + ARM64).
 
-## 项目结构
+## Project Structure
 
 ```
 test/android/
-├── Makefile                          # 独立 NDK 编译 + VMPacker 保护
+├── Makefile                          # Independent NDK compilation + VMPacker protection
 ├── README.md
 ├── jni/
-│   ├── CMakeLists.txt                # CMake 构建（供 Gradle 和独立编译共用）
-│   ├── native_bridge.c               # JNI 桥接：Java ↔ libvmptest
-│   └── test_runner.c                 # adb shell 独立测试程序（dlopen 方式）
+│   ├── CMakeLists.txt                # CMake build (shared by Gradle and independent compilation)
+│   ├── native_bridge.c               # JNI bridge: Java ↔ libvmptest
+│   └── test_runner.c                 # adb shell independent test program (using dlopen)
 ├── app/
-│   ├── build.gradle                  # Android 模块构建
+│   ├── build.gradle                  # Android module build
 │   └── src/main/
 │       ├── AndroidManifest.xml
 │       ├── java/com/vmpacker/test/
-│       │   ├── MainActivity.java     # 测试界面
-│       │   └── NativeTest.java       # JNI 声明
-│       └── res/                      # 布局和资源
-├── build.gradle                      # 项目级 Gradle
+│       │   ├── MainActivity.java     # Test interface
+│       │   └── NativeTest.java       # JNI declaration
+│       └── res/                      # Layout and resources
+├── build.gradle                      # Project-level Gradle
 ├── settings.gradle
 ├── gradle.properties
 └── scripts/
     └── protect_and_repack.sh         # protect .so in APK + re-sign
 ```
 
-## 前置要求
+## Prerequisites
 
-- **Android NDK** (r21+)，设置环境变量：
+- **Android NDK** (r21+), set environment variables:
   ```bash
   export NDK_HOME=/path/to/android-ndk-rXX
   ```
-- **Go 1.21+**（用于运行 VMPacker）
-- **adb**（用于设备测试）
-- **Android SDK + Gradle**（仅 APK 构建需要）
+- **Go 1.21+** (used to run VMPacker)
+- **adb** (used for device testing)
+- **Android SDK + Gradle** (only required for APK build)
 
-## 方式一：独立 NDK 编译 + adb 测试（推荐）
+## Method 1: Independent NDK Compilation + adb Testing (Recommended)
 
-无需 Gradle/Android SDK，直接用 NDK 编译 `.so` 并在设备上测试。
+Compile `.so` directly with NDK and test on device without Gradle/Android SDK.
 
 ```bash
 cd test/android
 
-# 编译 ARM64 .so + 测试程序
+# Compile ARM64 .so + test program
 make so64 runner64
 
-# VMPacker 保护
+# VMPacker protection
 make protect64
 
-# 推送到设备并运行
+# Push to device and run
 make push64
 make run-on-device
 
-# 一键完成所有步骤
+# One-key complete all steps
 make test64
 
-# 同时测试 ARM32 和 ARM64
+# Test both ARM32 and ARM64
 make test-all
 ```
 
-### 测试流程
+### Test Process
 
-1. `make so32/so64` — 使用 NDK clang 编译 `libnative_test.so`
+1. `make so32/so64` — Use NDK clang to compile `libnative_test.so`
 2. `make protect32/protect64` — VMPacker protects target functions in `.so`
-3. `make push32/push64` — 通过 adb 推送到设备 `/data/local/tmp/vmptest/`
-4. `make run-on-device` — 分别用未保护和保护后的 `.so` 运行测试
-5. 对比输出：保护前后结果应完全一致
+3. `make push32/push64` — Push to device via adb to `/data/local/tmp/vmptest/`
+4. `make run-on-device` — Run tests with unprotected and protected `.so` respectively
+5. Compare output: results should be exactly the same before and after protection
 
-### 被保护的函数
+### Protected Functions
 
-| 函数 | 类型 | 说明 |
+| Function | Type | Description |
 |------|------|------|
-| `vmp_compute` | 纯计算 | 哈希 + 算术 + 位运算 |
-| `vmp_verify_key` | 纯计算 | 密钥校验逻辑 |
-| `vmp_md5_hex` | PLT 调用 | MD5 计算，调用 `strlen`/`memcpy`/`memset`/`snprintf` |
-| `vmp_get_process_name` | PLT 调用 | 读取 `/proc/self/comm`，调用 `open`/`read`/`close` |
+| `vmp_compute` | Pure computation | Hash + Arithmetic + Bitwise operations |
+| `vmp_verify_key` | Pure computation | Key verification logic |
+| `vmp_md5_hex` | PLT call | MD5 calculation, calls `strlen`/`memcpy`/`memset`/`snprintf` |
+| `vmp_get_process_name` | PLT call | Read `/proc/self/comm`, calls `open`/`read`/`close` |
 
-## 方式二：Gradle APK 构建
+## Method 2: Gradle APK Build
 
-构建完整的 Android 应用，在设备上运行 UI 测试。
+Build a complete Android app and run UI tests on the device.
 
 ```bash
 cd test/android
 
-# 构建 debug APK
+# Build debug APK
 make apk
 
 # Protect .so in APK and re-sign
 make apk-protect
 
-# 安装到设备
+# Install to device
 make apk-install
 ```
 
-APK 构建需要额外配置 `local.properties`：
+APK build requires additional configuration in `local.properties`:
 ```properties
 sdk.dir=/path/to/Android/sdk
 ndk.dir=/path/to/android-ndk-rXX
 ```
 
-## 预期输出
+## Expected Output
 
 ```
 === VMPacker Android SO Test Runner ===
@@ -124,10 +124,10 @@ ndk.dir=/path/to/android-ndk-rXX
 ========================================
 ```
 
-保护后的 `.so` 应产生完全相同的输出。
+The protected `.so` should produce exactly the same output.
 
-## 注意事项
+## Notes
 
-- ARM64 编译使用 `-mgeneral-regs-only` 避免 NEON/SIMD 指令（VMPacker 暂不支持）
-- 测试程序使用 `dlopen` 加载 `.so`，与 Android 运行时行为一致
-- `/proc/self/comm` 在 Android 上返回进程名（即包名或可执行文件名）
+- ARM64 compilation uses `-mgeneral-regs-only` to avoid NEON/SIMD instructions (VMPacker does not yet support them)
+- The test program uses `dlopen` to load the `.so`, consistent with Android runtime behavior
+- `/proc/self/comm` returns the process name on Android (i.e., package name or executable filename)

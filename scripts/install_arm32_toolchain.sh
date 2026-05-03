@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# install_arm32_toolchain.sh — 安装 messense 预编译 ARM32 工具链
-# 用法: ./scripts/install_arm32_toolchain.sh [本地tar.gz路径]
-#       若传入本地路径则跳过下载，直接解压安装
-# 将工具链安装到 scripts/toolchains/armv7-unknown-linux-gnueabihf/
+# install_arm32_toolchain.sh — Install messense pre-compiled ARM32 toolchain
+# Usage: ./scripts/install_arm32_toolchain.sh [local tar.gz path]
+#       If a local path is provided, skip download and extract directly to install
+# Install the toolchain to scripts/toolchains/armv7-unknown-linux-gnueabihf/
 
 set -e
 

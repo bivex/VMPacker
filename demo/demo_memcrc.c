@@ -1,17 +1,17 @@
 /*
- * demo_memcrc.c — 内存 CRC 自校验 demo (ARM64)
+ * demo_memcrc.c — Memory CRC self-check demo (ARM64)
  *
- * 验证: 运行时对自身代码段做 CRC，检测是否被 patch。
- * 编译: aarch64-linux-gnu-gcc -static -O2 demo_memcrc.c -o demo_memcrc
+ * Verify: Perform CRC on its own code segment at runtime to detect if it has been patched.
+ * Compile: aarch64-linux-gnu-gcc -static -O2 demo_memcrc.c -o demo_memcrc
  *
- * 本 demo 模拟 stub 的两种 CRC:
- *   1. 字节码 CRC  — 校验 VM 字节码是否被篡改
- *   2. 内存 CRC    — 校验 stub 代码自身是否被 patch (反 IDA 修改)
+ * This demo simulates two types of CRC for the stub:
+ *   1. Bytecode CRC - Verify if the VM bytecode has been tampered with
+ *   2. Memory CRC - Verify if the stub code itself has been patched (anti-IDA modification)
  */
 #include <stdio.h>
 #include <string.h>
 
-/* ==== CRC32 (与 demo_crc.c 相同, 无外部依赖) ==== */
+/* ==== CRC32 (Same as demo_crc.c, no external dependencies) ==== */
 
 static unsigned int crc32_tab[256];
 static int crc32_ready = 0;
@@ -36,15 +36,15 @@ static unsigned int crc32_calc(const unsigned char *data, unsigned int len) {
   return crc ^ 0xFFFFFFFFu;
 }
 
-/* ==== 模拟 stub 代码区域 ==== */
+/* ==== Simulate stub code area ==== */
 
 /*
- * 用一个全局数组模拟 stub 的 .text 段。
+ * Use a global array to simulate the .text segment of the stub.
  * In a real scenario, the stub obtains its own PC via the ADR instruction,
  * then back-calculates to the blob start address for CRC.
  */
 static unsigned char fake_stub_code[] = {
-    /* 模拟 64 字节 stub 代码 */
+    /* Simulate 64 bytes of stub code */
     0xFD, 0x7B, 0xBF, 0xA9, /* stp x29, x30, [sp, #-16]! */
     0xFD, 0x03, 0x00, 0x91, /* mov x29, sp               */
     0x00, 0x00, 0x80, 0xD2, /* mov x0, #0                */
@@ -58,14 +58,14 @@ static unsigned char fake_stub_code[] = {
     0xBA, 0xBE, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
 };
 
-/* ==== 测试 1: 内存 CRC 正常校验 ==== */
+/* ==== Test 1: Normal memory CRC check ==== */
 
 static int test_memcrc_normal(void) {
-  /* 模拟: packer 编译后计算 stub 代码的 CRC 并嵌入 */
+  /* Simulate: Packer calculates the CRC of the stub code after compilation and embeds it */
   unsigned int expected_crc =
       crc32_calc(fake_stub_code, sizeof(fake_stub_code));
 
-  /* 模拟: 运行时 stub 对自身代码做 CRC */
+  /* Simulate: Stub performs CRC on its own code at runtime */
   unsigned int actual_crc = crc32_calc(fake_stub_code, sizeof(fake_stub_code));
 
   if (actual_crc == expected_crc) {
@@ -76,13 +76,13 @@ static int test_memcrc_normal(void) {
   return 1;
 }
 
-/* ==== 测试 2: 检测 IDA patch (0xCC / BRK 断点) ==== */
+/* ==== Test 2: Detect IDA patch (0xCC / BRK breakpoint) ==== */
 
 static int test_memcrc_patch(void) {
   unsigned int expected_crc =
       crc32_calc(fake_stub_code, sizeof(fake_stub_code));
 
-  /* 模拟: IDA/调试器在入口处 patch 一条指令 (改成 BRK #0) */
+  /* Simulate: IDA/debugger patches an instruction at the entry (change to BRK #0) */
   unsigned char saved[4];
   memcpy(saved, fake_stub_code, 4);
   fake_stub_code[0] = 0x00;
@@ -92,7 +92,7 @@ static int test_memcrc_patch(void) {
 
   unsigned int actual_crc = crc32_calc(fake_stub_code, sizeof(fake_stub_code));
 
-  /* 恢复 */
+  /* Restore */
   memcpy(fake_stub_code, saved, 4);
 
   if (actual_crc != expected_crc) {
@@ -104,18 +104,18 @@ static int test_memcrc_patch(void) {
   return 1;
 }
 
-/* ==== 测试 3: ADR 自定位 (ARM64 获取当前 PC) ==== */
+/* ==== Test 3: ADR self-location (ARM64 gets the current PC) ==== */
 
 /*
- * 在 ARM64 上，stub 可以用 ADR 获取自身地址:
- *   adr x0, .       => x0 = 当前指令地址
- *   sub x0, x0, #offset_from_blob_start => x0 = blob 起始
+ * On ARM64, the stub can use ADR to get its own address:
+ *   adr x0, .       => x0 = current instruction address
+ *   sub x0, x0, #offset_from_blob_start => x0 = blob start
  *
- * 这里用函数指针模拟验证该机制：
- * 取 test_self_locate 函数的地址，对前 N 字节算 CRC。
+ * Here, a function pointer is used to simulate and verify this mechanism:
+ * Take the address of the test_func_to_check function and calculate the CRC for the first N bytes.
  */
 
-/* 标记一个小函数，让我们可以对它做 CRC */
+/* Mark a small function so we can perform a CRC on it */
 __attribute__((noinline)) static unsigned int
 test_func_to_check(unsigned int a, unsigned int b) {
   return a + b + 42;
@@ -123,11 +123,11 @@ test_func_to_check(unsigned int a, unsigned int b) {
 
 static int test_self_locate(void) {
   /*
-   * 对 test_func_to_check 的前 16 字节做 CRC
+   * Perform CRC on the first 16 bytes of test_func_to_check
    * (In the actual stub, the entire blob is CRC-checked)
    *
-   * 注意: 这里只证明"可以从函数指针获取代码地址并计算CRC",
-   * 不验证具体 CRC 值（因为编译器可能改变代码）。
+   * Note: This only proves "can get code address from function pointer and calculate CRC",
+   * does not verify the specific CRC value (as the compiler may change the code).
    */
   const unsigned char *code_ptr = (const unsigned char *)test_func_to_check;
   unsigned int crc1 = crc32_calc(code_ptr, 16);
@@ -142,18 +142,18 @@ static int test_self_locate(void) {
   return 1;
 }
 
-/* ==== 测试 4: 双层 CRC 联合校验 ==== */
+/* ==== Test 4: Combined dual-layer CRC check ==== */
 
 static int test_dual_crc(void) {
-  /* 模拟字节码 */
+  /* Simulate bytecode */
   unsigned char bytecode[] = {0x5A, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                               0x42, 0x00, 0x2F, 0x02, 0x01, 0x37, 0x03, 0x01};
 
-  /* packer 端预计算: stub CRC + bytecode CRC */
+  /* Pre-calculation on the packer side: stub CRC + bytecode CRC */
   unsigned int stub_crc = crc32_calc(fake_stub_code, sizeof(fake_stub_code));
   unsigned int bc_crc = crc32_calc(bytecode, sizeof(bytecode));
 
-  /* 运行时校验: 先查内存 CRC，再查字节码 CRC */
+  /* Runtime check: first check memory CRC, then check bytecode CRC */
   unsigned int check1 = crc32_calc(fake_stub_code, sizeof(fake_stub_code));
   unsigned int check2 = crc32_calc(bytecode, sizeof(bytecode));
 
@@ -168,22 +168,22 @@ static int test_dual_crc(void) {
   return 1;
 }
 
-/* ==== 测试 5: 校验失败 → 直接不运行 ==== */
+/* ==== Test 5: Check failed → Do not run ==== */
 
 static int test_fail_abort(void) {
   unsigned int expected_crc =
       crc32_calc(fake_stub_code, sizeof(fake_stub_code));
 
-  /* 篡改一个字节 */
+  /* Tamper with one byte */
   unsigned char saved = fake_stub_code[10];
   fake_stub_code[10] ^= 0xFF;
 
   unsigned int actual_crc = crc32_calc(fake_stub_code, sizeof(fake_stub_code));
 
-  /* 恢复 */
+  /* Restore */
   fake_stub_code[10] = saved;
 
-  /* 模拟 stub 行为: CRC 不匹配 → 返回 0, 不执行任何字节码 */
+  /* Simulate stub behavior: CRC mismatch → return 0, do not execute any bytecode */
   int would_run = (actual_crc == expected_crc);
 
   if (!would_run) {

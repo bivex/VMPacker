@@ -1,18 +1,18 @@
 /*
- * vm_interp.c — 模块化 VM 解释器 (Linux/ARM64 PIC blob)
+ * vm_interp.c — Modular VM Interpreter (Linux/ARM64 PIC blob)
  *
- * 架构:
- *   vm_types.h       → 类型 + vm_ctx_t 结构体
- *   vm_opcodes.h     → 操作码定义
- *   vm_decode.h      → 字节码读取工具
- *   vm_handlers/*.h  → 分模块指令 handler
+ * Architecture:
+ *   vm_types.h       → Types + vm_ctx_t struct
+ *   vm_opcodes.h     → Opcode definitions
+ *   vm_decode.h      → Bytecode reading utilities
+ *   vm_handlers/*.h  → Modular instruction handlers
  *
- * 编译 (交叉编译为 blob):
+ * Compilation (Cross-compile to blob):
  *   aarch64-linux-gnu-gcc -c -Os -mcmodel=tiny -fno-stack-protector \
  *     -fno-builtin -nostdlib -march=armv8-a vm_interp.c -o vm_interp.o
  */
 
-/* ---- 基础设施 ---- */
+/* ---- Infrastructure ---- */
 
 #include "vm_decode.h"
 #include "vm_opcodes.h"
@@ -21,27 +21,27 @@
 #include "vm_crc.h"
 #include "vm_security.h"
 
-/* ---- 指令 Handler 模块 ---- */
+/* ---- Instruction Handler Modules ---- */
 #include "vm_handlers/h_alu.h" /* ADD/SUB/MUL/XOR/AND/OR/SHL/SHR/ASR/NOT/ROR + _IMM */
 #include "vm_handlers/h_branch.h" /* JMP/JE/JNE/JL/JGE/JGT/JLE/JB/JAE */
 #include "vm_handlers/h_cmp.h"    /* CMP, CMP_IMM */
 #include "vm_handlers/h_mem.h"    /* LOAD/STORE 8/32/64 */
 #include "vm_handlers/h_mov.h"    /* MOV_IMM, MOV_IMM32, MOV_REG */
 #include "vm_handlers/h_stack.h"  /* PUSH, POP */
-#include "vm_handlers/h_stack_ops.h" /* 栈机器操作 handler (VLOAD/VSTORE/VADD...) */
+#include "vm_handlers/h_stack_ops.h" /* Stack machine operation handlers (VLOAD/VSTORE/VADD...) */
 #include "vm_handlers/h_system.h" /* NOP, CALL_NAT, BR_REG, VLD16, VST16 */
 #include "vm_handlers/h_fpu.h"    /* FADD, FMUL, FCVT, ... */
 
 
 /* #define VM_DEBUG_TRACE */
 
-/* ---- 间接 Dispatch 跳转表 (条件编译) ---- */
+/* ---- Indirect Dispatch Jump Table (Conditional Compilation) ---- */
 #ifdef VM_INDIRECT_DISPATCH
 #include "vm_dispatch.h"
 #endif
 
-/* ---- Token 化入口 (条件编译) ---- */
-/* TOKEN_ONLY: Token 入口始终编译 */
+/* ---- Tokenized Entry (Conditional Compilation) ---- */
+/* TOKEN_ONLY: Token entry is always compiled */
 #include "vm_token.h"
 
 /* ---- Utils (no libc) ---- */
@@ -63,7 +63,7 @@ void *memcpy(void *dest, const void *src, unsigned long n) {
   return ret;
 }
 
-/* ---- syscall: mmap (无 libc 依赖) ---- */
+/* ---- syscall: mmap (no libc dependency) ---- */
 static inline void *sys_mmap(unsigned long size) {
   register long x8 __asm__("x8") = 222; /* __NR_mmap */
   register long x0 __asm__("x0") = 0;   /* addr = NULL */
@@ -89,34 +89,34 @@ static inline void sys_munmap(void *addr, unsigned long size) {
 }
 
 /*
- * vm_entry — VM 解释器入口
+ * vm_entry — VM Interpreter Entry
  *
- * 参数:
- *   args    : 指向保存的 X0-X7, callerFP, callerLR, V0-V7, X19-X28
- *             (共36个u64: args[0..7]=X0-X7, args[8..9]=FP/LR,
+ * Parameters:
+ *   args    : Pointer to saved X0-X7, callerFP, callerLR, V0-V7, X19-X28
+ *             (Total 36 u64: args[0..7]=X0-X7, args[8..9]=FP/LR,
  *              args[10..25]=V0-V7, args[26..35]=X19-X28)
- *   enc_bc  : XOR 加密的字节码
- *   bc_len  : 字节码长度
- *   xor_key : XOR 解密密钥
+ *   enc_bc  : XOR encrypted bytecode
+ *   bc_len  : bytecode length
+ *   xor_key : XOR decryption key
  *
- * 返回: R[0] (模拟 X0 返回值)
+ * Returns: R[0] (Simulated X0 return value)
  */
 __attribute__((section(".text.entry"))) u64
 vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_ptr,
          u32 func_id);
 
 /* ================================================================
- * Token 化入口 (条件编译)
+ * Tokenized Entry (Conditional Compilation)
  *
- * Token trampoline (3 条指令):
+ * Token trampoline (3 instructions):
  *   MOV  W16, #token_lo16
  *   MOVK W16, #token_hi16, LSL#16
  *   B    vm_entry_token
  *
- * X16 (IP0) 传递 token，X0-X7 保持调用方原始参数不变。
- * vm_entry_token_asm 负责保存寄存器并调用 vm_entry_token_inner。
+ * X16 (IP0) passes token, X0-X7 remain original caller parameters.
+ * vm_entry_token_asm is responsible for saving registers and calling vm_entry_token_inner.
  * ================================================================ */
-/* TOKEN_ONLY: Token 入口始终编译 */
+/* TOKEN_ONLY: Token entry is always compiled */
 
 /* Packer patches this variable with the token descriptor table VA in payload */
 __attribute__((section(".data.entry"), used)) volatile u64 _token_table_va = 0;
@@ -124,61 +124,61 @@ __attribute__((section(".data.entry"), used)) volatile u64 _token_table_va = 0;
  * so the stub can compute ASLR slide = runtime_self_va - link_time_self_va */
 __attribute__((section(".data.entry"), used)) volatile u64 _link_time_self_va = 0;
 
-/* 内部 C 函数: 解码 token 并调用 vm_entry */
+/* Internal C function: Decode token and call vm_entry */
 __attribute__((noinline, section(".text.entry"))) u64
 vm_entry_token_inner(u64 *args, u32 token) {
   u8 xor_key = (u8)TOKEN_XOR_KEY(token);
   u32 func_id = TOKEN_FUNC_ID(token);
 
-  /* PIE 兼容: _token_table_va 存储的是相对于 stub 基址的偏移
-   * 用 ADR 获取 stub 基址 (PC-relative, ±1MB) */
+  /* PIE compatible: _token_table_va stores the offset relative to the stub base address
+   * Use ADR to get stub base address (PC-relative, ±1MB) */
   extern u8 _vmp_stub_base;
   u64 self_va;
   __asm__ volatile("adr %0, _vmp_stub_base" : "=r"(self_va));
   u64 tbl_off = *(volatile u64 *)&_token_table_va;
   if (__builtin_expect(tbl_off == 0, 0))
-    return 0; /* 表未初始化, 安全退出 */
+    return 0; /* Table not initialized, safe exit */
 
   /* Compute ASLR slide for PIE/ET_DYN */
   u64 link_time_self = *(volatile u64 *)&_link_time_self_va;
   u64 slide = (link_time_self != 0) ? (self_va - link_time_self) : 0;
 
   token_desc_t *table = (token_desc_t *)(self_va + tbl_off);
-  /* bc_off 也是相对于 _token_table_va 的偏移 */
+  /* bc_off is also the offset relative to _token_table_va */
   u8 *enc_bc = (u8 *)(self_va + table[func_id].bc_off);
   u32 bc_len = table[func_id].bc_len;
 
   if (__builtin_expect(enc_bc == (u8 *)self_va || bc_len == 0, 0))
-    return 0; /* 无效条目, 安全退出 */
+    return 0; /* Invalid entry, safe exit */
 
-  /* ---- 运行时重定位 (RTLR) ---- */
-  /* RTLR table 偏移存储在 _token_table_va + 16 */
+  /* ---- Runtime Relocation (RTLR) ---- */
+  /* RTLR table offset stored at _token_table_va + 16 */
   u64 rtlr_off = *(volatile u64 *)(&_token_table_va + 2);
   void *rtlr_ptr = (rtlr_off != 0) ? (void *)(self_va + rtlr_off) : 0;
 
   return vm_entry(args, enc_bc, bc_len, xor_key, slide, rtlr_ptr, func_id);
 }
 
-/* Naked 汇编入口: 保存调用方寄存器, 调用 C 内部函数 */
+/* Naked assembly entry: Save caller registers, call internal C function */
 /* vm_entry_token moved to vm_entry.S to avoid naked attribute issues with GCC */
 
 /* end TOKEN_ONLY */
 
-/* ---- vm_entry 实现 ---- */
+/* ---- vm_entry Implementation ---- */
 __attribute__((section(".text.entry"))) u64
 vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_ptr,
          u32 func_id) {
   u64 ret = 0;
   
-  /* ---- 1. 动态分配字节码缓冲区 (mmap, 替代栈上 64KB) ---- */
+  /* ---- 1. Dynamically allocate bytecode buffer (mmap, replacing 64KB on stack) ---- */
   if (bc_len > VM_BYTECODE_MAX)
     bc_len = VM_BYTECODE_MAX;
-  u32 alloc_size = (bc_len + 4095u) & ~4095u; /* 页对齐向上取整 */
+  u32 alloc_size = (bc_len + 4095u) & ~4095u; /* Page alignment rounded up */
   u8 *bc_buf = (u8 *)sys_mmap(alloc_size);
   if ((long)bc_buf < 0)
-    return 0; /* mmap 失败, 安全退出 */
+    return 0; /* mmap failed, safe exit */
 
-  /* ---- 1b. XOR 解密 (8 字节加宽, ~8x 加速) ---- */
+  /* ---- 1b. XOR decryption (8-byte widening, ~8x speedup) ---- */
   u64 xk8 = (u64)xor_key;
   xk8 |= xk8 << 8;
   xk8 |= xk8 << 16;
@@ -193,12 +193,12 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
       bc_buf[i] = enc_bc[i] ^ xor_key;
   }
 
-  /* ---- 1c. 运行时重定位 (RTLR) — 在可写缓冲区执行 ---- */
+  /* ---- 1c. Runtime Relocation (RTLR) — executed in writable buffer ---- */
   if (rtlr_ptr != 0) {
     u8 *rtlr_start = (u8 *)rtlr_ptr;
     if (*(u32 *)rtlr_start == 0x524C5452) { /* "RTLR" */
       u32 count = *(u32 *)(rtlr_start + 4);
-      /* 安全检查: 限制最大重定位数量，防止损坏的 RTLR 表导致越界 */
+      /* Security check: Limit maximum relocations to prevent out-of-bounds caused by corrupted RTLR table */
       if (count > 1000000) count = 1000000;
       u8 *entry = rtlr_start + 8;
       for (u32 i = 0; i < count; i++) {
@@ -207,7 +207,7 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
           u64 bc_off = *(u64 *)(entry + 8);
           u64 target_va = *(u64 *)(entry + 16);
           /* Fixup absolute address: runtime_addr = target_link_time_va + slide */
-          /* 修复: 防止 bc_off + 8 溢出，先检查 bc_off 是否在边界内 */
+          /* Fix: Prevent bc_off + 8 overflow, check if bc_off is within bounds first */
 if (bc_off <= (u64)bc_len - 8) {
              u64 *patch_addr = (u64 *)(bc_buf + bc_off);
              *patch_addr = target_va + slide;
@@ -220,7 +220,7 @@ if (bc_off <= (u64)bc_len - 8) {
     }
   }
 
-  /* ---- 2b. 初始化 VM 上下文 (mmap 堆分配) ---- */
+  /* ---- 2b. Initialize VM context (mmap heap allocation) ---- */
   u32 ctx_alloc = (sizeof(vm_ctx_t) + 4095u) & ~4095u;
   vm_ctx_t *vm = (vm_ctx_t *)sys_mmap(ctx_alloc);
   if ((long)vm < 0) {
@@ -241,16 +241,16 @@ if (bc_off <= (u64)bc_len - 8) {
   /* Anti-Debug: Basic Timing Check (measure start time) */
   unsigned long long start_time = sec_get_timer();
 
-  /* ---- 2c. 解析字节码尾部 trailer ---- */
-  /* 尾部格式 (从末尾向前剥离):
+  /* ---- 2c. Parse bytecode trailer ---- */
+  /* Trailer format (stripped backwards from the end):
    *   [...bytecode...][BR map entries][reverse(1B)][oc_key(4B)]
    *                    [map_count:u32][func_addr:u64][func_size:u32]
    *
-   * 剥离顺序: func_size(4B) → func_addr(8B) → map_count(4B)
+   * Stripping order: func_size(4B) → func_addr(8B) → map_count(4B)
    *           → oc_key(4B) → reverse(1B) → BR map entries
-   * 固定 trailer 大小: 4+8+4+4+1 = 21B
+   * Fixed trailer size: 4+8+4+4+1 = 21B
    */
-  if (bc_len >= 21 + 256) { /* 最小 trailer: 21B + 256B(op_map) */
+  if (bc_len >= 21 + 256) { /* Minimum trailer: 21B + 256B(op_map) */
     u32 trail_func_size = rd32(&bc_buf[bc_len - 4]);
     u64 trail_func_addr = rd64(&bc_buf[bc_len - 12]);
     u32 trail_map_count = rd32(&bc_buf[bc_len - 16]);
@@ -260,7 +260,7 @@ if (bc_off <= (u64)bc_len - 8) {
         trail_map_count * 8 +
         21 + 256; /* +21 for reverse+oc_key+map_count+func_addr+func_size + 256 for op_map */
 
-    /* 设置 OpcodeCryptor 密钥 + reverse 标志 */
+    /* Set OpcodeCryptor key + reverse flag */
     vm->oc_key = trail_oc_key;
     vm->reverse = trail_reverse;
 
@@ -270,10 +270,10 @@ if (bc_off <= (u64)bc_len - 8) {
       vm->func_size = trail_func_size;
       vm->map_count = trail_map_count;
       vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size + 256];
-      vm->bc_len = bc_len - map_data_size; /* 实际字节码不含 trailer */
+      vm->bc_len = bc_len - map_data_size; /* Actual bytecode does not include trailer */
 
-      /* 插入排序 addr_map (按 arm64_off 升序, 为二分查找准备) */
-      /* 注: 使用字段级拷贝避免编译器生成隐式 memcpy (-nostdlib) */
+      /* Insertion sort addr_map (ascending by arm64_off, for binary search) */
+      /* Note: Use field-level copy to avoid compiler-generated implicit memcpy (-nostdlib) */
       for (u32 j = 1; j < vm->map_count; j++) {
         u32 t_arm = vm->addr_map[j].arm64_off;
         u32 t_vm = vm->addr_map[j].vm_off;
@@ -287,7 +287,7 @@ if (bc_off <= (u64)bc_len - 8) {
         vm->addr_map[k + 1].vm_off = t_vm;
       }
     } else {
-      /* 无 BR map: 只剥离 21B 固定 trailer */
+      /* No BR map: Strip only 21B fixed trailer */
       vm->bc_len = bc_len - 21;
       map_data_size = 21 + 256;
     }
@@ -327,27 +327,27 @@ if (end_time - start_time > 1000000) {
 /* ---- Anti-Debug: Breakpoint Scanning ---- */
 if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
 
-/* ---- OpcodeCryptor 解密宏 (两种模式共用) ---- */
+/* ---- OpcodeCryptor decryption macro (common to both modes) ---- */
 #define OC_DECRYPT(pc, key) ((u8)((key) ^ ((pc) * 0x9E3779B9u)))
 
 #ifdef VM_INDIRECT_DISPATCH
   /* ================================================================
-   * 间接 Dispatch 模式: 相对偏移跳转表 + 函数指针间接调用
+   * Indirect Dispatch mode: Relative offset jump table + indirect function pointer call
    *
-   * 替代 computed goto，使 IDA Pro 等静态分析工具
-   * 无法追踪所有 handler 目标地址。
+   * Replaces computed goto, making static analysis tools like IDA Pro
+   * unable to track all handler target addresses.
    * ================================================================ */
 
-  /* ---- 运行时初始化跳转表 (栈上分配, RX blob 不可写 BSS) ---- */
+  /* ---- Runtime initialization of jump table (stack allocation, RX blob non-writable BSS) ---- */
   vm_handler_fn vm_jump_table[256];
   vm_init_jump_table(vm_jump_table);
 
-  /* ---- PC 初始化: reverse 模式从 bc_len 开始 ---- */
+  /* ---- PC initialization: reverse mode starts from bc_len ---- */
   if (vm->reverse) {
     vm->pc = vm->bc_len;
   }
 
-  /* ---- 间接 Dispatch 主循环 ---- */
+  /* ---- Indirect Dispatch main loop ---- */
   for (;;) {
     /* -- Runtime Security Periodic Check -- */
     int sec_res = sec_runtime_check(vm);
@@ -356,7 +356,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
       goto cleanup;
     }
 
-    /* -- 反向/正向 PC 定位 -- */
+    /* -- Reverse/Forward PC positioning -- */
     if (vm->reverse) {
       if (__builtin_expect((i64)vm->pc <= 0, 0))
         break;
@@ -372,16 +372,16 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
         break;
     }
 
-    /* -- OpcodeCryptor 解密 -- */
+    /* -- OpcodeCryptor decryption -- */
     u8 _raw_op = vm->bc[vm->pc];
     u8 _dec_op = vm->oc_key ? (_raw_op ^ OC_DECRYPT(vm->pc, vm->oc_key)) : _raw_op;
 
-    /* -- 指令大小校验 -- */
+    /* -- Instruction size validation -- */
     u8 _isz = vm_insn_size(_dec_op);
     if (__builtin_expect(_isz == 0 || vm->pc + _isz > vm->bc_len, 0))
       break;
 
-    /* -- 特殊处理: HALT / RET (不经过跳转表) -- */
+    /* -- Special handling: HALT / RET (bypassing jump table) -- */
     if (_dec_op == OP_HALT) {
       ret = vm->R[0];
       goto cleanup;
@@ -391,12 +391,12 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
       goto cleanup;
     }
 
-    /* -- 间接 Dispatch: 直接从跳转表取函数指针调用 -- */
+    /* -- Indirect Dispatch: Call function pointer directly from jump table -- */
 #ifdef VM_DEBUG_TRACE
-    /* -- Debug trace: 输出 pc+op 到 stderr -- */
+    /* -- Debug trace: output pc+op to stderr -- */
     {
       u8 _tbuf[16];
-/* 内联计算十六进制字符 (避免 static 数据引用) */
+/* Inline calculation of hex characters (avoid static data reference) */
 #define _HX(n) ((u8)((n) < 10 ? '0' + (n) : 'A' + (n) - 10))
       _tbuf[0] = _HX((vm->pc >> 12) & 0xF);
       _tbuf[1] = _HX((vm->pc >> 8) & 0xF);
@@ -420,15 +420,15 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     vm_handler_fn _handler = vm_jump_table[_dec_op];
     u32 _step = _handler(vm);
 
-    /* -- 检查 HALT/RET 哨兵 -- */
+    /* -- Check HALT/RET sentinel -- */
     if (__builtin_expect(_step == VM_STEP_HALT || _step == VM_STEP_RET, 0)) {
       ret = vm->R[0];
       goto cleanup;
     }
 
-    /* -- 推进 PC -- */
-    /* _step == 0: 分支 handler 已直接设置 pc, 不推进 */
-    /* _step > 0 且非 reverse: 正常推进 */
+    /* -- Advance PC -- */
+    /* _step == 0: Branch handler has directly set pc, do not advance */
+    /* _step > 0 and not reverse: Normal advancement */
     if (_step > 0 && !vm->reverse) {
       vm->pc += _step;
     }
@@ -437,24 +437,24 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
 #else /* !VM_INDIRECT_DISPATCH */
 
   /* ================================================================
-   * 原始 Computed Goto 模式 (保持不变)
+   * Original Computed Goto mode (remains unchanged)
    * ================================================================ */
 
-  /* ---- 3. Computed goto 分发表 (替代 switch-case, ~20-30% 加速) ---- */
-  /* GCC 扩展: &&label 获取标签地址, goto *ptr 跳转 */
-  /* 注: 使用循环填充默认值避免 [0...255] 范围初始化生成隐式 memcpy */
+  /* ---- 3. Computed goto dispatch table (alternative to switch-case, ~20-30% speedup) ---- */
+  /* GCC extension: &&label gets label address, goto *ptr jumps */
+  /* Note: Use loop to fill defaults to avoid [0...255] range initialization generating implicit memcpy */
   const void *dtab[256];
   for (int _i = 0; _i < 256; _i++)
     dtab[_i] = &&L_UNKNOWN;
-  /* 系统 */
+  /* System */
   dtab[OP_NOP] = &&L_NOP;
   dtab[OP_HALT] = &&L_HALT;
   dtab[OP_RET] = &&L_RET;
-  /* 数据移动 */
+  /* Data Movement */
   dtab[OP_MOV_IMM] = &&L_MOV_IMM;
   dtab[OP_MOV_IMM32] = &&L_MOV_IMM32;
   dtab[OP_MOV_REG] = &&L_MOV_REG;
-  /* 内存 */
+  /* Memory */
   dtab[OP_LOAD8] = &&L_LOAD8;
   dtab[OP_LOAD32] = &&L_LOAD32;
   dtab[OP_LOAD64] = &&L_LOAD64;
@@ -463,7 +463,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   dtab[OP_STORE64] = &&L_STORE64;
   dtab[OP_LOAD16] = &&L_LOAD16;
   dtab[OP_STORE16] = &&L_STORE16;
-  /* ALU 三寄存器 */
+  /* ALU Three-Register */
   dtab[OP_ADD] = &&L_ADD;
   dtab[OP_SUB] = &&L_SUB;
   dtab[OP_MUL] = &&L_MUL;
@@ -476,7 +476,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   dtab[OP_NOT] = &&L_NOT;
   dtab[OP_ROR] = &&L_ROR;
   dtab[OP_UMULH] = &&L_UMULH;
-  /* ALU 立即数 */
+  /* ALU Immediate */
   dtab[OP_ADD_IMM] = &&L_ADD_IMM;
   dtab[OP_SUB_IMM] = &&L_SUB_IMM;
   dtab[OP_XOR_IMM] = &&L_XOR_IMM;
@@ -486,10 +486,10 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   dtab[OP_SHL_IMM] = &&L_SHL_IMM;
   dtab[OP_SHR_IMM] = &&L_SHR_IMM;
   dtab[OP_ASR_IMM] = &&L_ASR_IMM;
-  /* 比较 */
+  /* Comparison */
   dtab[OP_CMP] = &&L_CMP;
   dtab[OP_CMP_IMM] = &&L_CMP_IMM;
-  /* 分支 */
+  /* Branch */
   dtab[OP_JMP] = &&L_JMP;
   dtab[OP_JE] = &&L_JE;
   dtab[OP_JNE] = &&L_JNE;
@@ -501,10 +501,10 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   dtab[OP_JAE] = &&L_JAE;
   dtab[OP_JBE] = &&L_JBE;
   dtab[OP_JA] = &&L_JA;
-  /* 栈操作 */
+  /* Stack Operations */
   dtab[OP_PUSH] = &&L_PUSH;
   dtab[OP_POP] = &&L_POP;
-  /* 原生调用 */
+  /* Native Call */
   dtab[OP_CALL_NAT] = &&L_CALL_NAT;
   dtab[OP_CALL_REG] = &&L_CALL_REG;
   dtab[OP_BR_REG] = &&L_BR_REG;
@@ -527,7 +527,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   /* MRS */
   dtab[OP_MRS] = &&L_MRS;
 
-  /* ---- 栈机器操作码 ---- */
+  /* ---- Stack Machine Opcodes ---- */
   dtab[OP_S_VLOAD] = &&L_S_VLOAD;
   dtab[OP_S_VSTORE] = &&L_S_VSTORE;
   dtab[OP_S_PUSH_IMM32] = &&L_S_PUSH32;
@@ -574,8 +574,8 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   dtab[OP_SVLD] = &&L_SVLD;
   dtab[OP_SVST] = &&L_SVST;
 
-/* 反向模式: pc 指向指令末尾的 size标记之后
- * 步骤: pc--; size = bc[pc]; pc -= size; 现在 pc 指向指令起始 */
+/* Reverse mode: pc points after the size marker at the end of instruction
+ * Steps: pc--; size = bc[pc]; pc -= size; now pc points to instruction start */
 #define DISPATCH()                                                             \
   do {                                                                         \
     int _sec_res = sec_runtime_check(vm);                                      \
@@ -605,7 +605,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     goto *dtab[_dec_op];                                                       \
   } while (0)
 
-/* NEXT: handler 必须总是执行; 正向 pc += n, 反向忽略 advance */
+/* NEXT: handler must always execute; forward pc += n, reverse ignores advance */
 #define NEXT(n)                                                                \
   do {                                                                         \
     u32 _adv = (n);                                                            \
@@ -614,17 +614,17 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
       vm->pc += _adv;                                                          \
     DISPATCH();                                                                \
   } while (0)
-#define NEXT0() DISPATCH() /* handler 已设置 pc */
+#define NEXT0() DISPATCH() /* handler has set pc */
 
-  /* ---- PC 初始化: reverse 模式从 bc_len 开始 ---- */
+  /* ---- PC initialization: reverse mode starts from bc_len ---- */
   if (vm->reverse) {
-    vm->pc = vm->bc_len; /* DISPATCH 会先递减定位到最后一条指令 */
+    vm->pc = vm->bc_len; /* DISPATCH will first decrement to locate the last instruction */
   }
 
-  /* ---- 开始执行 ---- */
+  /* ---- Start Execution ---- */
   DISPATCH();
 
-/* ---- 系统 ---- */
+/* ---- System ---- */
 L_NOP:
   NEXT(h_nop(vm));
 L_HALT:
@@ -635,7 +635,7 @@ L_RET: {
   goto cleanup;
 }
 
-/* ---- 数据移动 ---- */
+/* ---- Data Movement ---- */
 L_MOV_IMM:
   NEXT(h_mov_imm(vm));
 L_MOV_IMM32:
@@ -643,7 +643,7 @@ L_MOV_IMM32:
 L_MOV_REG:
   NEXT(h_mov_reg(vm));
 
-/* ---- 内存访问 ---- */
+/* ---- Memory Access ---- */
 L_LOAD8:
   NEXT(h_load8(vm));
 L_LOAD32:
@@ -661,7 +661,7 @@ L_LOAD16:
 L_STORE16:
   NEXT(h_store16(vm));
 
-/* ---- ALU 三寄存器 ---- */
+/* ---- ALU Three-Register ---- */
 L_ADD:
   NEXT(h_add(vm));
 L_SUB:
@@ -687,7 +687,7 @@ L_ROR:
 L_UMULH:
   NEXT(h_umulh(vm));
 
-/* ---- ALU 立即数 ---- */
+/* ---- ALU Immediate ---- */
 L_ADD_IMM:
   NEXT(h_add_imm(vm));
 L_SUB_IMM:
@@ -707,13 +707,13 @@ L_SHR_IMM:
 L_ASR_IMM:
   NEXT(h_asr_imm(vm));
 
-/* ---- 比较 ---- */
+/* ---- Comparison ---- */
 L_CMP:
   NEXT(h_cmp(vm));
 L_CMP_IMM:
   NEXT(h_cmp_imm(vm));
 
-/* ---- 分支 (handler 返回 0, 已设置 pc) ---- */
+/* ---- Branch (handler returns 0, pc already set) ---- */
 L_JMP:
   h_jmp(vm);
   NEXT0();
@@ -748,13 +748,13 @@ L_JA:
   h_ja(vm);
   NEXT0();
 
-/* ---- 栈操作 ---- */
+/* ---- Stack Operations ---- */
 L_PUSH:
   NEXT(h_push(vm));
 L_POP:
   NEXT(h_pop(vm));
 
-/* ---- 原生调用 ---- */
+/* ---- Native Call ---- */
 L_CALL_NAT:
   NEXT(h_call_nat(vm));
 L_CALL_REG:
@@ -773,7 +773,7 @@ L_VLD16:
 L_VST16:
   NEXT(h_vst16(vm));
 
-/* ---- TBZ/TBNZ (分支, handler 返回 0, 已设置 pc) ---- */
+/* ---- TBZ/TBNZ (branch, handler returns 0, pc already set) ---- */
 L_TBZ:
   h_tbz(vm);
   NEXT0();
@@ -839,7 +839,7 @@ L_SFMOVVR:
 L_SFCVT:
   NEXT(h_fcvt(vm));
 
-/* ---- 栈机器 ---- */
+/* ---- Stack Machine ---- */
 L_S_PUSH32:
   NEXT(h_s_push_imm32(vm));
 L_S_PUSH64:
@@ -931,7 +931,7 @@ L_S_SEXT32:
 L_S_CMP:
   NEXT(h_s_cmp(vm));
 
-/* ---- 未知指令 ---- */
+/* ---- Unknown Instruction ---- */
 L_UNKNOWN:
   ret = vm->R[0]; /* fall through to cleanup */
 
@@ -941,7 +941,7 @@ L_UNKNOWN:
 
 #endif /* VM_INDIRECT_DISPATCH */
 
-  /* ---- 统一退出: 释放 mmap 防止泄漏 ---- */
+  /* ---- Unified Exit: Release mmap to prevent leaks ---- */
 cleanup:
   /* ---- Anti-Tampering: Buffer Zeroing ---- */
   if (vm) sec_zero_memory(vm, ctx_alloc);

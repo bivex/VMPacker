@@ -1,17 +1,17 @@
 /*
- * vm_sections.h — Handler Section 分配宏
+ * vm_sections.h — Handler Section Allocation Macros
  *
- * 当 VM_FUNC_SPLIT 宏定义时，将 handler 包装函数分散到
+ * When VM_FUNC_SPLIT macro is defined, disperse handler wrapper functions into
  * in different ELF sections, making IDA Pro recognize each fragment as an
  * independent function.
  *
- * Section 分组:
- *   .text.vm_alu    — ALU 运算 (add/sub/mul/xor/and/or/shl/shr/asr/not/ror + _imm)
- *   .text.vm_mem    — 内存访问 (load/store 8/32/64, mov_imm/imm32/reg)
- *   .text.vm_branch — 分支 (jmp/je/jne/jl/jge/jgt/jle/jb/jae/jbe/ja)
- *   .text.vm_system — 系统 (nop/halt/ret/call_nat/call_reg/br_reg/push/pop/vld16/vst16)
+ * Section Grouping:
+ *   .text.vm_alu    — ALU Operations (add/sub/mul/xor/and/or/shl/shr/asr/not/ror + _imm)
+ *   .text.vm_mem    — Memory Access (load/store 8/32/64, mov_imm/imm32/reg)
+ *   .text.vm_branch — Branch (jmp/je/jne/jl/jge/jgt/jle/jb/jae/jbe/ja)
+ *   .text.vm_system — System (nop/halt/ret/call_nat/call_reg/br_reg/push/pop/vld16/vst16)
  *
- * 未启用时宏展开为空，不影响编译。
+ * When not enabled, the macro expands to empty, not affecting compilation.
  */
 #ifndef VM_SECTIONS_H
 #define VM_SECTIONS_H

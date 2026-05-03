@@ -1,11 +1,11 @@
 /*
- * demo_ldadd_basic.c — Phase B: LDADD/CAS 基础翻译测试（不用 X15）
- * 排除 R15 冲突因素，纯测 VMP 翻译是否正确
+ * demo_ldadd_basic.c — Phase B: LDADD/CAS basic translation test (without X15)
+ * Exclude R15 conflict factor, test if VMP translation is correct
  */
 #include <stdint.h>
 #include <stdio.h>
 
-/* 基础 LDADD: X0 做 Rs, 正常寄存器 */
+/* Basic LDADD: X0 as Rs, normal register */
 __attribute__((noinline)) int test_ldadd_basic(void) {
   int fail = 0;
   uint64_t mem = 100;
@@ -31,15 +31,15 @@ __attribute__((noinline)) int test_ldadd_basic(void) {
   return fail;
 }
 
-/* 基础 CAS: 正常寄存器 */
+/* Basic CAS: normal register */
 __attribute__((noinline)) int test_cas_basic(void) {
   int fail = 0;
   uint64_t mem = 0xAAAA;
   uint64_t expected = 0xAAAA;
   uint64_t newval = 0xBBBB;
   /* CAS expected, newval, [&mem]
-   * 比较: mem(0xAAAA) == expected(0xAAAA) → 相等
-   * 结果: mem = newval(0xBBBB), expected = old_mem(0xAAAA) */
+   * Compare: mem(0xAAAA) == expected(0xAAAA) → equal
+   * Result: mem = newval(0xBBBB), expected = old_mem(0xAAAA) */
   __asm__ volatile("cas %0, %2, [%1]"
                    : "+r"(expected)
                    : "r"(&mem), "r"(newval)
@@ -62,7 +62,7 @@ __attribute__((noinline)) int test_cas_basic(void) {
 
 int main(void) {
   int total = 0;
-  printf("=== Phase B: LDADD/CAS 基础测试 ===\n");
+  printf("=== Phase B: LDADD/CAS basic test ===\n");
   total += test_ldadd_basic();
   total += test_cas_basic();
   printf("===================================\n");

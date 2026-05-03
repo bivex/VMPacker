@@ -1,18 +1,18 @@
 /*
- * demo_insn_umulh.c — UMULH (unsigned multiply high 64-bit) 测试
+ * demo_insn_umulh.c — UMULH (unsigned multiply high 64-bit) test
  *
  * UMULH Xd, Xn, Xm: Xd = (Xn * Xm)[127:64]
  *
  * All UMULH instructions are inlined in test_umulh, without subroutine calls.
- * 使用 X9-X14 作为安全临时寄存器，避免与 ABI 参数冲突。
+ * Use X9-X14 as safe temporary registers to avoid conflicts with ABI parameters.
  *
- * .inst 编码:
+ * .inst encoding:
  *   0x9BCA7D29 = UMULH X9, X9, X10
  *     1_00_11011_110_01010_0_11111_01001_01001
  *   0x9BCC7D69 = UMULH X9, X11, X12
  *     1_00_11011_110_01100_0_11111_01011_01001
  *
- * 交叉编译:
+ * Cross-compile:
  *   aarch64-linux-gnu-gcc -O1 -static -o build/demo_insn_umulh demo/demo_insn_umulh.c
  */
 #include <stdio.h>
@@ -23,14 +23,14 @@ uint64_t test_umulh(uint64_t a, uint64_t b,
                     uint64_t c, uint64_t d,
                     uint64_t e) {
     /*
-     * 计算: (UMULH(a, b) ^ UMULH(c, d)) + e
+     * Calculate: (UMULH(a, b) ^ UMULH(c, d)) + e
      *
      * ABI: a=X0, b=X1, c=X2, d=X3, e=X4
-     * 先把所有参数保存到 X9-X13，再用 .inst
+     * First save all parameters to X9-X13, then use .inst
      */
     uint64_t result;
     __asm__ volatile(
-        /* 保存所有参数到安全寄存器 */
+        /* Save all parameters to safe registers */
         "mov x9,  %[a]\n"
         "mov x10, %[b]\n"
         "mov x11, %[c]\n"
@@ -40,10 +40,10 @@ uint64_t test_umulh(uint64_t a, uint64_t b,
         /* UMULH X9, X9, X10 → X9 = hi(a*b) */
         ".inst 0x9BCA7D29\n"
 
-        /* 保存 hi1 到 X14 */
+        /* Save hi1 to X14 */
         "mov x14, x9\n"
 
-        /* 重新加载 X11, X12 (可能被编译器优化掉，但 .inst 不会碰它们) */
+        /* Reload X11, X12 (might be optimized away by the compiler, but .inst won't touch them) */
         /* UMULH X9, X11, X12 → X9 = hi(c*d) */
         ".inst 0x9BCC7D69\n"
 
@@ -82,7 +82,7 @@ int main(void) {
      * result     = 0x1133ADB04FC7A8D2 + 0x1111111111111111
      *            = 0x2244BEC160D8B9E3
      *
-     * 但实际值需要在设备上验证，这里用运行时比较。
+     * But the actual value needs to be verified on the device; here we use runtime comparison.
      */
     uint64_t a = 0xDEADBEEFCAFEBABEULL;
     uint64_t b = 0x1234567890ABCDEFULL;
@@ -92,7 +92,7 @@ int main(void) {
 
     uint64_t got = test_umulh(a, b, c, d, e);
 
-    /* 用 __uint128_t 计算期望值 */
+    /* Calculate the expected value using __uint128_t */
     __uint128_t prod1 = (__uint128_t)a * b;
     __uint128_t prod2 = (__uint128_t)c * d;
     uint64_t hi1 = (uint64_t)(prod1 >> 64);

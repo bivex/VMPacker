@@ -2,9 +2,9 @@
 #include <stdint.h>
 
 /*
- * demo_insn_strh.c — STRH (16-bit store) 测试
+ * demo_insn_strh.c — STRH (16-bit store) test
  *
- * 测试 STRH 将寄存器低16位存储到内存
+ * Test STRH storing the lower 16 bits of a register to memory
  */
 
 __attribute__((noinline)) int64_t check_strh(void) {

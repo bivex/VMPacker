@@ -56,7 +56,7 @@ else
 endif
 
 # Compilation options
-# 编译选项
+# Compilation options
 STUB_CFLAGS = -g -c -O1 -mcmodel=tiny -fno-stack-protector \
               -fno-builtin -fno-builtin-memcpy -nostdlib -march=armv8-a \
               -DVM_FUNC_SPLIT -DVM_TOKEN_ENTRY -DVM_INDIRECT_DISPATCH

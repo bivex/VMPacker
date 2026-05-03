@@ -1,8 +1,8 @@
 #include <stdio.h>
 
 /*
- * 目标：触发 ARM64 BR(寄存器间接跳转)，对应 VM 的 OP_BR_REG。
- * 方法：GNU C computed goto（goto *ptr）。
+ * Goal: Trigger ARM64 BR (register indirect jump), corresponding to VM's OP_BR_REG.
+ * Method: GNU C computed goto (goto *ptr).
  */
 __attribute__((noinline)) int check_br_reg(int x) {
     static void *tbl[] = { &&L_FAIL, &&L_OK };

@@ -1,14 +1,14 @@
 /*
- * demo_sdiv_ldst.c — 测试 SDIV + load/store 变体
+ * demo_sdiv_ldst.c — Test SDIV + load/store variants
  *
- * 覆盖:
- *   - SDIV (有符号除法)
+ * Coverage:
+ *   - SDIV (signed division)
  *   - LDRH/STRH (reg offset)
  *   - LDRSB/LDRSH/LDRSW (reg offset)
  *   - LDURH/STURH (unscaled)
  *   - LDURSB/LDURSH/LDURSW (unscaled)
  *
- * 编译: aarch64-linux-gnu-gcc -O2 -o demo_sdiv_ldst demo_sdiv_ldst.c
+ * Compile: aarch64-linux-gnu-gcc -O2 -o demo_sdiv_ldst demo_sdiv_ldst.c
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -49,7 +49,7 @@ __attribute__((noinline)) int64_t test_ldrsw_reg(int32_t *arr, int64_t idx) {
 }
 
 __attribute__((noinline)) uint16_t test_ldurh(uint16_t *p) {
-  // 编译器可能用 LDURH 处理非对齐或小偏移
+  // The compiler may use LDURH to handle unaligned or small offsets
   char *base = (char *)p;
   return *(uint16_t *)(base + 3); // unaligned offset → LDURH
 }

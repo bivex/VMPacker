@@ -1,12 +1,12 @@
  /*
- * demo_indirect_dispatch.c — 间接 Dispatch 跳转表机制验证 demo
+ * demo_indirect_dispatch.c — Indirect Dispatch Jump Table Mechanism Verification Demo
  *
- * 独立验证: 相对偏移跳转表 + 函数指针间接调用
- * 不依赖 stub/ 任何头文件，所有类型和 handler 内联定义。
+ * Independent verification: relative offset jump table + indirect function pointer call
+ * Does not depend on any stub/ headers; all types and handlers are defined inline.
  *
- * 计算: 10 * 3 + 7 = 37
+ * Calculation: 10 * 3 + 7 = 37
  *
- * 字节码:
+ * Bytecode:
  *   MOV_IMM32 R0, 10   → [0x49][0x00][0x0A][0x00][0x00][0x00]  (6B)
  *   MOV_IMM32 R1, 3    → [0x49][0x01][0x03][0x00][0x00][0x00]  (6B)
  *   MUL R0, R0, R1     → [0x83][0x00][0x00][0x01]              (4B)
@@ -14,14 +14,14 @@
  *   ADD R0, R0, R1     → [0x37][0x00][0x00][0x01]              (4B)
  *   HALT               → [0x00]                                 (1B)
  *
- * 编译:
+ * Compilation:
  *   aarch64-linux-gnu-gcc -O1 -o demo_indirect_dispatch \
  *       demo/demo_indirect_dispatch.c -nostdlib -static
  *
- * 预期: 输出 "PASS"，exit code = 37
+ * Expected: output "PASS", exit code = 37
  */
 
-/* ---- 基础类型 (自包含，不依赖 stub/) ---- */
+/* ---- Basic Types (self-contained, no stub/ dependency) ---- */
 typedef unsigned char      u8;
 typedef unsigned short     u16;
 typedef unsigned int       u32;
@@ -37,7 +37,7 @@ typedef int                i32;
 #define OP_MOV_IMM32 0x49
 #define OP_NOP       0xC3
 
-/* ---- 最小 VM 上下文 ---- */
+/* ---- Minimal VM Context ---- */
 #define VM_REG_COUNT 32
 
 typedef struct {
@@ -48,12 +48,12 @@ typedef struct {
     u8  halted;
 } vm_ctx_t;
 
-/* ---- Handler 函数签名: 返回指令步进字节数 ---- */
+/* ---- Handler function signature: returns instruction step size in bytes ---- */
 typedef u32 (*vm_handler_fn)(vm_ctx_t *vm);
 
 /* ================================================================
- * Handlers — 每个 handler 必须 __attribute__((noinline))
- * 防止编译器内联优化掉间接调用机制
+ * Handlers — each handler must be __attribute__((noinline))
+ * to prevent the compiler from inlining and optimizing away the indirect call mechanism
  * ================================================================ */
 
 __attribute__((noinline))
@@ -112,44 +112,44 @@ static u32 h_nop(vm_ctx_t *vm) {
 
 __attribute__((noinline))
 static u32 h_unknown(vm_ctx_t *vm) {
-    /* 未知 opcode: 安全停机 */
+    /* Unknown opcode: safe halt */
     vm->halted = 1;
     return 1;
 }
 
 /* ================================================================
- * 间接 Dispatch 跳转表
+ * Indirect Dispatch Jump Table
  *
- * 核心机制:
+ * Core mechanism:
  *   jump_table[opcode] = (int32_t)((char*)handler - (char*)jump_table)
  *   handler_addr = (char*)jump_table + jump_table[opcode]
  *
- * 使用 int32_t 相对偏移，而非绝对函数指针。
+ * Use int32_t relative offsets instead of absolute function pointers.
  * ================================================================ */
 
-/* 编译期计算相对偏移的宏 */
+/* Macro for calculating relative offset at compile time */
 #define HANDLER_OFFSET(fn) \
     (i32)((const char *)(fn) - (const char *)vm_jump_table)
 
-/* 跳转表基址宏 */
+/* Jump table base address macro */
 #define VM_DISPATCH_BASE ((const char *)vm_jump_table)
 
 /*
- * 跳转表: 256 个 int32_t 相对偏移
+ * Jump table: 256 int32_t relative offsets
  *
- * 注意: GCC [0 ... 255] 范围初始化器在 -nostdlib 下可能
- * 生成隐式 memset/memcpy 调用。为安全起见，使用运行时初始化。
+ * Note: GCC [0 ... 255] range initializers may generate implicit
+ * memset/memcpy calls under -nostdlib. For safety, use runtime initialization.
  */
 static i32 vm_jump_table[256];
 
-/* 运行时初始化跳转表 */
+/* Runtime initialization of jump table */
 __attribute__((noinline))
 static void init_jump_table(void) {
-    /* 默认: 所有 opcode 指向 h_unknown */
+    /* Default: all opcodes point to h_unknown */
     for (int i = 0; i < 256; i++)
         vm_jump_table[i] = HANDLER_OFFSET(h_unknown);
 
-    /* 已定义 opcode */
+    /* Defined opcodes */
     vm_jump_table[OP_HALT]      = HANDLER_OFFSET(h_halt);
     vm_jump_table[OP_MOV_IMM32] = HANDLER_OFFSET(h_mov_imm32);
     vm_jump_table[OP_ADD]       = HANDLER_OFFSET(h_add);
@@ -159,7 +159,7 @@ static void init_jump_table(void) {
 }
 
 /* ================================================================
- * Dispatch 循环 — 通过跳转表间接调用 handler
+ * Dispatch loop — call handler indirectly via jump table
  * ================================================================ */
 
 __attribute__((noinline))
@@ -167,13 +167,13 @@ static u64 vm_run(vm_ctx_t *vm) {
     while (!vm->halted && vm->pc < vm->bc_len) {
         u8 opcode = vm->bc[vm->pc];
 
-        /* 从跳转表读取相对偏移 */
+        /* Read relative offset from jump table */
         i32 offset = vm_jump_table[opcode];
 
-        /* 计算 handler 绝对地址: base + offset */
+        /* Calculate absolute handler address: base + offset */
         vm_handler_fn handler = (vm_handler_fn)(VM_DISPATCH_BASE + offset);
 
-        /* 通过函数指针间接调用 */
+        /* Indirect call via function pointer */
         u32 step = handler(vm);
 
         vm->pc += step;
@@ -182,7 +182,7 @@ static u64 vm_run(vm_ctx_t *vm) {
 }
 
 /* ================================================================
- * 测试字节码: 10 * 3 + 7 = 37
+ * Test bytecode: 10 * 3 + 7 = 37
  * ================================================================ */
 static u8 test_bytecode[] = {
     /* MOV_IMM32 R0, 10 */
@@ -200,7 +200,7 @@ static u8 test_bytecode[] = {
 };
 
 /* ================================================================
- * ARM64 syscall 辅助
+ * ARM64 syscall helper
  * ================================================================ */
 
 static void sys_write(const char *buf, u64 len) {
@@ -221,13 +221,13 @@ static void __attribute__((noreturn)) sys_exit(int code) {
 }
 
 /* ================================================================
- * _start 入口 — bare-metal 风格，无 libc
+ * _start entry — bare-metal style, no libc
  * ================================================================ */
 void _start(void) {
-    /* 1. 初始化跳转表 */
+    /* 1. Initialize jump table */
     init_jump_table();
 
-    /* 2. 初始化 VM 上下文 */
+    /* 2. Initialize VM context */
     vm_ctx_t vm;
     for (int i = 0; i < VM_REG_COUNT; i++)
         vm.R[i] = 0;
@@ -236,10 +236,10 @@ void _start(void) {
     vm.bc_len = (u32)sizeof(test_bytecode);
     vm.halted = 0;
 
-    /* 3. 执行 */
+    /* 3. Execute */
     u64 result = vm_run(&vm);
 
-    /* 4. 输出结果 */
+    /* 4. Output result */
     if (result == 37) {
         sys_write("PASS\n", 5);
     } else {

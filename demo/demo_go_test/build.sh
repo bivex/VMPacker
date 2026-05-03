@@ -1,12 +1,12 @@
 #!/bin/bash
-# 交叉编译 Go 程序为 ARM64 Linux ELF (带符号表)
+# Cross-compile Go program to ARM64 Linux ELF (with symbol table)
 # 
-# 用法: bash demo/demo_go_test/build.sh
+# Usage: bash demo/demo_go_test/build.sh
 #
-# 注意: 
-#   -ldflags="-compressdwarf=false" 保留完整调试信息
-#   CGO_ENABLED=0 确保纯 Go 编译，无 C 依赖
-#   -gcflags="-N -l" 禁用优化和内联，保证函数不被优化掉
+# Note: 
+#   -ldflags="-compressdwarf=false" Keep full debug information
+#   CGO_ENABLED=0 Ensure pure Go compilation, no C dependencies
+#   -gcflags="-N -l" Disable optimization and inlining to ensure functions are not optimized away
 
 set -e
 
@@ -21,7 +21,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
 echo "[+] Output: build/demo_go_test"
 echo ""
 echo "[*] Checking symbols..."
-# 用 Go 的 objdump 或 nm 查看符号
+# Use Go's objdump or nm to view symbols
 go tool nm ../../build/demo_go_test 2>/dev/null | grep -i "checkKey" || echo "(use 'go tool nm' or 'aarch64-linux-gnu-nm' to inspect)"
 echo ""
 echo "[*] Done. Try:"

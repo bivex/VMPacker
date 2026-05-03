@@ -1,16 +1,16 @@
 /*
- * vm_dispatch.h — 间接 Dispatch 跳转表
+ * vm_dispatch.h — Indirect Dispatch Jump Table
  *
- * 当 VM_INDIRECT_DISPATCH 宏定义时启用。
- * 使用绝对函数指针数组，运行时在栈上填充，
- * 通过间接调用 handler，断裂 IDA 交叉引用。
+ * Enabled when VM_INDIRECT_DISPATCH macro is defined.
+ * Uses an absolute function pointer array, filled on the stack at runtime,
+ * to break IDA cross-references through indirect handler calls.
  *
- * 核心机制:
+ * Core mechanism:
  *   jump_table[opcode] = (vm_handler_fn)handler
  *   handler = jump_table[opcode]; handler(vm);
  *
- * 注意: 跳转表必须在栈上分配 — stub 是 RX-only flat binary,
- * BSS/data 段不可写。
+ * Note: Jump table must be allocated on the stack — stub is an RX-only flat binary,
+ * BSS/data sections are not writable.
  */
 #ifndef VM_DISPATCH_H
 #define VM_DISPATCH_H
@@ -21,24 +21,24 @@
 #include "vm_sections.h"
 #include "vm_types.h"
 
-/* Handler 函数签名: 接收 vm_ctx_t*, 返回指令步进字节数 */
+/* Handler function signature: receives vm_ctx_t*, returns instruction step size in bytes */
 typedef u32 (*vm_handler_fn)(vm_ctx_t *vm);
 
-/* HALT 哨兵值: handler 返回此值表示需要退出 VM */
+/* HALT sentinel value: handler returns this value to indicate VM exit */
 #define VM_STEP_HALT 0xFFFFFFFFu
 
-/* RET 哨兵值: handler 返回此值表示 RET 指令 */
+/* RET sentinel value: handler returns this value to indicate RET instruction */
 #define VM_STEP_RET 0xFFFFFFFEu
 
 /* ================================================================
- * Handler 包装函数
+ * Handler Wrapper Functions
  *
- * 现有 handler 是 static inline，编译器可能内联。
- * 包装函数使用 noinline 确保生成独立函数体，
- * 使间接调用机制真正生效。
+ * Existing handlers are static inline, the compiler may inline them.
+ * Wrapper functions use noinline to ensure independent function bodies are generated,
+ * making the indirect call mechanism truly effective.
  * ================================================================ */
 
-/* ---- 系统 ---- */
+/* ---- System ---- */
 __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_nop(vm_ctx_t *vm) {
   return h_nop(vm);
 }
@@ -114,7 +114,7 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmov_vr(vm_ctx_t *vm) {
   return h_fmov_vr(vm);
 }
 
-/* ---- 栈机器 ---- */
+/* ---- Stack Machine ---- */
 
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_mov_imm(vm_ctx_t *vm) {
   return h_mov_imm(vm);
@@ -126,7 +126,7 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_mov_reg(vm_ctx_t *vm) {
   return h_mov_reg(vm);
 }
 
-/* ---- 内存 ---- */
+/* ---- Memory ---- */
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_load8(vm_ctx_t *vm) {
   return h_load8(vm);
 }
@@ -152,7 +152,7 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_store16(vm_ctx_t *vm) {
   return h_store16(vm);
 }
 
-/* ---- SIMD 内存 ---- */
+/* ---- SIMD Memory ---- */
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_vld(vm_ctx_t *vm) {
   return h_s_vld(vm);
 }
@@ -160,7 +160,7 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_vst(vm_ctx_t *vm) {
   return h_s_vst(vm);
 }
 
-/* ---- ALU 三寄存器 ---- */
+/* ---- ALU Three-Register ---- */
 
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_add(vm_ctx_t *vm) {
   return h_add(vm);
@@ -199,7 +199,7 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_umulh(vm_ctx_t *vm) {
   return h_umulh(vm);
 }
 
-/* ---- ALU 立即数 ---- */
+/* ---- ALU Immediate ---- */
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_add_imm(vm_ctx_t *vm) {
   return h_add_imm(vm);
 }
@@ -228,7 +228,7 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_asr_imm(vm_ctx_t *vm) {
   return h_asr_imm(vm);
 }
 
-/* ---- 比较 ---- */
+/* ---- Comparison ---- */
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_cmp(vm_ctx_t *vm) {
   return h_cmp(vm);
 }
@@ -236,7 +236,7 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_cmp_imm(vm_ctx_t *vm) {
   return h_cmp_imm(vm);
 }
 
-/* ---- 分支 (返回 0 表示 pc 已设置) ---- */
+/* ---- Branch (returns 0 means pc has been set) ---- */
 __attribute__((noinline)) VM_SECTION_BRANCH static u32 hw_jmp(vm_ctx_t *vm) {
   h_jmp(vm);
   return 0;
@@ -282,7 +282,7 @@ __attribute__((noinline)) VM_SECTION_BRANCH static u32 hw_ja(vm_ctx_t *vm) {
   return 0;
 }
 
-/* ---- 栈操作 ---- */
+/* ---- Stack Operations ---- */
 __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_push(vm_ctx_t *vm) {
   return h_push(vm);
 }
@@ -290,7 +290,7 @@ __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_pop(vm_ctx_t *vm) {
   return h_pop(vm);
 }
 
-/* ---- 原生调用 ---- */
+/* ---- Native Call ---- */
 __attribute__((noinline)) VM_SECTION_SYSTEM static u32
 hw_call_nat(vm_ctx_t *vm) {
   return h_call_nat(vm);
@@ -311,7 +311,7 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_vst16(vm_ctx_t *vm) {
   return h_vst16(vm);
 }
 
-/* ---- TBZ/TBNZ (分支, 返回 0) ---- */
+/* ---- TBZ/TBNZ (branch, returns 0) ---- */
 __attribute__((noinline)) VM_SECTION_BRANCH static u32 hw_tbz(vm_ctx_t *vm) {
   h_tbz(vm);
   return 0;
@@ -380,10 +380,10 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_sbc(vm_ctx_t *vm) {
 }
 
 /* ================================================================
- * 栈机器 (Stack Machine) Handler Wrappers
+ * Stack Machine Handler Wrappers
  * ================================================================ */
 
-/* ---- 栈传输 ---- */
+/* ---- Stack Transfer ---- */
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_vload(vm_ctx_t *vm) {
   return h_s_vload(vm);
 }
@@ -399,7 +399,7 @@ hw_s_push_imm64(vm_ctx_t *vm) {
   return h_s_push_imm64(vm);
 }
 
-/* ---- 栈控制 ---- */
+/* ---- Stack Control ---- */
 __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_s_dup(vm_ctx_t *vm) {
   return h_s_dup(vm);
 }
@@ -410,7 +410,7 @@ __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_s_drop(vm_ctx_t *vm) {
   return h_s_drop(vm);
 }
 
-/* ---- 栈 ALU 二元 ---- */
+/* ---- Stack ALU Binary ---- */
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_add(vm_ctx_t *vm) {
   return h_s_add(vm);
 }
@@ -460,7 +460,7 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_sbc(vm_ctx_t *vm) {
   return h_s_sbc(vm);
 }
 
-/* ---- 栈 ALU 一元 ---- */
+/* ---- Stack ALU Unary ---- */
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_not(vm_ctx_t *vm) {
   return h_s_not(vm);
 }
@@ -495,12 +495,12 @@ __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_load_slide(vm_ctx_t *vm
   return h_s_load_slide(vm);
 }
 
-/* ---- 栈比较 ---- */
+/* ---- Stack Comparison ---- */
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_s_cmp(vm_ctx_t *vm) {
   return h_s_cmp(vm);
 }
 
-/* ---- 栈内存 ---- */
+/* ---- Stack Memory ---- */
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_ld8(vm_ctx_t *vm) {
   return h_s_ld8(vm);
 }
@@ -527,28 +527,28 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_st64(vm_ctx_t *vm) {
 }
 
 /* ================================================================
- * 跳转表运行时初始化 (绝对函数指针)
+ * Jump table runtime initialization (absolute function pointers)
  *
- * 使用循环填充默认值，避免 GCC 范围初始化器
- * 在 -nostdlib 下生成隐式 memset/memcpy 调用。
+ * Use a loop to fill defaults to avoid GCC range initializers
+ * generating implicit memset/memcpy calls under -nostdlib.
  *
- * tbl: 调用方栈上分配的 vm_handler_fn[256] 数组
+ * tbl: vm_handler_fn[256] array allocated on the caller's stack
  * ================================================================ */
 __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   for (int i = 0; i < OP_ID_COUNT; i++)
     tbl[i] = hw_unknown;
 
-  /* 系统 */
+  /* System */
   tbl[OP_ID_NOP] = hw_nop;
   tbl[OP_ID_HALT] = hw_halt;
   tbl[OP_ID_RET] = hw_ret;
 
-  /* 数据移动 */
+  /* Data Movement */
   tbl[OP_ID_MOVIMM] = hw_mov_imm;
   tbl[OP_ID_MOVIMM32] = hw_mov_imm32;
   tbl[OP_ID_MOVREG] = hw_mov_reg;
 
-  /* 内存 */
+  /* Memory */
   tbl[OP_ID_LOAD8] = hw_load8;
   tbl[OP_ID_LOAD32] = hw_load32;
   tbl[OP_ID_LOAD64] = hw_load64;
@@ -558,7 +558,7 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_ID_LOAD16] = hw_load16;
   tbl[OP_ID_STORE16] = hw_store16;
 
-  /* ALU 三寄存器 */
+  /* ALU Three-Register */
   tbl[OP_ID_ADD] = hw_add;
   tbl[OP_ID_SUB] = hw_sub;
   tbl[OP_ID_MUL] = hw_mul;
@@ -572,7 +572,7 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_ID_ROR] = hw_ror;
   tbl[OP_ID_UMULH] = hw_umulh;
 
-  /* ALU 立即数 */
+  /* ALU Immediate */
   tbl[OP_ID_ADDIMM] = hw_add_imm;
   tbl[OP_ID_SUBIMM] = hw_sub_imm;
   tbl[OP_ID_XORIMM] = hw_xor_imm;
@@ -583,11 +583,11 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_ID_SHRIMM] = hw_shr_imm;
   tbl[OP_ID_ASRIMM] = hw_asr_imm;
 
-  /* 比较 */
+  /* Comparison */
   tbl[OP_ID_CMP] = hw_cmp;
   tbl[OP_ID_CMPIMM] = hw_cmp_imm;
 
-  /* 分支 */
+  /* Branch */
   tbl[OP_ID_JMP] = hw_jmp;
   tbl[OP_ID_JE] = hw_je;
   tbl[OP_ID_JNE] = hw_jne;
@@ -600,11 +600,11 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_ID_JBE] = hw_jbe;
   tbl[OP_ID_JA] = hw_ja;
 
-  /* 栈操作 */
+  /* Stack Operations */
   tbl[OP_ID_PUSH] = hw_push;
   tbl[OP_ID_POP] = hw_pop;
 
-  /* 原生调用 */
+  /* Native Call */
   tbl[OP_ID_CALLNATIVE] = hw_call_nat;
   tbl[OP_ID_CALLREG] = hw_call_reg;
   tbl[OP_ID_BRREG] = hw_br_reg;
@@ -646,7 +646,7 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_ID_ADC] = hw_adc;
   tbl[OP_ID_SBC] = hw_sbc;
 
-  /* ---- 栈机器操作码 ---- */
+  /* ---- Stack Machine Opcodes ---- */
   tbl[OP_ID_SVLOAD] = hw_s_vload;
   tbl[OP_ID_SVSTORE] = hw_s_vstore;
   tbl[OP_ID_SPUSHIMM32] = hw_s_push_imm32;
@@ -691,7 +691,7 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_ID_SST32] = hw_s_st32;
   tbl[OP_ID_SST64] = hw_s_st64;
 
-  /* ---- SIMD 内存访问 ---- */
+  /* ---- SIMD Memory Access ---- */
   tbl[OP_ID_SVLD] = hw_s_vld;
   tbl[OP_ID_SVST] = hw_s_vst;
 

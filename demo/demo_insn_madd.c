@@ -1,5 +1,5 @@
 // demo/demo_insn_madd.c
-// 测试 MADD/MSUB 指令的所有变体
+// Test all variants of MADD/MSUB instructions
 // MADD: Rd = Ra + Rn * Rm
 // MSUB: Rd = Ra - Rn * Rm
 // MUL:  Rd = Rn * Rm (MADD with Ra=XZR)
@@ -57,7 +57,7 @@ int __attribute__((noinline)) test_mneg64(long a, long b) {
   return (int)(result == -(a * b));
 }
 
-// 综合测试函数（确保 > 72 bytes 以支持 standard mode）
+// Comprehensive test function (ensure > 72 bytes to support standard mode)
 int __attribute__((noinline)) test_madd_all(void) {
   int pass = 0;
   int total = 0;

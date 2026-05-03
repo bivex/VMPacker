@@ -1,10 +1,11 @@
 #include <stdio.h>
 
 /*
- * HALT 指令验证说明：
- * vmp 翻译器会在每个函数字节码尾部自动追加 OP_HALT。
- * 本 demo 保持函数逻辑极简，验证受保护函数执行完成后能正常停机并返回。
+ * HALT instruction verification description:
+ * The vmp translator will automatically append OP_HALT at the end of each function's bytecode.
+ * This demo keeps the function logic minimal to verify that the protected function can halt normally and return after execution.
  */
+
 __attribute__((noinline)) int check_halt(int x) {
     int y = x + 1;
     __asm__ volatile(

@@ -1,12 +1,12 @@
 /*
- * demo_ldr_reg.c — 测试 LDR_REG (寄存器偏移寻址) 在 VMP reverse 模式下的行为
+ * demo_ldr_reg.c — Test LDR_REG (register offset addressing) behavior in VMP reverse mode
  *
- * GCC -O2 会将 table[idx] 编译为: LDR Wd, [Xn, Xm, LSL #2]
+ * GCC -O2 will compile table[idx] to: LDR Wd, [Xn, Xm, LSL #2]
  * This is the core instruction pattern for CRC32 table lookup in check_stub_crc.
  *
- * 预期输出: checksum=0x12345678 的某个 CRC 变换值
- * VMP 前: 正确输出
- * VMP 后 (当前有 bug): SIGSEGV
+ * Expected output: some CRC transformed value of checksum=0x12345678
+ * Before VMP: correct output
+ * After VMP (currently has a bug): SIGSEGV
  */
 
 #include <stdint.h>
@@ -21,7 +21,7 @@ static const uint32_t lookup[256] __attribute__((aligned(4))) = {
     0xF3B97148, 0x84BE41DE, 0x1ADAD47D, 0x6DDDE4EB, 0xF4D4B551, 0x83D385C7,
     0x136C9856, 0x646BA8C0, 0xFD62F97A, 0x8A65C9EC, 0x14015C4F, 0x63066CD9,
     0xFA0F3D63, 0x8D080DF5,
-    /* 填充剩余为递增值 */
+    /* Fill remaining with incremental values */
     0x3B6E20C8, 0x4C69105E, 0xD56041E4, 0xA2677172, 0x3C03E4D1, 0x4B04D447,
     0xD20D85FD, 0xA50AB56B, 0x35B5A8FA, 0x42B2986C, 0xDBBBC9D6, 0xACBCF940,
     0x32D86CE3, 0x45DF5C75, 0xDCD60DCF, 0xABD13D59, 0x26D930AC, 0x51DE003A,
@@ -40,7 +40,7 @@ static const uint32_t lookup[256] __attribute__((aligned(4))) = {
     0x5005713C, 0x270241AA, 0xBE0B1010, 0xC90C2086, 0x5768B525, 0x206F85B3,
     0xB966D409, 0xCE61E49F, 0x5EDEF90E, 0x29D9C998, 0xB0D09822, 0xC7D7A8B4,
     0x59B33D17, 0x2EB40D81, 0xB7BD5C3B, 0xC0BA6CAD,
-    /* 128-255: 填充 */
+    /* 128-255: Padding */
     0xEDB88320, 0x9ABFB3B6, 0x03B6E20C, 0x74B1D29A, 0xEAD54739, 0x9DD277AF,
     0x04DB2615, 0x73DC1683, 0xE3630B12, 0x94643B84, 0x0D6D6A3E, 0x7A6A5AA8,
     0xE40ECF0B, 0x9309FF9D, 0x0A00AE27, 0x7D079EB1, 0xF00F9344, 0x8708A3D2,
@@ -64,11 +64,11 @@ static const uint32_t lookup[256] __attribute__((aligned(4))) = {
     0xB3667A2E, 0xC4614AB8, 0x5D681B02, 0x2A6F2B94, 0xB40BBE37, 0xC30C8EA1,
     0x5A05DF1B, 0x2D02EF8D};
 
-/* 使用查表的 CRC32 计算 — 核心 LDR_REG 触发点 */
+/* CRC32 calculation using a lookup table - core LDR_REG trigger point */
 __attribute__((noinline)) uint32_t my_crc32(const uint8_t *data, uint32_t len) {
   uint32_t crc = 0xFFFFFFFF;
   for (uint32_t i = 0; i < len; i++) {
-    /* GCC -O2 会将 lookup[(crc ^ data[i]) & 0xFF] 编译为:
+    /* GCC -O2 will compile lookup[(crc ^ data[i]) & 0xFF] to:
      *   AND  Wm, ..., #0xFF
      *   LDR  Wd, [Xbase, Xm, LSL #2]    ← LDR_REG!
      */
@@ -84,10 +84,10 @@ int main(void) {
     len++;
 
   uint32_t result = my_crc32((const uint8_t *)test, len);
-  /* 预期 CRC32: 0xA1B2C3D4 之类的固定值 */
+  /* Expected CRC32: a fixed value like 0xA1B2C3D4 */
   printf("crc32 = 0x%08X\n", result);
 
-  /* 验证正确性: CRC32("Hello VMP LDR_REG test!") 应为固定值 */
+  /* Verify correctness: CRC32("Hello VMP LDR_REG test!") should be a fixed value */
   if (result == 0) {
     printf("FAIL: crc is zero\n");
     return 1;

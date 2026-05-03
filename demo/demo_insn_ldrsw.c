@@ -2,15 +2,15 @@
 #include <stdint.h>
 
 /*
- * demo_insn_ldrsw.c — LDRSW 指令测试
+ * demo_insn_ldrsw.c — LDRSW instruction test
  *
- * LDRSW Xd, [Xn, #imm] : 从内存加载 32 位有符号值，符号扩展到 64 位
- * 测试正数和负数两种情况
+ * LDRSW Xd, [Xn, #imm] : Load a 32-bit signed value from memory and sign-extend it to 64 bits
+ * Test both positive and negative cases
  */
 
 __attribute__((noinline)) int64_t check_ldrsw(void) {
-    /* 正数: 0x7FFFFFFF = 2147483647 → 符号扩展后仍为 0x000000007FFFFFFF */
-    /* 负数: 0xFFFFFF00 = -256 (i32) → 符号扩展后为 0xFFFFFFFFFFFFFF00 */
+    /* Positive: 0x7FFFFFFF = 2147483647 → still 0x000000007FFFFFFF after sign extension */
+    /* Negative: 0xFFFFFF00 = -256 (i32) → 0xFFFFFFFFFFFFFF00 after sign extension */
     int32_t buf[2] = { -256, 2147483647 };
     int64_t r1 = 0, r2 = 0;
 
@@ -23,8 +23,8 @@ __attribute__((noinline)) int64_t check_ldrsw(void) {
     );
     __asm__ volatile("nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop;");
 
-    /* r1 应该是 -256 (0xFFFFFFFFFFFFFF00) */
-    /* r2 应该是 2147483647 (0x000000007FFFFFFF) */
+    /* r1 should be -256 (0xFFFFFFFFFFFFFF00) */
+    /* r2 should be 2147483647 (0x000000007FFFFFFF) */
     if (r1 == -256 && r2 == 2147483647) {
         return 1; /* PASS */
     }

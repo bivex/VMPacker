@@ -11,7 +11,7 @@
     <a href="#usage">Usage</a> •
     <a href="#architecture">Architecture</a> •
     <a href="docs/ISA.md">VM ISA</a> •
-    <a href="README_CN.md">中文文档</a>
+    <a href="README_CN.md">Chinese Documentation</a>
   </p>
 </p>
 
@@ -152,7 +152,7 @@ Requirements: Go 1.21+, GCC cross-compiler (aarch64-linux-gnu-gcc) or Android ND
 | [Architecture Notes](docs/notes/) | Design decisions, task history |
 | [Android Testing](docs/Android_Test.md) | NDK build + emulator testing |
 | [ARM32 Build](docs/BUILD_ARM32.md) | ARM32 cross-compilation guide |
-| [中文文档](README_CN.md) | Full Chinese documentation |
+| [Chinese Documentation](README_CN.md) | Full Chinese documentation |
 
 ## Roadmap
 

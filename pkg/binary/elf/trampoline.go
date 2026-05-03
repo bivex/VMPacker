@@ -7,16 +7,16 @@ import (
 )
 
 // ============================================================
-// Token 化入口跳板 (ARM64 / ARM32 / Thumb)
+// Tokenized Entry Trampoline (ARM64 / ARM32 / Thumb)
 // ============================================================
 
-// BuildTokenTrampoline 构造 Token 化入口跳板（3 条 ARM64 指令, 12 字节）
+// BuildTokenTrampoline constructs a tokenized entry trampoline (3 ARM64 instructions, 12 bytes)
 //
-//	MOV  W16, #token_lo16          ; token 低 16 位 → W16
-//	MOVK W16, #token_hi16, LSL#16  ; token 高 16 位合并
-//	B    vm_entry_token             ; 跳转到 Token 入口
+//	MOV  W16, #token_lo16          ; lower 16 bits of token → W16
+//	MOVK W16, #token_hi16, LSL#16  ; upper 16 bits of token merged
+//	B    vm_entry_token             ; Jump to Token entry
 //
-// X16 (IP0) 传递 token，X0-X7 保持调用方原始参数不变。
+// X16 (IP0) passes the token, X0-X7 keep the original caller arguments unchanged.
 func BuildTokenTrampoline(funcAddr, vmEntryTokenVA uint64, token uint32) []byte {
 	var buf bytes.Buffer
 
@@ -38,7 +38,7 @@ func BuildTokenTrampoline(funcAddr, vmEntryTokenVA uint64, token uint32) []byte 
 }
 
 // ============================================================
-// ELF64 二进制结构读写
+// ELF64 binary structure read/write
 // ============================================================
 
 type elf64Ehdr struct {
@@ -174,7 +174,7 @@ func writeThumb32BranchW(w io.Writer, offset int32) {
 }
 
 // ============================================================
-// ELF32 二进制结构读写
+// ELF32 binary structure read/write
 // ============================================================
 
 type elf32Ehdr struct {

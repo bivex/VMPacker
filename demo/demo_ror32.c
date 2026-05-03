@@ -1,20 +1,20 @@
 /*
- * demo_ror32.c — 验证 ROR 32-bit bug
+ * demo_ror32.c — Verify ROR 32-bit bug
  *
  * Contains rotl32() + chained XOR decrypt logic—identical pattern to
  * decrypt_crc_info in check_stub_crc.
  *
- * ARM64 编译后 rotl32(v,7) 会生成:
+ * After ARM64 compilation, rotl32(v,7) will generate:
  *   EOR Wd, Wn, Wm, ROR #25
  * This is a 32-bit ROR. If the VM's h_ror performs a 64-bit ROR, the result
  * will be incorrect.
  *
- * 编译: aarch64-linux-gnu-gcc -O2 -march=armv8-a -static -o demo_ror32
- * demo_ror32.c 反汇编验证: aarch64-linux-gnu-objdump -d demo_ror32 | grep -A30
+ * Compile: aarch64-linux-gnu-gcc -O2 -march=armv8-a -static -o demo_ror32
+ * Disassembly verification: aarch64-linux-gnu-objdump -d demo_ror32 | grep -A30
  * '<my_decrypt>'
  */
 
-/* 避免 libc 依赖的 syscall 包装 */
+/* Syscall wrapper to avoid libc dependency */
 static long my_write(int fd, const void *buf, long count) {
   register long x8 __asm__("x8") = 64;
   register long x0 __asm__("x0") = fd;
@@ -37,7 +37,7 @@ typedef unsigned char u8;
 /* Exactly the same rotl32 as in integrity.c */
 static u32 rotl32(u32 v, int n) { return (v << n) | (v >> (32 - n)); }
 
-/* 与 decrypt_crc_info 相同的解密链 */
+/* Same decryption chain as decrypt_crc_info */
 static void my_decrypt(u32 *key, u32 *addr, u32 *size, u32 *hash) {
   u32 dec;
   dec = *addr ^ *key;
@@ -53,7 +53,7 @@ static void my_decrypt(u32 *key, u32 *addr, u32 *size, u32 *hash) {
   *hash = dec;
 }
 
-/* 十六进制输出 */
+/* Hexadecimal output */
 static void print_hex(u32 v) {
   char buf[11];
   buf[0] = '0';
@@ -74,18 +74,18 @@ static void print_str(const char *s) {
   my_write(1, s, len);
 }
 
-/* 测试入口 */
+/* Test entry */
 __attribute__((noinline)) int my_test(void) {
-  /* 使用 check_stub_crc 实际使用的 salt 值 */
+  /* Use the salt value actually used in check_stub_crc */
   u32 key = 0x59EEE963;
 
-  /* 模拟加密的 CRC_INFO 条目（addr, size, hash 各 4 字节） */
-  /* 先用原始值加密，然后解密验证 */
+  /* Simulate encrypted CRC_INFO entry (addr, size, hash each 4 bytes) */
+  /* First encrypt with original values, then decrypt and verify */
   u32 orig_addr = 0x00001000;
   u32 orig_size = 0x00000612;
   u32 orig_hash = 0xDEADBEEF;
 
-  /* 加密：encrypt = value ^ key, key = rotl32(key,7) ^ value */
+  /* Encryption：encrypt = value ^ key, key = rotl32(key,7) ^ value */
   u32 ekey = key;
   u32 enc_addr = orig_addr ^ ekey;
   ekey = rotl32(ekey, 7) ^ orig_addr;
@@ -93,14 +93,14 @@ __attribute__((noinline)) int my_test(void) {
   ekey = rotl32(ekey, 7) ^ orig_size;
   u32 enc_hash = orig_hash ^ ekey;
 
-  /* 解密 */
+  /* Decryption */
   u32 dkey = key;
   u32 dec_addr = enc_addr;
   u32 dec_size = enc_size;
   u32 dec_hash = enc_hash;
   my_decrypt(&dkey, &dec_addr, &dec_size, &dec_hash);
 
-  /* 验证 */
+  /* Verification */
   print_str("key=");
   print_hex(key);
   print_str("\norig: ");

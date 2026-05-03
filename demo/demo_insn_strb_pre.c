@@ -64,14 +64,14 @@ int test_strb_pre(void) {
         : "x0", "x1", "memory"
     );
 
-    // 验证结果
+    // Verify results
     uint32_t result = 0;
     result |= ((uint32_t)buf[15]) << 24;  // 0xCD
     result |= ((uint32_t)buf[16]) << 16;  // 0xAB
     result |= ((uint32_t)buf[17]) << 8;   // 0xEF
     result |= ((uint32_t)buf[18]);         // 0x42
 
-    // 额外填充指令确保函数体 > 72 字节
+    // Extra padding instructions to ensure function body > 72 bytes
     __asm__ volatile(
         "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
         "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"

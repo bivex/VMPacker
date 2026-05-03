@@ -1,15 +1,15 @@
 /**
- * simple_app.cpp - VMPacker 测试程序
+ * simple_app.cpp - VMPacker test program
  *
- * 包含常用指令的计算逻辑及日志打印，用于验证 VMP 保护后程序能否正常运行。
- * 核心函数 log2Console 将作为保护目标。
+ * Contains calculation logic of common instructions and log printing, used to verify if the program can run normally after VMP protection.
+ * The core function log2Console will serve as the protection target.
  *
- * 两种编译模式 (见 test/Makefile):
- *   1) 静态模式: gcc simple_app.cpp -o simple_app        (仅测试可执行文件保护)
- *   2) SO 模式:  gcc -DUSE_SHARED_LIB simple_app.cpp -lvmptest  (同时测试 .so 保护)
+ * Two compilation modes (see test/Makefile):
+ *   1) Static mode: gcc simple_app.cpp -o simple_app (only testing executable file protection)
+ *   2) SO mode:  gcc -DUSE_SHARED_LIB simple_app.cpp -lvmptest (testing .so protection as well)
  *
- * 保护: go run ./cmd/vmpacker/ -func log2Console -v -debug -o /tmp/simple_app_protected simple_app
- * 运行: ./simple_app_protected
+ * Protection: go run ./cmd/vmpacker/ -func log2Console -v -debug -o /tmp/simple_app_protected simple_app
+ * Running: ./simple_app_protected
  */
 
 #include <stdio.h>
@@ -20,18 +20,18 @@
 #endif
 
 /**
- * log2Console - 模拟日志输出到控制台的核心函数
+ * log2Console - Core function simulating log output to the console
  *
- * 使用常用指令: 算术(ADD/SUB/MUL)、逻辑(AND/OR/XOR)、
- * 比较与分支、循环、内存访问等。
- * 该函数将被 VMP 保护。
- * extern "C" 保证符号名为 log2Console，便于 vmpacker -func 匹配。
+ * Uses common instructions: arithmetic (ADD/SUB/MUL), logic (AND/OR/XOR),
+ * comparison and branching, loops, memory access, etc.
+ * This function will be protected by VMP.
+ * extern "C" Ensures the symbol name is log2Console, making it easy for vmpacker -func to match.
  */
 extern "C" int log2Console(const char* tag, int level, int value) {
   if (tag == 0)
     return -1;
 
-  /* 简单 hash: 对 tag 各字节做运算 */
+  /* Simple hash: performing operations on each byte of the tag */
   unsigned int hash = 0x811c9dc5;
   int len = 0;
   const char* p = tag;
@@ -41,33 +41,33 @@ extern "C" int log2Console(const char* tag, int level, int value) {
     p++;
   }
 
-  /* 算术运算: value * 7 + hash % 100 */
+  /* Arithmetic operations: value * 7 + hash % 100 */
   int a = value * 7;
   int b = (int)(hash % 100);
   int result = a + b;
 
-  /* 条件分支 */
+  /* Conditional branching */
   if (level > 0) {
     result += 10;
   } else {
     result -= 5;
   }
 
-  /* 循环: 累加 0..4 */
+  /* Loop: accumulating 0..4 */
   int sum = 0;
   for (int i = 0; i < 5; i++) {
     sum += i;
   }
   result += sum;
 
-  /* 位运算 */
+  /* Bitwise operations */
   result = (result & 0xFFF) | ((result >> 12) << 12);
 
   return result;
 }
 
 /**
- * computeAndLog - 计算并格式化日志字符串（供 main 调用）
+ * computeAndLog - Calculate and format log string (for main to call)
  */
 void computeAndLog(const char* msg, int x, int y) {
   int z = log2Console(msg, 1, x + y);
@@ -77,7 +77,7 @@ void computeAndLog(const char* msg, int x, int y) {
 int main(int argc, char* argv[]) {
   printf("=== VMPacker Simple App Test ===\n");
 
-  /* 调用被保护的 log2Console (可执行文件内) */
+  /* Call the protected log2Console (within the executable) */
   computeAndLog("init", 10, 20);
   computeAndLog("step1", 5, 15);
   computeAndLog("step2", 100, 200);
@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
   printf("[LOG] Final result: %d\n", final_result);
 
 #ifdef USE_SHARED_LIB
-  /* 调用共享库中的被保护函数 */
+  /* Call the protected function in the shared library */
   printf("\n--- Shared library (.so) tests ---\n");
 
   int r1 = vmp_compute("hello", 0, 42);
