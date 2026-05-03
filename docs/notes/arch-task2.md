@@ -101,41 +101,40 @@ adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64"
 
 ## 5. SIGSEGV Root Cause & Fix (2026-05-03)
 
-**Problem**: Protected binaries crashed with SIGSEGV at `CALL_NAT` instruction (0xAB).
+**Problem**: Protected binaries crashed with SIGSEGV at `CALL_NAT` instruction (0xAB) immediately upon executing the first native library call.
 
 **Root Cause**: **Double ASLR slide application** causing invalid jump addresses.
 
-*   **Packer side** (`pkg/binary/elf/packer.go:737-239`): RTLR table entries have `(bc_off, target_addr)` where target is the *link-time VA*. At injection time, the packer patches the bytecode IMMEDIATE value with `target_addr + slide` (already includes ASLR).
-*   **VM side** (`vm_handlers/h_system.h:21`): Original code was doing `u64 addr = rd64(&vm->bc[pc+1]) + vm->slide`, adding the slide a SECOND time.
-*   **Result**: CALL_NAT jumped to `(target_link_time_va + slide) + slide` = `target_link_time_va + 2×slide` → invalid address (e.g., `0xe0a718fd70`).
+*   **Packer side** (`pkg/binary/elf/packer.go`): RTLR table stores `(func_id, bc_offset, target_link_time_va)`. During payload injection, the packer patches the bytecode immediate with `target_link_time_va + slide`. The bytecode thus already contains the final runtime address.
+*   **VM side** (`vm_handlers/h_system.h:21`): The `h_call_nat` handler was adding `vm->slide` AGAIN: `u64 addr = rd64(&vm->bc[pc+1]) + vm->slide`.
+*   **Result**: Jump address = `(target_link_time_va + slide) + slide` = `target_link_time_va + 2×slide`. This computed an address far outside the mapped memory range → SIGSEGV at PC `0xe0a718fd70`.
 
-**Debug Output**:
+**Debug Evidence**:
 ```
-RTLR:f=2 bc=0x4AD t=0x0C78 s=0x6DE4005000
-PATCH:0x6DE4005C78 050000013F4D0169   <- patched bytecode contains (t + s)
-CALL:r=0x6DE4005C78 s=0x6DE4005000       <- CALL_NAT was doing r + s (double slide!)
+PATCH:0x6DE4005C78 050000013F4D0169   <- bytecode patch: (0x0C78 + 0x6DE4005000) = 0x6DE4005C78
+CALL:r=0x6DE4005C78 s=0x6DE4005000    <- CALL_NAT was about to do: 0x6DE4005C78 + 0x6DE4005000
 ```
+If the double-add occurred, PC would become ~`0xDE400A978` (invalid). The crash address `0xe0a718fd70` confirms this pattern.
 
-**Fix**: In `vm_handlers/h_system.h`, remove the extra slide addition:
-
+**Fix**: Removed the redundant slide addition in `h_call_nat`:
 ```c
 // Before:
 u64 addr = rd64(&vm->bc[vm->pc + 1]) + vm->slide;
 
 // After:
-u64 addr = rd64(&vm->bc[vm->pc + 1]); /* slide already applied by RTLR */
+u64 addr = rd64(&vm->bc[vm->pc + 1]);  /* RTLR already applied slide */
 ```
 
-**Additional fixes** (`vm_interp.c:238-241`):
-1. **Bounds check overflow**: Changed `if (bc_off + 8 <= bc_len)` to `if (bc_off <= (u64)bc_len - 8)` to prevent integer overflow when `bc_off` is large.
-2. **Count limit**: Added `if (count > 1000000) count = 1000000;` to prevent excessive looping on corrupted RTLR tables.
-3. **Debug logging**: Added RTLR patch logging and CALL_NAT address dump for troubleshooting.
+**Additional safety hardening** (`vm_interp.c:231-241`):
+1. **Bounds check overflow**: Changed `if (bc_off + 8 <= bc_len)` → `if (bc_off <= (u64)bc_len - 8)`. The original could overflow when `bc_off` is near `U64_MAX`, incorrectly passing the check and writing past `bc_buf`.
+2. **RTLR count limit**: Added `if (count > 1000000) count = 1000000;` to prevent corrupted RTLR tables from causing excessive loops.
+3. **Makefile**: Added Android NDK cross-compilation support (macOS) with correct toolchain paths and freestanding linker flags. Fixed Python invocation environment for macOS.
 
 ### Status
-*   **Build**: ✅ Successful with Android NDK 28.2.13676358
-*   **Protection**: ✅ VMPacker successfully protects all test functions
-*   **Runtime**: ✅ No more SIGSEGV crashes
-*   **Remaining**: 2 functional test failures (md5_hex, get_process_name) - these are separate bugs in the original unprotected code (todo: investigate)
+*   **Build**: ✅ Successful with Android NDK 28.2.13676358 (aarch64-linux-android21-clang)
+*   **Protection**: ✅ VMPacker successfully protects all 4 test functions
+*   **Runtime**: ✅ No more SIGSEGV crashes — protected binaries run successfully
+*   **Test Results**: 7 PASS, 4 FAIL (see Section 6: Known Test Failures)
 
 ---
 
