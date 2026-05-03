@@ -8,7 +8,7 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// DecodeFunction 解码 ARM64 指令
+// DecodeFunction decodes ARM64 instructions
 func (p *Packer) DecodeFunction(code []byte) []vm.Instruction {
 	dec := arm64.NewDecoder()
 	var insts []vm.Instruction
@@ -20,7 +20,7 @@ func (p *Packer) DecodeFunction(code []byte) []vm.Instruction {
 	return insts
 }
 
-// DecodeFunctionARM32 解码 ARM32/Thumb 指令
+// DecodeFunctionARM32 decodes ARM32/Thumb instructions
 func (p *Packer) DecodeFunctionARM32(code []byte, thumbMode bool) []vm.Instruction {
 	var dec *arm32.Decoder
 	if thumbMode {

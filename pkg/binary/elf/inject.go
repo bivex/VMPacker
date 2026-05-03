@@ -93,7 +93,7 @@ func writeTrampolines(data []byte, funcs []FuncBytecode, vmEntryTokenVA uint64, 
 
 // ---- ARM64 (ELF64) injection ----
 
-// injectVMPBatch64 — ARM64 ELF64 注入
+// injectVMPBatch64 — ARM64 ELF64 injection
 func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 	ehdr := readEhdr64(p.data)
 
@@ -190,7 +190,7 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 
 // ---- ARM32 (ELF32) injection ----
 
-// injectVMPBatch32 — ARM32 ELF32 注入
+// injectVMPBatch32 — ARM32 ELF32 injection
 func (p *Packer) injectVMPBatch32(funcs []FuncBytecode) error {
 	ehdr := readEhdr32(p.data)
 	blob := p.interpBlobARM32

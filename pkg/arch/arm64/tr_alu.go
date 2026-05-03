@@ -5,11 +5,11 @@ import (
 )
 
 // ============================================================
-// ALU — 仅保留无法用栈模式实现的特殊格式指令
+// ALU — only keeps special-format insns that cannot use stack mode
 // ============================================================
 
-// trCCMP 翻译 CCMP/CCMN (reg/imm)
-// 字节码: [op][cond][nzcv][rn][rm_or_imm5][sf] = 6B
+// trCCMP translates CCMP/CCMN (reg/imm)
+// Bytecode: [op][cond][nzcv][rn][rm_or_imm5][sf] = 6B
 // inst.Cond = condition, inst.WB = nzcv (default flags)
 // isNeg: true=CCMN, false=CCMP
 // isImm: true=imm5 variant (inst.Rm reused as imm5), false=reg variant
@@ -54,9 +54,9 @@ func (t *Translator) trCCMP(inst vm.Instruction, isNeg bool, isImm bool) error {
 	return nil
 }
 
-// trMRS 翻译 MRS Xd, <sysreg> — 读取系统寄存器
-// 格式: [OpMrs][d][sysreg_lo][sysreg_hi] = 4B
-// sysreg 是 15-bit 编码，存为 uint16 LE
+// trMRS translates MRS Xd, <sysreg> — read system register
+// Format: [OpMrs][d][sysreg_lo][sysreg_hi] = 4B
+// sysreg is 15-bit encoded, stored as uint16 LE
 func (t *Translator) trMRS(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {

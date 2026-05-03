@@ -23,7 +23,7 @@ type translationResult struct {
 	Relocations []vm.Relocation
 }
 
-// Process 主入口
+// Process main entry point
 func (p *Packer) Process() error {
 	var err error
 	p.data, err = os.ReadFile(p.inputPath)
@@ -45,7 +45,7 @@ func (p *Packer) Process() error {
 	fmt.Printf("[*] ELF: %s, Type: %s, Class: %s\n", f.Machine, f.Type, f.Class)
 	fmt.Printf("[*] VM interp blob: %d bytes (ARM32=%v)\n", len(activeBlob), p.isARM32)
 
-	// 第一阶段: 收集所有函数的字节码
+	// Phase 1: collect bytecode for all functions
 	entries := p.collectEntries(f)
 
 	var funcs []FuncBytecode
@@ -105,7 +105,7 @@ func (p *Packer) Process() error {
 		})
 	}
 
-	// 第二阶段: 批量注入 (一次 PT_NOTE 劫持)
+	// Phase 2: batch injection (single PT_NOTE hijack)
 	fmt.Printf("\n[*] Injecting %d functions...\n", len(funcs))
 	err = p.injectVMPBatch(funcs)
 	if err != nil {
@@ -116,7 +116,7 @@ func (p *Packer) Process() error {
 		fmt.Printf("    [+] %s VMP protected\n", fb.FI.Name)
 	}
 
-	// 第三阶段: 清除符号表 (可选)
+	// Phase 3: strip symbol table (optional)
 	if p.stripSymbols {
 		p.stripSections()
 		fmt.Println("[*] Symbols stripped")
@@ -264,17 +264,17 @@ func (p *Packer) writeUnsupportedReport(name string, fi *vm.FuncInfo, result *tr
 	debugPath := p.outputPath + ".debug.txt"
 	df, err := os.Create(debugPath)
 	if err != nil {
-		fmt.Printf("    [!] debug 文件创建失败: %v\n", err)
+		fmt.Printf("    [!] debug file creation failed: %v\n", err)
 		return
 	}
 	defer df.Close()
 
 	fmt.Fprintf(df, "================================================================\n")
-	fmt.Fprintf(df, "翻译失败报告 — %s @ 0x%X\n", name, fi.Addr)
-	fmt.Fprintf(df, "函数大小: %d bytes, 总指令数: %d, 已翻译: %d\n",
+	fmt.Fprintf(df, "Translation failure report — %s @ 0x%X\n", name, fi.Addr)
+	fmt.Fprintf(df, "Function size: %d bytes, total insts: %d, translated: %d\n",
 		fi.Size, result.TotalInsts, result.TransInsts)
 	fmt.Fprintf(df, "================================================================\n\n")
-	fmt.Fprintf(df, "不支持的指令 (%d):\n\n", len(result.Unsupported))
+	fmt.Fprintf(df, "Unsupported instructions (%d):\n\n", len(result.Unsupported))
 
 	instMap := make(map[int]vm.Instruction)
 	for _, inst := range insts {
@@ -285,12 +285,12 @@ func (p *Packer) writeUnsupportedReport(name string, fi *vm.FuncInfo, result *tr
 		fmt.Fprintf(df, "[%d] %s\n", idx+1, u)
 
 		var off int
-		if _, err := fmt.Sscanf(u, "偏移 0x%X:", &off); err == nil {
+		if _, err := fmt.Sscanf(u, "offset 0x%X:", &off); err == nil {
 			if inst, ok := instMap[off]; ok {
 				raw := inst.Raw
-				fmt.Fprintf(df, "    原始字节: %02X %02X %02X %02X\n",
+				fmt.Fprintf(df, "    raw bytes: %02X %02X %02X %02X\n",
 					byte(raw), byte(raw>>8), byte(raw>>16), byte(raw>>24))
-				fmt.Fprintf(df, "    绝对地址: 0x%X\n", fi.Addr+uint64(off))
+				fmt.Fprintf(df, "    absolute addr: 0x%X\n", fi.Addr+uint64(off))
 			}
 		}
 		fmt.Fprintln(df)
@@ -301,13 +301,13 @@ func (p *Packer) writeUnsupportedReport(name string, fi *vm.FuncInfo, result *tr
 		archName = "arm32"
 	}
 	fmt.Fprintf(df, "================================================================\n")
-	fmt.Fprintf(df, "修复建议:\n")
-	fmt.Fprintf(df, "- 为每条不支持的指令编写 demo 测试用例 (参考 demo/ 目录)\n")
-	fmt.Fprintf(df, "- 在 pkg/arch/%s/translator.go translateOne() 中添加对应 case\n", archName)
-	fmt.Fprintf(df, "- 使用 -v 标志查看完整反汇编上下文\n")
+	fmt.Fprintf(df, "Fix suggestions:\n")
+	fmt.Fprintf(df, "- Write a demo test case for each unsupported insn (see demo/ dir)\n")
+	fmt.Fprintf(df, "- Add corresponding case in pkg/arch/%s/translator.go translateOne()\n", archName)
+	fmt.Fprintf(df, "- Use -v flag to see full disassembly context\n")
 	fmt.Fprintf(df, "================================================================\n")
 
-	fmt.Printf("    [+] 翻译失败 debug 文件: %s\n", debugPath)
+	fmt.Printf("    [+] translation failure debug file: %s\n", debugPath)
 }
 
 // writeDebugDump generates a side-by-side ARM→VM debug comparison file
@@ -363,13 +363,13 @@ func (p *Packer) writeDebugDump(name string, fi *vm.FuncInfo, result *translatio
 
 // postProcessBytecode applies reverse, opcode encryption, RTLR remap, and XOR chain encryption
 func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instruction) ([]byte, byte, error) {
-	// ---- PC 反向遍历: 反转指令顺序 ----
+	// ---- PC reverse traversal: reverse instruction order ----
 	reversed, offsetMap, byteMap := reverseInstructions(result.Bytecode, result.CodeLen)
 
 	newCodeLen := len(reversed)
 	remapBranchTargets(reversed, newCodeLen, offsetMap, p.verbose)
 
-	// 重映射 addr_map 中的 vm_off (BR 间接跳转)
+	// Remap vm_off in addr_map (BR indirect jumps)
 	mapCount := binary.LittleEndian.Uint32(result.Bytecode[len(result.Bytecode)-16:])
 	trailerStart := result.CodeLen
 	for j := 0; j < int(mapCount); j++ {
@@ -380,7 +380,7 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 		}
 	}
 
-	// 用反转后的字节码替换原始指令区，保留 trailer
+	// Replace original instruction area with reversed bytecode, keep trailer
 	trailer := result.Bytecode[result.CodeLen:]
 	finalBytecode := make([]byte, 0, newCodeLen+len(trailer))
 	finalBytecode = append(finalBytecode, reversed...)
@@ -393,7 +393,7 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 			len(offsetMap), newCodeLen, result.CodeLen, len(offsetMap))
 	}
 
-	// ---- OpcodeCryptor: 逐指令 opcode 加密 ----
+	// ---- OpcodeCryptor: per-instruction opcode encryption ----
 	var ocKeyBuf [4]byte
 	if _, err := rand.Read(ocKeyBuf[:]); err != nil {
 		return nil, 0, fmt.Errorf("generating oc_key failed: %v", err)
@@ -423,7 +423,7 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 		}
 	}
 
-	// ---- XOR chain 加密 (整段字节码) ----
+	// ---- XOR chain encryption (whole bytecode segment) ----
 	xorKey := byte(0xA5)
 	encrypted := make([]byte, len(result.Bytecode))
 	for i, b := range result.Bytecode {

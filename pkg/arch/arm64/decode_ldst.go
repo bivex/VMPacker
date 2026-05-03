@@ -3,9 +3,9 @@ package arm64
 import "github.com/vmpacker/pkg/vm"
 
 // ============================================================
-// 加载/存储 模式表
+// Load/Store pattern table
 //
-// 覆盖: LDP/STP, LDR/STR(imm unsigned/pre/post), LDRB/STRB,
+// Covers: LDP/STP, LDR/STR(imm unsigned/pre/post), LDRB/STRB,
 //       LDRH/STRH, LDR/STR(reg), LDRSB/LDRSH/LDRSW,
 //       LD1/ST1(SIMD)
 // ============================================================
@@ -13,12 +13,12 @@ import "github.com/vmpacker/pkg/vm"
 var ldstPatterns = []InstrPattern{
 	// ================================================================
 	// LDP/STP (load/store pair)
-	// 编码: opc:101:V:cat:L:imm7:Rt2:Rn:Rt
+	// Encoding: opc:101:V:cat:L:imm7:Rt2:Rn:Rt
 	//   opc=x0 → 32-bit, opc=1x → 64-bit  (sf=bit31)
 	//   V=0 integer
 	//   cat: 001=post, 010=signed-offset, 011=pre
 	//   L: 0=store, 1=load
-	// 匹配: bits[28:27]=01, bit26=0 → pair integer
+	// Match: bits[28:27]=01, bit26=0 → pair integer
 	// ================================================================
 	{
 		Name: "STP", Mask: 0x1C400000, Value: 0x08000000, Op: STP,
@@ -45,7 +45,7 @@ var ldstPatterns = []InstrPattern{
 		},
 	// ================================================================
 	// LDP/STP (SIMD/FP)
-	// 编码: opc:101:V:cat:L:imm7:Rt2:Rn:Rt
+	// Encoding: opc:101:V:cat:L:imm7:Rt2:Rn:Rt
 	//   V=1 (bit 26)
 	//   bits[29:27] = 101
 	//   Mask: 0x3E400000, Value: 0x2C400000 for LDP, 0x2C000000 for STP
@@ -64,7 +64,7 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// LDPSW (load pair signed word): opc=01, V=0, L=1
-	// 编码: 01:101:0:0:cat:1:imm7:Rt2:Rn:Rt
+	// Encoding: 01:101:0:0:cat:1:imm7:Rt2:Rn:Rt
 	// cat: 001=post, 010=signed-offset, 011=pre
 	// Loads two 32-bit words, sign-extends them to 64-bit
 	// ================================================================
@@ -81,7 +81,7 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// SIMD load/store (LD1/ST1 multiple structures)
-	// 编码: 0:Q:001100:L:000000:opcode:00:Rn:Rt
+	// Encoding: 0:Q:001100:L:000000:opcode:00:Rn:Rt
 	// ================================================================
 	{
 		Name: "LD1_16B", Mask: 0xBFFF0000, Value: 0x0C400000, Op: LD1_16B,
@@ -96,7 +96,7 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// Load/Store register (register offset)
-	// 编码: size:111:V:00:opc:1:Rm:option:S:10:Rn:Rt
+	// Encoding: size:111:V:00:opc:1:Rm:option:S:10:Rn:Rt
 	// ================================================================
 	{
 		Name: "LDRB_REG", Mask: 0xFFE00C00, Value: 0x38600800, Op: LDRB_REG,
@@ -159,8 +159,8 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// Load/Store register (unscaled immediate) LDUR/STUR
-	// 编码: size:111:V:00:opc:0:imm9:00:Rn:Rt  (bits[11:10]=00)
-	// 复用 LDR_IMM/STR_IMM Op，offset 不缩放
+	// Encoding: size:111:V:00:opc:0:imm9:00:Rn:Rt  (bits[11:10]=00)
+	// Reuses LDR_IMM/STR_IMM Op, offset not scaled
 	// ================================================================
 	// LDUR 64-bit
 	{
@@ -231,7 +231,7 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// Load/Store register (immediate pre/post-index)
-	// 编码: size:111:V:00:opc:0:imm9:wb:Rn:Rt
+	// Encoding: size:111:V:00:opc:0:imm9:wb:Rn:Rt
 	//   wb=01 → post-index, wb=11 → pre-index
 	// ================================================================
 	// STR 32-bit post
@@ -303,7 +303,7 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// Load/Store register (unsigned offset imm12)
-	// 编码: size:111:V:01:opc:imm12:Rn:Rt
+	// Encoding: size:111:V:01:opc:imm12:Rn:Rt
 	// ================================================================
 	// LDR 64-bit unsigned
 	{
@@ -380,7 +380,7 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// LDR/STR (SIMD/FP) - Unsigned immediate
-	// 编码: size:111:V:01:opc:imm12:Rn:Rt
+	// Encoding: size:111:V:01:opc:imm12:Rn:Rt
 	//   V=1, bits[29:27]=111, bits[25:24]=01
 	//   Mask: 0x3BC00000 (Exclude size bits [31:30] and opc bits [23:22] from fixed match)
 	//   Value: 0x39400000
@@ -398,7 +398,7 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// Load register (literal / PC-relative)
-	// 编码: opc:011:V:00:imm19:Rt
+	// Encoding: opc:011:V:00:imm19:Rt
 	//   opc=00,V=0 → LDR Wt   (32-bit)
 	//   opc=01,V=0 → LDR Xt   (64-bit)
 	//   opc=10,V=0 → LDRSW Xt (32→64 sign-extend)
@@ -425,9 +425,9 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// PRFM (immediate, unsigned offset)
-	// 编码: 11:111:0:01:10:imm12:Rn:Rt(prfop)
-	// 与 LDR(imm) 64-bit unsigned 共享 op0 分组，opc=10 区分
-	// VMP 中 NOP 化：预取不影响语义
+	// Encoding: 11:111:0:01:10:imm12:Rn:Rt(prfop)
+	// Shares op0 group with LDR(imm) 64-bit unsigned, opc=10 distinguishes
+	// VMP: NOP-ify prefetch, does not affect semantics
 	// ================================================================
 	{
 		Name: "PRFM_IMM", Mask: 0xFFC00000, Value: 0xF9800000, Op: PRFM,
@@ -436,7 +436,7 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// Load-Acquire / Store-Release / Load-Acquire Exclusive / Store-Release Exclusive
-	// 编码: size:001000:o2:L:o1:Rs:o0:Rt2:Rn:Rt
+	// Encoding: size:001000:o2:L:o1:Rs:o0:Rt2:Rn:Rt
 	// ================================================================
 	// LDAR: size:001000:1:1:0:11111:1:11111:Rn:Rt
 	{
@@ -465,9 +465,9 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// LDADD (atomic add, LSE / ARMv8.1)
-	// 编码: size:111:0:00:A:R:1:Rs:0:000:00:Rn:Rt
+	// Encoding: size:111:0:00:A:R:1:Rs:0:000:00:Rn:Rt
 	//   size: 10=32-bit, 11=64-bit (bit[31]=1)
-	// VMP 单线程简化: old = [Rn]; [Rn] = old + Rs; Rt = old
+	// VMP single-threaded simplified: old = [Rn]; [Rn] = old + Rs; Rt = old
 	// ================================================================
 	{
 		Name: "LDADD", Mask: 0x3F20FC00, Value: 0x38200000, Op: LDADD,
@@ -477,11 +477,11 @@ var ldstPatterns = []InstrPattern{
 
 	// ================================================================
 	// CAS (compare-and-swap, LSE / ARMv8.1)
-	// 编码: size:001000:1:L:1:Rs:o0:11111:Rn:Rt
+	// Encoding: size:001000:1:L:1:Rs:o0:11111:Rn:Rt
 	//   size: 10=32-bit, 11=64-bit (bit[31]=1)
 	//   Rs = compare value register (also destination for loaded value)
 	//   Rt = new value register
-	// VMP 单线程简化: old = [Rn]; if old==Rs then [Rn]=Rt; Rs = old
+	// VMP single-threaded simplified: old = [Rn]; if old==Rs then [Rn]=Rt; Rs = old
 	// ================================================================
 	{
 		Name: "CAS", Mask: 0x3FA07C00, Value: 0x08A07C00, Op: CAS,
@@ -490,7 +490,7 @@ var ldstPatterns = []InstrPattern{
 	},
 }
 
-// postPairSIMD LDP/STP SIMD 后处理
+// postPairSIMD LDP/STP SIMD post-processing
 func postPairSIMD(f map[string]int64, inst *vm.Instruction) {
 	wb := f["wb"]
 	if wb != 1 && wb != 2 && wb != 3 {
@@ -527,7 +527,7 @@ func postPairSIMD(f map[string]int64, inst *vm.Instruction) {
 	inst.Rm += vm.REG_V_BASE
 }
 
-// postLdrStrSIMD LDR/STR SIMD 后处理
+// postLdrStrSIMD LDR/STR SIMD post-processing
 func postLdrStrSIMD(isLoad bool) PostFunc {
 	return func(f map[string]int64, inst *vm.Instruction) {
 		sz := f["size"]
@@ -568,7 +568,7 @@ func postLdrStrSIMD(isLoad bool) PostFunc {
 	}
 }
 
-// postAcqRel Acquire/Release load/store 后处理
+// postAcqRel Acquire/Release load/store post-processing
 // size[31:30]: 00=1B, 01=2B, 10=4B, 11=8B → inst.Shift = access bytes
 func postAcqRel(f map[string]int64, inst *vm.Instruction) {
 	sz := f["size"]
@@ -577,9 +577,9 @@ func postAcqRel(f map[string]int64, inst *vm.Instruction) {
 	xzrReplace(&inst.Rd)
 }
 
-// ---- Post 处理函数 ----
+// ---- Post processing functions ----
 
-// postPair LDP/STP 后处理：验证寻址模式 + offset 缩放
+// postPair LDP/STP post-processing: validate addressing mode + offset scaling
 func postPair(f map[string]int64, inst *vm.Instruction) {
 	wb := f["wb"]
 	if wb != 1 && wb != 2 && wb != 3 {
@@ -594,12 +594,12 @@ func postPair(f map[string]int64, inst *vm.Instruction) {
 	} else {
 		inst.Imm = f["imm7"] * 4
 	}
-	// Rt/Rt2 中 reg31 = XZR (STP存零/LDP丢弃), 不是SP
+	// Rt/Rt2: reg31 = XZR (STP stores zero/LDP discards), not SP
 	xzrReplace(&inst.Rd)
 	xzrReplace(&inst.Rm)
 }
 
-// postSimdMulti SIMD 多结构体 load/store
+// postSimdMulti SIMD multi-struct load/store
 func postSimdMulti(f map[string]int64, inst *vm.Instruction) {
 	switch f["opcode"] {
 	case 0b0111:
@@ -642,7 +642,7 @@ func postLdrStrPrePostXZR(f map[string]int64, inst *vm.Instruction) {
 	xzrReplace(&inst.Rd)
 }
 
-// postUnscaled LDUR/STUR 无缩放偏移后处理: imm9 直接使用，不缩放
+// postUnscaled LDUR/STUR unscaled offset post-processing: imm9 used directly, no scaling
 func postUnscaled(sf bool) PostFunc {
 	return func(f map[string]int64, inst *vm.Instruction) {
 		inst.Imm = f["imm9"]
@@ -651,7 +651,7 @@ func postUnscaled(sf bool) PostFunc {
 	}
 }
 
-// postUnsigned unsigned offset 后处理
+// postUnsigned unsigned offset post-processing
 func postUnsigned(scale int64, sf bool) PostFunc {
 	return func(f map[string]int64, inst *vm.Instruction) {
 		inst.Imm = f["imm12"] * scale
@@ -660,22 +660,22 @@ func postUnsigned(scale int64, sf bool) PostFunc {
 	}
 }
 
-// postLdrLiteral LDR literal 后处理: imm19*4 = PC-relative offset
-// WB=4 标记 LDRSW (sign-extend) 变体
+// postLdrLiteral LDR literal post-processing: imm19*4 = PC-relative offset
+// WB=4 marks LDRSW (sign-extend) variant
 func postLdrLiteral(sf bool, signExtend bool) PostFunc {
 	return func(f map[string]int64, inst *vm.Instruction) {
 		inst.Imm = f["imm19"] * 4 // PC-relative byte offset
 		inst.SF = sf
-		inst.Rn = -1 // 无 base register (PC-relative)
+		inst.Rn = -1 // No base register (PC-relative)
 		if signExtend {
-			inst.WB = 4 // 标记 LDRSW
+			inst.WB = 4 // Marks LDRSW
 		}
 		xzrReplace(&inst.Rd)
 	}
 }
 
-// postLdpsw LDPSW 后处理: 类似 postPair 但 opc=01 固定 32-bit load
-// offset 按 4 字节(32-bit word) 缩放，结果 sign-extend 到 64-bit
+// postLdpsw LDPSW post-processing: like postPair but opc=01 fixed 32-bit load
+// offset scaled by 4 bytes (32-bit word), result sign-extended to 64-bit
 func postLdpsw(f map[string]int64, inst *vm.Instruction) {
 	wb := f["wb"]
 	if wb != 1 && wb != 2 && wb != 3 {
@@ -689,7 +689,7 @@ func postLdpsw(f map[string]int64, inst *vm.Instruction) {
 	xzrReplace(&inst.Rm)
 }
 
-// postLdadd LDADD 后处理: 根据 size 设置 access width
+// postLdadd LDADD post-processing: set access width based on size
 func postLdadd(f map[string]int64, inst *vm.Instruction) {
 	sz := f["size"]
 	inst.Shift = 1 << int(sz) // 1,2,4,8
@@ -698,7 +698,7 @@ func postLdadd(f map[string]int64, inst *vm.Instruction) {
 	xzrReplace(&inst.Rm)
 }
 
-// postCas CAS 后处理: 根据 size 设置 access width
+// postCas CAS post-processing: set access width based on size
 // Rm=Rs(compare reg, also written), Rd=Rt(new value reg)
 func postCas(f map[string]int64, inst *vm.Instruction) {
 	sz := f["size"]

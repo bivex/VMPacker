@@ -19,37 +19,37 @@ type execSection struct {
 	data   []byte
 }
 
-// ParseAddrSpec 解析地址规格: "0xADDR", "0xSTART-0xEND", "0xSTART-0xEND:name"
+// ParseAddrSpec parses address spec: "0xADDR", "0xSTART-0xEND", "0xSTART-0xEND:name"
 func ParseAddrSpec(s string) (AddrSpec, error) {
 	var spec AddrSpec
-	// 分离可选名称 (最后一个冒号后面)
+	// Separate optional name (after last colon)
 	if idx := strings.LastIndex(s, ":"); idx > 2 {
 		candidate := s[idx+1:]
-		// 如果不像十六进制数则是名称
+		// If not a hex number, treat as name
 		if _, err := strconv.ParseUint(candidate, 0, 64); err != nil {
 			spec.Name = candidate
 			s = s[:idx]
 		}
 	}
-	// 解析地址范围
+	// Parse address range
 	if parts := strings.Split(s, "-"); len(parts) == 2 {
 		start, err := strconv.ParseUint(parts[0], 0, 64)
 		if err != nil {
-			return spec, fmt.Errorf("起始地址无效: %s", parts[0])
+			return spec, fmt.Errorf("invalid start address: %s", parts[0])
 		}
 		end, err := strconv.ParseUint(parts[1], 0, 64)
 		if err != nil {
-			return spec, fmt.Errorf("结束地址无效: %s", parts[1])
+			return spec, fmt.Errorf("invalid end address: %s", parts[1])
 		}
 		if end <= start {
-			return spec, fmt.Errorf("结束地址必须大于起始地址")
+			return spec, fmt.Errorf("end address must be greater than start address")
 		}
 		spec.Addr = start
 		spec.End = end
 	} else {
 		addr, err := strconv.ParseUint(s, 0, 64)
 		if err != nil {
-			return spec, fmt.Errorf("地址无效: %s", s)
+			return spec, fmt.Errorf("invalid address: %s", s)
 		}
 		spec.Addr = addr
 	}
@@ -59,7 +59,7 @@ func ParseAddrSpec(s string) (AddrSpec, error) {
 	return spec, nil
 }
 
-// FindFunction 在 ELF 中查找函数，并计算其实体在文件中的正确偏移
+// FindFunction finds a function in ELF and computes its correct file offset
 func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 	syms, err := f.Symbols()
 	if err != nil {
@@ -99,7 +99,7 @@ func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 
 // resolveFileOffset finds file offset for a virtual address, checking PT_LOAD first then sections
 func resolveFileOffset(f *elf.File, addr uint64, secIdx elf.SectionIndex) (uint64, string, bool) {
-	// 优先使用 Program Headers (Android .so 必备)
+	// Prefer Program Headers (required for Android .so)
 	for _, ph := range f.Progs {
 		if ph.Type == elf.PT_LOAD && (ph.Flags&elf.PF_X != 0) {
 			if addr >= ph.Vaddr && addr < ph.Vaddr+ph.Memsz {
@@ -108,7 +108,7 @@ func resolveFileOffset(f *elf.File, addr uint64, secIdx elf.SectionIndex) (uint6
 		}
 	}
 
-	// 回退到 Section Headers
+	// Fallback to Section Headers
 	if int(secIdx) < len(f.Sections) {
 		sec := f.Sections[secIdx]
 		if addr >= sec.Addr {
@@ -119,7 +119,7 @@ func resolveFileOffset(f *elf.File, addr uint64, secIdx elf.SectionIndex) (uint6
 	return 0, "", false
 }
 
-// FindFunctionByAddr 通过地址查找函数
+// FindFunctionByAddr finds function by address
 func (p *Packer) FindFunctionByAddr(f *elf.File, spec AddrSpec) (*vm.FuncInfo, error) {
 	sec, err := findExecSection(f, spec.Addr)
 	if err != nil {
@@ -234,14 +234,14 @@ func detectARM32FunctionEnd(secData []byte, startOff uint64, addr uint64, isThum
 	return 0, fmt.Errorf("cannot detect function size at 0x%X (no BX LR / POP {PC} found)", addr)
 }
 
-// ExtractFuncCode 提取函数机器码
+// ExtractFuncCode extracts function machine code
 func (p *Packer) ExtractFuncCode(f *elf.File, fi *vm.FuncInfo) ([]byte, error) {
 	if fi.Size == 0 {
 		return nil, fmt.Errorf("function %s has zero size", fi.Name)
 	}
 
 	if fi.Section == "__LOAD_X" {
-		// 无 section headers: 从 LOAD segment 读取
+		// No section headers: read from LOAD segment
 		for _, prog := range f.Progs {
 			if prog.Type != elf.PT_LOAD || prog.Flags&elf.PF_X == 0 {
 				continue

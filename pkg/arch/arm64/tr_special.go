@@ -7,7 +7,7 @@ import (
 )
 
 // ============================================================
-// 特殊指令翻译 — ADRP / ADR
+// Special instruction translation — ADRP / ADR
 // ============================================================
 
 // emitAddrWithSlide emits bytecode that computes (link_time_addr + slide)
@@ -60,9 +60,9 @@ func (t *Translator) trADR(inst vm.Instruction) (int, error) {
 	return 0, nil
 }
 
-// trSVC 翻译 SVC #imm16
-// 字节码: [OpSvc][imm16_lo][imm16_hi] = 3B
-// handler 使用 inline asm 执行 svc #0，从 VM 寄存器传递 syscall 参数
+// trSVC translates SVC #imm16
+// Bytecode: [OpSvc][imm16_lo][imm16_hi] = 3B
+// Handler uses inline asm to execute svc #0, passing syscall args via VM registers
 func (t *Translator) trSVC(inst vm.Instruction) error {
 	imm16 := uint16(inst.Imm)
 	t.emit(vm.OpSvc, byte(imm16), byte(imm16>>8))

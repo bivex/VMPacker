@@ -7,9 +7,9 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// ---- 栈模式杂项翻译函数 ----
+// ---- Stack-mode misc translation functions ----
 
-// trStackMovReg 翻译 MOV Xd, Xn (栈模式)
+// trStackMovReg translates MOV Xd, Xn (stack mode)
 func (t *Translator) trStackMovReg(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {
@@ -38,7 +38,7 @@ func (t *Translator) trStackMovReg(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackCBZ 翻译 CBZ/CBNZ (栈模式)
+// trStackCBZ translates CBZ/CBNZ (stack mode)
 func (t *Translator) trStackCBZ(inst vm.Instruction, isZero bool) error {
 	target := inst.Offset + int(inst.Imm)
 
@@ -47,7 +47,7 @@ func (t *Translator) trStackCBZ(inst vm.Instruction, isZero bool) error {
 		return err
 	}
 
-	// 纯栈比较: VLOAD(rd) PUSH(0) S_CMP
+	// Pure stack cmp: VLOAD(rd) PUSH(0) S_CMP
 	t.sVload(rd)
 	t.sPushImm32(0)
 	t.emit(vm.OpSCmp)
@@ -66,7 +66,7 @@ func (t *Translator) trStackCBZ(inst vm.Instruction, isZero bool) error {
 	return nil
 }
 
-// trStackMADD 翻译 MADD/MSUB (栈模式)
+// trStackMADD translates MADD/MSUB (stack mode)
 // MADD: Rd = Ra + Rn * Rm
 // MSUB: Rd = Ra - Rn * Rm
 func (t *Translator) trStackMADD(inst vm.Instruction, isSub bool) error {
@@ -116,7 +116,7 @@ func (t *Translator) trStackMADD(inst vm.Instruction, isSub bool) error {
 	return nil
 }
 
-// trStackCSEL 翻译 CSEL/CSINC/CSINV/CSNEG (栈模式)
+// trStackCSEL translates CSEL/CSINC/CSINV/CSNEG (stack mode)
 func (t *Translator) trStackCSEL(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {
@@ -131,7 +131,7 @@ func (t *Translator) trStackCSEL(inst vm.Instruction) error {
 		return err
 	}
 
-	// 条件码映射
+	// Condition code mapping
 	var vmOp byte
 	switch inst.Cond {
 	case COND_EQ:
@@ -159,11 +159,11 @@ func (t *Translator) trStackCSEL(inst vm.Instruction) error {
 	case COND_PL:
 		vmOp = vm.OpJge
 	default:
-		return fmt.Errorf("CSEL: 不支持的条件码 0x%X", inst.Cond)
+		return fmt.Errorf("CSEL: unsupported condition code 0x%X", inst.Cond)
 	}
 
-	// CSEL 的分支逻辑不能用栈操作改写（它用 VM 分支指令）
-	// 但 XZR 处理改为栈模式 push 0
+	// CSEL branch logic cannot be rewritten with stack ops (uses VM branch)
+	// But XZR handling changed to stack mode push 0
 	if inst.Rn == vm.REG_XZR {
 		t.sPushImm32(0)
 		t.sVstore(rn)
@@ -173,7 +173,7 @@ func (t *Translator) trStackCSEL(inst vm.Instruction) error {
 		t.sVstore(rm)
 	}
 
-	// 条件跳转到 true 路径
+	// Conditional jump to true path
 	t.emit(vmOp)
 	jccPos := t.pos()
 	t.emitU32(0)
@@ -221,9 +221,9 @@ func (t *Translator) trStackCSEL(inst vm.Instruction) error {
 	return nil
 }
 
-// ---- 栈模式位逻辑翻译函数 ----
+// ---- Stack-mode bit logic translation functions ----
 
-// trStackBitLogicalNot 翻译 BIC/ORN/EON — 栈模式
+// trStackBitLogicalNot translates BIC/ORN/EON — stack mode
 // Rd = Rn OP NOT(shift(Rm))
 // vmStackOp: OpSAnd → BIC, OpSOr → ORN, OpSXor → EON
 func (t *Translator) trStackBitLogicalNot(inst vm.Instruction, sOp byte, setFlags bool) error {
@@ -263,15 +263,15 @@ func (t *Translator) trStackBitLogicalNot(inst vm.Instruction, sOp byte, setFlag
 	return nil
 }
 
-// trStackEON 翻译 EON — 栈模式
+// trStackEON translates EON — stack mode
 // EON = Rd = Rn XOR NOT(shift(Rm))
 func (t *Translator) trStackEON(inst vm.Instruction) error {
 	return t.trStackBitLogicalNot(inst, vm.OpSXor, false)
 }
 
-// ---- 栈模式扩展寄存器翻译函数 ----
+// ---- Stack-mode extended register translation functions ----
 
-// trStackAddSubExt 翻译 ADD/SUB (extended register) — 栈模式
+// trStackAddSubExt translates ADD/SUB (extended register) — stack mode
 // Rd = Rn op extend(Rm, shift)
 func (t *Translator) trStackAddSubExt(inst vm.Instruction, sOp byte, setFlags bool) error {
 	rd, err := t.mapReg(inst.Rd)
@@ -318,7 +318,7 @@ func (t *Translator) trStackAddSubExt(inst vm.Instruction, sOp byte, setFlags bo
 	case 7: // SXTX — no-op
 	}
 
-	// 额外左移
+	// Extra left shift
 	if inst.Shift > 0 {
 		t.sPushImm32(uint32(inst.Shift))
 		t.emit(vm.OpSShl)
@@ -345,10 +345,10 @@ func (t *Translator) trStackAddSubExt(inst vm.Instruction, sOp byte, setFlags bo
 	return nil
 }
 
-// ---- 栈模式原子操作翻译函数 ----
+// ---- Stack-mode atomic operation translation functions ----
 
-// trStackLdadd 翻译 LDADD — 原子加 (单线程简化) — 栈模式
-// 语义: old = Mem[Rn]; Mem[Rn] = old + Rs; Rt = old
+// trStackLdadd translates LDADD — atomic add (single-thread simplified) — stack mode
+// Semantics: old = Mem[Rn]; Mem[Rn] = old + Rs; Rt = old
 func (t *Translator) trStackLdadd(inst vm.Instruction) error {
 	rn, err := t.mapReg(inst.Rn)
 	if err != nil {
@@ -398,9 +398,9 @@ func (t *Translator) trStackLdadd(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackCas 翻译 CAS — 比较并交换 (单线程简化) — 栈模式
-// 语义: old = Mem[Rn]; if old == Xs then Mem[Rn] = Xt; Xs = old
-// 单线程: 总是成功, 简化为: old=[Rn]; [Rn]=Xt; Rs=old
+// trStackCas translates CAS — compare and swap (single-thread simplified) — stack mode
+// Semantics: old = Mem[Rn]; if old == Xs then Mem[Rn] = Xt; Xs = old
+// Single-threaded: always succeeds, simplified to: old=[Rn]; [Rn]=Xt; Rs=old
 func (t *Translator) trStackCas(inst vm.Instruction) error {
 	rn, err := t.mapReg(inst.Rn)
 	if err != nil {
@@ -439,9 +439,9 @@ func (t *Translator) trStackCas(inst vm.Instruction) error {
 	return nil
 }
 
-// ---- 栈模式乘法翻译函数 ----
+// ---- Stack-mode multiply translation functions ----
 
-// trStackSMADDL 翻译 SMADDL/SMSUBL — 栈模式
+// trStackSMADDL translates SMADDL/SMSUBL — stack mode
 // SMADDL: Xd = Xa + SEXT(Wn) * SEXT(Wm)
 // SMSUBL: Xd = Xa - SEXT(Wn) * SEXT(Wm)
 func (t *Translator) trStackSMADDL(inst vm.Instruction, isSub bool) error {
@@ -499,7 +499,7 @@ func (t *Translator) trStackSMADDL(inst vm.Instruction, isSub bool) error {
 	return nil
 }
 
-// trStackUMADDL 翻译 UMADDL/UMSUBL — 栈模式
+// trStackUMADDL translates UMADDL/UMSUBL — stack mode
 // UMADDL: Xd = Xa + ZEXT(Wn) * ZEXT(Wm)
 // UMSUBL: Xd = Xa - ZEXT(Wn) * ZEXT(Wm)
 func (t *Translator) trStackUMADDL(inst vm.Instruction, isSub bool) error {

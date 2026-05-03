@@ -4,9 +4,9 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// ---- 栈模式 Bitfield 翻译函数 ----
+// ---- Stack-mode Bitfield translation functions ----
 
-// trStackBFM 翻译 BFM Xd, Xn, #immr, #imms — 位域移动 — 栈模式
+// trStackBFM translates BFM Xd, Xn, #immr, #imms — bitfield move — stack mode
 // BFI alias:   imms < immr → dst_lsb = regsize-immr, width = imms+1
 // BFXIL alias: imms >= immr → dst_lsb = 0, width = imms-immr+1
 func (t *Translator) trStackBFM(inst vm.Instruction) error {
@@ -39,7 +39,7 @@ func (t *Translator) trStackBFM(inst vm.Instruction) error {
 
 	mask := uint64((1 << width) - 1)
 
-	// --- 栈操作: extracted = (Rn >> srcLSB) & mask ---
+	// --- Stack op: extracted = (Rn >> srcLSB) & mask ---
 	t.sVload(rn)
 	if srcLSB > 0 {
 		t.sPushImm32(srcLSB)
@@ -75,7 +75,7 @@ func (t *Translator) trStackBFM(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackEXTR 翻译 EXTR Xd, Xn, Xm, #lsb — 位域提取 — 栈模式
+// trStackEXTR translates EXTR Xd, Xn, Xm, #lsb — bitfield extract — stack mode
 // ROR alias: Rn == Rm → rotate right
 // General:   result = (Rm >> lsb) | (Rn << (regSize-lsb))
 func (t *Translator) trStackEXTR(inst vm.Instruction) error {
@@ -98,7 +98,7 @@ func (t *Translator) trStackEXTR(inst vm.Instruction) error {
 	}
 
 	if inst.Rn == inst.Rm {
-		// ROR alias: 栈模式
+		// ROR alias: stack mode
 		t.sVload(rn)
 		t.sPushImm32(lsb)
 		t.sPushImm32(regSize)
@@ -126,8 +126,8 @@ func (t *Translator) trStackEXTR(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackUBFM 翻译 UBFM — 栈模式
-// 覆盖所有 case: LSR, LSL, UXTB, UXTH, UBFX, UBFIZ
+// trStackUBFM translates UBFM — stack mode
+// Covers all cases: LSR, LSL, UXTB, UXTH, UBFX, UBFIZ
 func (t *Translator) trStackUBFM(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {

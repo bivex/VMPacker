@@ -11,8 +11,8 @@ import (
 // Acquire/Release instructions - simple semantics, no temp register involvement
 // ============================================================
 
-// trLdar 翻译 LDAR/LDARB/LDARH/LDAXR/LDAXRB/LDAXRH
-// 在单线程 VM 中等价于普通 load from [Rn] with offset=0
+// trLdar translates LDAR/LDARB/LDARH/LDAXR/LDAXRB/LDAXRH
+// In single-threaded VM equivalent to normal load from [Rn] with offset=0
 func (t *Translator) trLdar(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {
@@ -42,8 +42,8 @@ func (t *Translator) trLdar(inst vm.Instruction) error {
 	return nil
 }
 
-// trStlr 翻译 STLR/STLRB/STLRH
-// 在单线程 VM 中等价于普通 store to [Rn] with offset=0
+// trStlr translates STLR/STLRB/STLRH
+// In single-threaded VM equivalent to normal store to [Rn] with offset=0
 func (t *Translator) trStlr(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {
@@ -73,8 +73,8 @@ func (t *Translator) trStlr(inst vm.Instruction) error {
 	return nil
 }
 
-// trStlxr 翻译 STLXR/STLXRB/STLXRH
-// 在单线程 VM 中: store + status register = 0 (always succeed)
+// trStlxr translates STLXR/STLXRB/STLXRH
+// In single-threaded VM: store + status register = 0 (always succeeds)
 func (t *Translator) trStlxr(inst vm.Instruction) error {
 	rn, err := t.mapReg(inst.Rn)
 	if err != nil {

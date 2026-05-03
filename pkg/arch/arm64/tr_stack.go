@@ -5,16 +5,16 @@ import (
 )
 
 // ============================================================
-// 栈模式翻译器 — 所有 ARM64 指令转为纯栈操作
+// Stack-mode translator — converts all ARM64 instructions to pure stack ops
 //
-// 翻译策略:
+// Translation strategy:
 //   register-based: emit(OpAdd, rd, rn, rm)
 //   stack-based:    VLOAD(rn) → VLOAD(rm) → S_ADD → VSTORE(rd)
 //
-// 优势: 彻底消除寄存器冲突，无需 pickTemp/pickTemp2
+// Advantage: eliminates register conflicts completely, no need for pickTemp/pickTemp2
 // ============================================================
 
-// ---- 栈模式 emit 辅助函数 ----
+// ---- Stack-mode emit helpers ----
 
 // sVload push R[reg] onto eval stack
 func (t *Translator) sVload(reg byte) {
@@ -56,9 +56,9 @@ func (t *Translator) sSwap() { t.emit(vm.OpSSwap) }
 // sDrop pop and discard TOS
 func (t *Translator) sDrop() { t.emit(vm.OpSDrop) }
 
-// ---- 栈模式 ALU 翻译函数 ----
+// ---- Stack-mode ALU translation functions ----
 
-// trStackAluReg 翻译三寄存器 ALU (栈模式)
+// trStackAluReg translates 3-reg ALU (stack mode)
 // ARM64: op Xd, Xn, Xm  →  VLOAD(rn) VLOAD(rm) S_OP VSTORE(rd)
 func (t *Translator) trStackAluReg(inst vm.Instruction, sOp byte) error {
 	rd, rn, rm, err := t.mapReg3(inst)
@@ -66,10 +66,10 @@ func (t *Translator) trStackAluReg(inst vm.Instruction, sOp byte) error {
 		return err
 	}
 
-	// XZR 处理: push 0 而不是 VLOAD
+	// XZR handling: push 0 instead of VLOAD
 	t.pushRegOrZero(inst.Rn, rn)
 
-	// 移位处理
+	// Shift handling
 	if inst.Shift != 0 {
 		t.pushRegOrZero(inst.Rm, rm)
 		t.emitShiftOnStack(inst.ShiftType, uint32(inst.Shift), inst.SF)
@@ -85,21 +85,21 @@ func (t *Translator) trStackAluReg(inst vm.Instruction, sOp byte) error {
 		}
 	}
 
-	t.emit(sOp) // 二元操作
+	t.emit(sOp) // Binary operation
 
 	if !inst.SF {
-		t.emit(vm.OpSTrunc32) // W 寄存器模式截断
+		t.emit(vm.OpSTrunc32) // W register mode truncation
 	}
 
 	if inst.Rd == vm.REG_XZR {
-		t.sDrop() // 结果丢弃
+		t.sDrop() // Discard result
 	} else {
 		t.sVstore(rd)
 	}
 	return nil
 }
 
-// trStackAluRegFlags 翻译三寄存器 ALU + 设置标志位 (栈模式)
+// trStackAluRegFlags translates 3-reg ALU + set flags (stack mode)
 func (t *Translator) trStackAluRegFlags(inst vm.Instruction, sOp byte, setFlags bool) error {
 	rd, rn, rm, err := t.mapReg3(inst)
 	if err != nil {
@@ -135,13 +135,13 @@ func (t *Translator) trStackAluRegFlags(inst vm.Instruction, sOp byte, setFlags 
 	return nil
 }
 
-// trStackAluImm 翻译寄存器+立即数 ALU (栈模式)
+// trStackAluImm translates reg+imm ALU (stack mode)
 // ARM64: op Xd, Xn, #imm  →  VLOAD(rn) PUSH(imm) S_OP VSTORE(rd)
 func (t *Translator) trStackAluImm(inst vm.Instruction, sOp byte) error {
 	return t.trStackAluImmFlags(inst, sOp, false)
 }
 
-// trStackAluImmFlags 翻译寄存器+立即数 ALU + 标志位 (栈模式)
+// trStackAluImmFlags translates reg+imm ALU + flags (stack mode)
 func (t *Translator) trStackAluImmFlags(inst vm.Instruction, sOp byte, setFlags bool) error {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {
@@ -175,7 +175,7 @@ func (t *Translator) trStackAluImmFlags(inst vm.Instruction, sOp byte, setFlags 
 	return nil
 }
 
-// trStackUnary 翻译一元操作 (栈模式)
+// trStackUnary translates unary op (stack mode)
 // ARM64: op Xd, Xn  →  VLOAD(rn) S_OP VSTORE(rd)
 func (t *Translator) trStackUnary(inst vm.Instruction, sOp byte) error {
 	rd, err := t.mapReg(inst.Rd)
@@ -198,9 +198,9 @@ func (t *Translator) trStackUnary(inst vm.Instruction, sOp byte) error {
 	return nil
 }
 
-// ---- 栈模式 MOV 翻译函数 ----
+// ---- Stack-mode MOV translation functions ----
 
-// trStackMov 翻译 MOV (栈模式)
+// trStackMov translates MOV (stack mode)
 // MOVZ: Xd = imm << shift
 // MOVN: Xd = ~(imm << shift)
 func (t *Translator) trStackMov(inst vm.Instruction) error {
@@ -220,7 +220,7 @@ func (t *Translator) trStackMov(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackMovN 翻译 MOVN (栈模式)
+// trStackMovN translates MOVN (stack mode)
 func (t *Translator) trStackMovN(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {
@@ -237,8 +237,8 @@ func (t *Translator) trStackMovN(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackMovK 翻译 MOVK (栈模式)
-// 保留 Rd 其他字段，仅替换指定 16-bit 段
+// trStackMovK translates MOVK (stack mode)
+// Keep other Rd fields, only replace specified 16-bit segment
 func (t *Translator) trStackMovK(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {
@@ -247,7 +247,7 @@ func (t *Translator) trStackMovK(inst vm.Instruction) error {
 
 	hw := uint64(inst.Shift) // 0, 16, 32, 48
 	imm := uint64(inst.Imm)
-	mask := uint64(0xFFFF) << hw // 要清除的 16-bit 区域
+	mask := uint64(0xFFFF) << hw // 16-bit region to clear
 
 	// Rd = (Rd & ~mask) | (imm << hw)
 	t.sVload(rd)          // push Rd
@@ -264,9 +264,9 @@ func (t *Translator) trStackMovK(inst vm.Instruction) error {
 	return nil
 }
 
-// ---- 栈模式 CMP 翻译函数 ----
+// ---- Stack-mode CMP translation functions ----
 
-// trStackCmp 翻译 CMP reg,reg (栈模式)
+// trStackCmp translates CMP reg,reg (stack mode)
 // CMP Xn, Xm → VLOAD(rn) VLOAD(rm) S_CMP
 func (t *Translator) trStackCmp(inst vm.Instruction) error {
 	rn, err := t.mapReg(inst.Rn)
@@ -284,7 +284,7 @@ func (t *Translator) trStackCmp(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackCmpImm 翻译 CMP reg,#imm (栈模式)
+// trStackCmpImm translates CMP reg,#imm (stack mode)
 func (t *Translator) trStackCmpImm(inst vm.Instruction) error {
 	rn, err := t.mapReg(inst.Rn)
 	if err != nil {
@@ -297,9 +297,9 @@ func (t *Translator) trStackCmpImm(inst vm.Instruction) error {
 	return nil
 }
 
-// ---- 辅助工具函数 ----
+// ---- Helper functions ----
 
-// mapReg3 映射 Rd/Rn/Rm 三寄存器 (XZR→16 但不再有冲突顾虑)
+// mapReg3 maps Rd/Rn/Rm 3 registers (XZR→16 but no conflict concerns)
 func (t *Translator) mapReg3(inst vm.Instruction) (byte, byte, byte, error) {
 	rd, err := t.mapReg(inst.Rd)
 	if err != nil {
@@ -325,14 +325,14 @@ func (t *Translator) pushRegOrZero(arm64Reg int, vmReg byte) {
 	}
 }
 
-// emitShiftOnStack 在栈顶值上执行移位操作 (用于 shifted register operands)
-// TOS = value to shift, 输出 TOS = shifted value
+// emitShiftOnStack performs shift on TOS (for shifted register operands)
+// TOS = value to shift, output TOS = shifted value
 func (t *Translator) emitShiftOnStack(shiftType int, amount uint32, sf bool) {
 	if amount == 0 {
 		return
 	}
 
-	// 32-bit 模式: 先截断到 32 位
+	// 32-bit mode: first truncate to 32 bits
 	if !sf {
 		t.emit(vm.OpSTrunc32)
 	}
@@ -346,7 +346,7 @@ func (t *Translator) emitShiftOnStack(shiftType int, amount uint32, sf bool) {
 		t.emit(vm.OpSShr)
 	case 2: // ASR
 		if !sf {
-			// 32-bit ASR: 需要先符号扩展
+			// 32-bit ASR: need sign extension first
 			t.emit(vm.OpSSext32)
 			t.sPushImm32(amount)
 			t.emit(vm.OpSAsr)
@@ -356,7 +356,7 @@ func (t *Translator) emitShiftOnStack(shiftType int, amount uint32, sf bool) {
 		}
 	case 3: // ROR
 		if !sf {
-			// 32-bit ROR: 用 SHR+SHL+OR 模拟
+			// 32-bit ROR: simulate with SHR+SHL+OR
 			shift := amount & 31
 			if shift != 0 {
 				t.sDup() // dup value
@@ -374,7 +374,7 @@ func (t *Translator) emitShiftOnStack(shiftType int, amount uint32, sf bool) {
 		}
 	}
 
-	// 32-bit 模式: 截断移位结果
+	// 32-bit mode: truncate shift result
 	if !sf {
 		t.emit(vm.OpSTrunc32)
 	}

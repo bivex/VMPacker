@@ -4,9 +4,9 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// ---- 栈模式 Store 翻译函数 ----
+// ---- Stack-mode Store translation functions ----
 
-// trStackStore 翻译 STR (栈模式)
+// trStackStore translates STR (stack mode)
 // STR Rt, [Rn, #off] → VLOAD(rn) PUSH(off) S_ADD VLOAD(rt) S_ST{8|16|32|64}
 func (t *Translator) trStackStore(inst vm.Instruction) error {
 	rn, err := t.mapReg(inst.Rn)
@@ -92,7 +92,7 @@ func (t *Translator) trStackStore(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackStoreReg 翻译 STR (register offset) — 栈模式
+// trStackStoreReg translates STR (register offset) — stack mode
 func (t *Translator) trStackStoreReg(inst vm.Instruction) error {
 	rn, err := t.mapReg(inst.Rn)
 	if err != nil {
@@ -143,9 +143,9 @@ func (t *Translator) trStackStoreReg(inst vm.Instruction) error {
 	return nil
 }
 
-// ---- opcode 映射查找表 ----
+// ---- Opcode mapping table ----
 
-// regToStackOp 将 register-based opcode 映射到 stack-based opcode
+// regToStackOp maps register-based opcode to stack-based opcode
 func regToStackOp(regOp byte) byte {
 	switch regOp {
 	case vm.OpAdd:
@@ -175,7 +175,7 @@ func regToStackOp(regOp byte) byte {
 	}
 }
 
-// immToStackOp 将 imm-based opcode 映射到 stack-based opcode
+// immToStackOp maps imm-based opcode to stack-based opcode
 func immToStackOp(immOp byte) byte {
 	switch immOp {
 	case vm.OpAddImm:

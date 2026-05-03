@@ -4,9 +4,9 @@ import (
 	"github.com/vmpacker/pkg/vm"
 )
 
-// ---- 栈模式 Load 翻译函数 ----
+// ---- Stack-mode Load translation functions ----
 
-// trStackLoad 翻译 LDR (栈模式)
+// trStackLoad translates LDR (stack mode)
 // LDR Rd, [Rn, #off] → VLOAD(rn) PUSH(off) S_ADD S_LD{8|16|32|64} VSTORE(rd)
 func (t *Translator) trStackLoad(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
@@ -52,7 +52,7 @@ func (t *Translator) trStackLoad(inst vm.Instruction) error {
 		sLdOp = vm.OpSLd64
 	}
 
-	// 回写辅助函数 (pre/post index)
+	// Writeback helper (pre/post index)
 	emitWriteback := func() {
 		t.sVload(rn)
 		wbImm := inst.Imm
@@ -97,7 +97,7 @@ func (t *Translator) trStackLoad(inst vm.Instruction) error {
 		t.emit(sLdOp)
 	}
 
-	// 符号扩展
+	// Sign extension
 	if op == LDRSW_IMM {
 		t.emit(vm.OpSSext32)
 	}
@@ -147,7 +147,7 @@ signext:
 	return nil
 }
 
-// trStackLoadReg 翻译 LDR (register offset) — 栈模式
+// trStackLoadReg translates LDR (register offset) — stack mode
 // addr = Rn + (shift ? Rm << size : Rm)
 func (t *Translator) trStackLoadReg(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
@@ -199,7 +199,7 @@ func (t *Translator) trStackLoadReg(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackLoadRegSigned 翻译 LDRSB/LDRSH/LDRSW (register offset) — 栈模式
+// trStackLoadRegSigned translates LDRSB/LDRSH/LDRSW (register offset) — stack mode
 // addr = Rn + (Rm << shift), load, sign-extend
 func (t *Translator) trStackLoadRegSigned(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
@@ -263,7 +263,7 @@ func (t *Translator) trStackLoadRegSigned(inst vm.Instruction) error {
 	return nil
 }
 
-// trStackLdrLiteral 翻译 LDR literal (PC-relative) — 栈模式
+// trStackLdrLiteral translates LDR literal (PC-relative) — stack mode
 // ARM64: LDR Xt/Wt, [PC + imm19*4]
 func (t *Translator) trStackLdrLiteral(inst vm.Instruction) error {
 	rd, err := t.mapReg(inst.Rd)
