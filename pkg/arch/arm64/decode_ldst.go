@@ -31,6 +31,18 @@ var ldstPatterns = []InstrPattern{
 		},
 		Post: postPair,
 	},
+		// LDP integer (V=0, L=1): same as STP but bit22=1 (load)
+		{
+			Name: "LDP_INT", Mask: 0x1C400000, Value: 0x08400000, Op: LDP,
+			Fields: []FieldDef{
+				{Name: "sf", Hi: 31, Lo: 31},
+				{Name: "wb", Hi: 25, Lo: 23},
+				{Name: "imm7", Hi: 21, Lo: 15, Signed: true},
+				{Name: "Rm", Hi: 14, Lo: 10}, // Rt2
+				fRn, fRd,                     // Rn, Rt
+			},
+			Post: postPair,
+		},
 	// ================================================================
 	// LDP/STP (SIMD/FP)
 	// 编码: opc:101:V:cat:L:imm7:Rt2:Rn:Rt
@@ -57,7 +69,7 @@ var ldstPatterns = []InstrPattern{
 	// Loads two 32-bit words, sign-extends them to 64-bit
 	// ================================================================
 	{
-		Name: "LDPSW", Mask: 0x7C400000, Value: 0x28400000, Op: LDPSW,
+		Name: "LDPSW", Mask: 0xFC400000, Value: 0x68400000, Op: LDPSW,
 		Fields: []FieldDef{
 			{Name: "wb", Hi: 25, Lo: 23},
 			{Name: "imm7", Hi: 21, Lo: 15, Signed: true},
