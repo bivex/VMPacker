@@ -35,3 +35,5 @@ vmp-gui/build/
 *.debug.txt
 *.unsupported.txt
 *.vmp
+cmd/vmpacker/vm_interp.bin
+cmd/vmpacker/vm_interp.bin
