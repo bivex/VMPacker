@@ -2,15 +2,15 @@
 #include <stdint.h>
 
 /*
- * demo_insn_ldrsb.c — LDRSB 指令测试
+ * demo_insn_ldrsb.c — LDRSB instruction test
  *
- * LDRSB Xd, [Xn, #imm] : 从内存加载 8 位有符号值，符号扩展到 64 位
- * 测试正数和负数两种情况
+ * LDRSB Xd, [Xn, #imm] : Load an 8-bit signed value from memory, sign-extended to 64-bit
+ * Testing both positive and negative cases
  */
 
 __attribute__((noinline)) int64_t check_ldrsb(void) {
-    /* 正数: 0x7F = 127 → 符号扩展后仍为 0x000000000000007F */
-    /* 负数: 0x80 = -128 (i8) → 符号扩展后为 0xFFFFFFFFFFFFFF80 */
+    /* Positive: 0x7F = 127 → Remains 0x000000000000007F after sign-extension */
+    /* Negative: 0x80 = -128 (i8) → 0xFFFFFFFFFFFFFF80 after sign-extension */
     int8_t buf[2] = { -128, 127 };
     int64_t r1 = 0, r2 = 0;
 
@@ -23,8 +23,8 @@ __attribute__((noinline)) int64_t check_ldrsb(void) {
     );
     __asm__ volatile("nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop;");
 
-    /* r1 应该是 -128 (0xFFFFFFFFFFFFFF80) */
-    /* r2 应该是 127 (0x000000000000007F) */
+    /* r1 should be -128 (0xFFFFFFFFFFFFFF80) */
+    /* r2 should be 127 (0x000000000000007F) */
     if (r1 == -128 && r2 == 127) {
         return 1; /* PASS */
     }

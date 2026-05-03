@@ -2,9 +2,9 @@
 #include <stdint.h>
 
 /*
- * demo_insn_ldrsh.c — LDRSH (16-bit signed load) 测试
+ * demo_insn_ldrsh.c — LDRSH (16-bit signed load) test
  *
- * 测试 LDRSH 从内存加载 16-bit 有符号值并符号扩展到 64-bit
+ * Testing LDRSH to load 16-bit signed values from memory and sign-extend to 64-bit
  */
 
 __attribute__((noinline)) int64_t check_ldrsh(void) {
@@ -22,10 +22,10 @@ __attribute__((noinline)) int64_t check_ldrsh(void) {
     );
     __asm__ volatile("nop; nop; nop; nop; nop; nop; nop; nop;");
 
-    /* r0 = 0x1234 (正数，符号扩展不变) */
+    /* r0 = 0x1234 (positive, remains same after sign-extension) */
     /* r1 = -1 = 0xFFFFFFFFFFFFFFFF */
     /* r2 = -0x1234 = 0xFFFFFFFFFFFFEDCC */
-    /* r3 = 0x7FFF (正数最大值) */
+    /* r3 = 0x7FFF (maximum positive value) */
     if (r0 == 0x1234 && r1 == -1 && r2 == -0x1234 && r3 == 0x7FFF) return 1;
     printf("DETAIL: r0=0x%lx r1=0x%lx r2=0x%lx r3=0x%lx\n", r0, r1, r2, r3);
     return 0;
