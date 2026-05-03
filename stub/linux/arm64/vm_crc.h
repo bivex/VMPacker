@@ -33,3 +33,5 @@ static inline u32 crc32_calc(const u8 *data, u32 len) {
   }
   return crc ^ 0xFFFFFFFFu;
 }
+
+#endif /* VM_CRC_H */

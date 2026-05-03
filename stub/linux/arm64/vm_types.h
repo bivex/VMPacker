@@ -85,6 +85,11 @@ typedef struct {
   /* PIE/ASLR: runtime load base slide for CALL_NAT absolute addresses.
    * slide = runtime_base - link_time_base.  0 for ET_EXEC. */
   u64 slide;
+
+  /* Runtime Security: Periodic Integrity Checks */
+  u32 expected_bc_crc; /* CRC32 of bytecode (stored in trailer) */
+  u32 bc_crc_len;      /* Length of bytecode to CRC check */
+  u32 insn_count;      /* Executed instruction counter for periodic checks */
 } vm_ctx_t;
 
 /* ---- SP Stack Boundary Check ---- */
@@ -148,6 +153,11 @@ static inline void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
 
   /* PIE/ASLR slide: default 0 (ET_EXEC) */
   vm->slide = 0;
+
+  /* Security */
+  vm->expected_bc_crc = 0;
+  vm->bc_crc_len = 0;
+  vm->insn_count = 0;
 }
 
 #endif /* VM_TYPES_H */

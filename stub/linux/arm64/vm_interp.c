@@ -17,6 +17,8 @@
 #include "vm_decode.h"
 #include "vm_opcodes.h"
 #include "vm_types.h"
+#include "vm_crc.h"
+#include "vm_security.h"
 
 /* ---- 指令 Handler 模块 ---- */
 #include "vm_handlers/h_alu.h" /* ADD/SUB/MUL/XOR/AND/OR/SHL/SHR/ASR/NOT/ROR + _IMM */
@@ -227,6 +229,17 @@ if (bc_off <= (u64)bc_len - 8) {
   vm_ctx_init(vm, args, bc_buf, bc_len);
   vm->slide = slide;
 
+  /* ---- Anti-Tampering: Memory Dump Protection ---- */
+  sec_protect_memory(bc_buf, alloc_size);
+  sec_protect_memory(vm, ctx_alloc);
+
+  /* ---- Anti-Debug: Initial Checks ---- */
+  if (sec_check_tracerpid()) { goto cleanup; }
+  if (sec_check_ptrace()) { goto cleanup; }
+  
+  /* Anti-Debug: Basic Timing Check (measure start time) */
+  unsigned long long start_time = sec_get_timer();
+
   /* ---- 2c. 解析字节码尾部 trailer ---- */
   /* 尾部格式 (从末尾向前剥离):
    *   [...bytecode...][BR map entries][reverse(1B)][oc_key(4B)]
@@ -275,8 +288,43 @@ if (bc_off <= (u64)bc_len - 8) {
     } else {
       /* 无 BR map: 只剥离 21B 固定 trailer */
       vm->bc_len = bc_len - 21;
+      map_data_size = 21 + 256;
+    }
+    
+    /* ---- Anti-Tampering: CRC32 Bytecode Integrity Check ---- */
+    if (bc_len >= map_data_size + CRC_SECTION_SIZE) {
+      u32 magic = rd32(&bc_buf[bc_len - map_data_size - 4]);
+      if (magic == CRC_MAGIC) {
+        u32 expected_bc_crc = rd32(&bc_buf[bc_len - map_data_size - 8]);
+        u32 bc_crc_len = bc_len - map_data_size - CRC_SECTION_SIZE;
+        u32 actual_bc_crc = crc32_calc(bc_buf, bc_crc_len);
+        if (expected_bc_crc != actual_bc_crc) {
+          goto cleanup; /* Integrity check failed, abort execution */
+        }
+        /* Update actual bc_len to exclude the CRC section */
+        vm->bc_len = bc_crc_len;
+        vm->expected_bc_crc = expected_bc_crc;
+        vm->bc_crc_len = bc_crc_len;
+      }
     }
   }
+
+/* ---- Anti-Hook: Inline Hook Detection ---- */
+/* Detect inline hooks on some common targets */
+if (sec_scan_inline_hook((void *)memcpy)) { goto cleanup; }
+if (sec_scan_inline_hook((void *)vm_entry)) { goto cleanup; }
+if (sec_scan_inline_hook((void *)sys_mmap)) { goto cleanup; }
+if (sec_scan_inline_hook((void *)sys_ptrace)) { goto cleanup; }
+
+/* ---- Anti-Debug: Timing Check (Verify execution time hasn't been delayed) ---- */
+unsigned long long end_time = sec_get_timer();
+if (end_time - start_time > 500000) { 
+  /* Heuristic: Initialization shouldn't take this long (tuned for Release builds) */
+  /* goto cleanup; */ /* Optional: enable when strictly tuned */
+}
+
+/* ---- Anti-Debug: Breakpoint Scanning ---- */
+if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { goto cleanup; }
 
 /* ---- OpcodeCryptor 解密宏 (两种模式共用) ---- */
 #define OC_DECRYPT(pc, key) ((u8)((key) ^ ((pc) * 0x9E3779B9u)))
@@ -300,6 +348,11 @@ if (bc_off <= (u64)bc_len - 8) {
 
   /* ---- 间接 Dispatch 主循环 ---- */
   for (;;) {
+    /* -- Runtime Security Periodic Check -- */
+    if (__builtin_expect(sec_runtime_check(vm), 0)) {
+      goto cleanup;
+    }
+
     /* -- 反向/正向 PC 定位 -- */
     if (vm->reverse) {
       if (__builtin_expect((i64)vm->pc <= 0, 0))
@@ -518,10 +571,12 @@ if (bc_off <= (u64)bc_len - 8) {
   dtab[OP_SVLD] = &&L_SVLD;
   dtab[OP_SVST] = &&L_SVST;
 
-/* 反向模式: pc 指向指令末尾的 size 标记之后
+/* 反向模式: pc 指向指令末尾的 size标记之后
  * 步骤: pc--; size = bc[pc]; pc -= size; 现在 pc 指向指令起始 */
 #define DISPATCH()                                                             \
   do {                                                                         \
+    if (__builtin_expect(sec_runtime_check(vm), 0))                            \
+      goto cleanup;                                                            \
     if (vm->reverse) {                                                         \
       if (__builtin_expect((i64)vm->pc <= 0, 0))                               \
         goto cleanup;                                                          \
@@ -882,6 +937,9 @@ L_UNKNOWN:
 
   /* ---- 统一退出: 释放 mmap 防止泄漏 ---- */
 cleanup:
+  /* ---- Anti-Tampering: Buffer Zeroing ---- */
+  if (vm) sec_zero_memory(vm, ctx_alloc);
+  if (bc_buf) sec_zero_memory(bc_buf, alloc_size);
   /* sys_munmap(vm, ctx_alloc); */
   /* sys_munmap(bc_buf, alloc_size); */
   return ret;
