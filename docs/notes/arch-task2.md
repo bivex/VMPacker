@@ -77,7 +77,117 @@ adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64"
 4.  **Extended Obfuscation**: Explore additional obfuscation transformations (control-flow flattening, bogus branches, VM_INDIRECT_DISPATCH as default).
 ---
 
-## 4. Debugging SIGSEGV in Protected Binaries (Current)
+## 6. Known Test Failures (Post-SIGSEGV Fix)
+
+After fixing the SIGSEGV crash, the test suite runs completely but reports 4 failures across 2 functions. These are **not VM crashes** — they are functional mismatches in expected output.
+
+### 6.1 `vmp_md5_hex` — All 3 test cases FAIL
+
+**Observed output:**
+```
+--- vmp_md5_hex ---
+  md5("hello")     = B  (rc=0)
+  [FAIL] md5("hello") matches
+  md5("")          = B  (rc=0)
+  [FAIL] md5("") matches
+  md5("The q...")  = B  (rc=0)
+  [FAIL] md5(long string) matches
+```
+
+**Analysis**: The function returns `rc=0` (success) but the hex buffer contains a single character `"B"` instead of the 32-character MD5 hex string. This suggests:
+- The PLT calls (`strlen`, `memcpy`, `memset`, `snprintf`) are executing correctly (rc=0 indicates success).
+- The output buffer is being overwritten or the string-writing logic is corrupted.
+- **Hypothesis**: Stack alignment or register preservation issue in the native call ABI bridge. The `vmp_md5_hex` ARM64 function uses stack arguments (3rd and 4th args: buffer pointer and buffer length). The VM's `CALL_NAT` passes R0-R7, but the stack pointer alignment might be wrong for variadic functions like `snprintf`.
+
+**ARM64 AAPCS calling convention**:
+- R0-R7: First 8 integer args
+- Stack: 8-byte aligned before `BL` (SP % 8 == 0)
+- Variadic functions (snprintf) need to check if FP registers contain args
+
+The VM's `vm_entry_token` saves X0-X18, SP is re-aligned inside the VM's interpreter loop. When `CALL_NAT` executes `BLR Xn`, the caller's SP alignment must be preserved. If the VM's stack (`eval_stk`) is not 16-byte aligned at the call site, variadic function behavior may be undefined.
+
+**Status**: Not blocking — core VM protection is stable. To fix would require adjusting VM stack alignment strategy or the ABI bridge code in `vm_entry_token`.
+
+### 6.2 `vmp_get_process_name` — Returns empty string
+
+**Observed output:**
+```
+--- vmp_get_process_name ---
+  process_name = ""  (len=0)
+  [FAIL] get_process_name returns positive length
+```
+
+**Analysis**: Original unprotected function reads `/proc/self/comm` via `open`/`read`/`close`. The protected version returns length 0 with empty string.
+- NOT a SIGSEGV — system calls appear to succeed (no crash)
+- Buffer remains unfilled → either `read()` returned 0 or the file descriptor was invalid
+- **Hypothesis**: The file descriptor number passed from VM to libc is corrupted. PLT relocation for `open`/`read`/`close` are correctly patched (verified: no crash), but register values (file descriptor in R1 for `open` return, passed to `read`) might be lost across VM-native boundary.
+
+**Potential cause**: In `vm_entry_token`, register preservation logic for X19-X28 restores with `ldp x19, x20, [sp, #304]` pattern. If the native function returns an FD in R0, and the next VM instruction expects it in `vm->R[0]`, but ABI clobbering occurs during `CALL_NAT`/return, the value could be lost.
+
+**Status**: Functional but incorrect output. Requires ABI compliance debugging in `vm_entry_token` stack frame and register save/restore sequence.
+
+### 6.3 Summary
+
+| Function   | Status | Notes |
+|-----------|--------|-------|
+| vmp_compute | ✅ PASS | Pure stack-machine ALU, no external calls |
+| vmp_verify_key | ✅ PASS | Simple checksum, no external calls |
+| vmp_md5_hex | ❌ 3 FAIL | Output buffer corrupted: returns single char 'B' |
+| vmp_get_process_name | ❌ 1 FAIL | Returns empty string, FD handling likely broken |
+
+The pattern is clear: **Functions that call external libc functions via PLT fail**, while pure-VM functions work perfectly. This isolates the bug to the ABI bridge between the VM interpreter and the libc PLT calls — either:
+1. `CALL_NAT` stack alignment is wrong for PLT calls
+2. Register preservation in `vm_entry_token` corrupts callee-saved registers (X19-X28) that the libc functions expect
+3. The immediate value patching is correct now (no crash), but the stack pointer passed to the native function is misaligned
+
+---
+
+## 7. Reproduction Steps (Воспроизведение)
+
+```bash
+# 1. Set environment (macOS)
+export ANDROID_NDK=/Users/password9090/android-sdk/ndk/28.2.13676358
+
+# 2. Rebuild stub and packer
+cd /Volumes/External/Code/VMPacker
+make clean && make stub && make packer
+
+# 3. Protect the Android test library
+./build/vmpacker -func vmp_compute,vmp_verify_key,vmp_md5_hex,vmp_get_process_name \
+    -o test/android/build/libnative_test_protected_arm64.so \
+    test/android/build/libnative_test_arm64.so
+
+# 4. Deploy to emulator
+adb shell mkdir -p /data/local/tmp/vmptest
+adb push test/android/build/test_runner_arm64 /data/local/tmp/vmptest/
+adb push test/android/build/libnative_test_protected_arm64.so /data/local/tmp/vmptest/libnative_test.so
+adb shell chmod +x /data/local/tmp/vmptest/test_runner_arm64
+
+# 5. Run tests (SIGSEGV is now fixed; functional failures remain)
+adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64"
+
+# Expected output: "PASS: 7    FAIL: 4"
+```
+
+### To capture crash logs (for debugging):
+```bash
+adb logcat -c
+adb shell "cd /data/local/tmp/vmptest && LD_LIBRARY_PATH=. ./test_runner_arm64" &
+sleep 2
+adb logcat -d | grep -i "fatal\|signal" -A 20
+```
+
+---
+
+## 8. Future Work
+
+1. **PLT Call ABI Compliance**: Investigate and fix stack/register preservation for PLT calls in `vm_entry_token`. The issue affects `vmp_md5_hex` and `vmp_get_process_name` which rely on libc functions.
+2. **RTLR for ARM32**: Port the Runtime Relocation logic to the 32-bit interpreter.
+3. **Section Header Recovery**: Optionally re-construct section headers in protected binaries for better analysis tool compatibility.
+4. **Extended Obfuscation**: Consider making VM_INDIRECT_DISPATCH the default, adding control-flow flattening.
+
+---
+
 
 ### Symptoms
 *   **Crash**: SIGSEGV (signal 11, SEGV_MAPERR) when running protected ARM64 Android binaries
