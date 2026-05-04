@@ -33,9 +33,33 @@ static inline u32 h_call_nat(vm_ctx_t *vm) {
     sys_write(1, _dbgbuf, 9);
   }
 #ifdef __aarch64__
-  native_fn_t fn = (native_fn_t)addr;
-  vm->R[0] = fn(vm->R[0], vm->R[1], vm->R[2], vm->R[3], vm->R[4], vm->R[5],
-                vm->R[6], vm->R[7]);
+  /* Load VM registers into temporaries */
+  u64 r0 = vm->R[0], r1 = vm->R[1], r2 = vm->R[2], r3 = vm->R[3];
+  u64 r4 = vm->R[4], r5 = vm->R[5], r6 = vm->R[6], r7 = vm->R[7];
+  u64 result, saved_sp;
+  __asm__ volatile(
+    "mov %[sp_save], sp\n\t"
+    "bic sp, sp, #15\n\t"          /* Align SP to 16 bytes */
+    "mov x0, %[r0]\n\t"
+    "mov x1, %[r1]\n\t"
+    "mov x2, %[r2]\n\t"
+    "mov x3, %[r3]\n\t"
+    "mov x4, %[r4]\n\t"
+    "mov x5, %[r5]\n\t"
+    "mov x6, %[r6]\n\t"
+    "mov x7, %[r7]\n\t"
+    "mov x10, %[addr]\n\t"
+    "blr x10\n\t"
+    "mov %[result], x0\n\t"
+    "mov sp, %[sp_save]\n\t"
+    : [result] "=r" (result), [sp_save] "=r" (saved_sp)
+    : [addr] "r" (addr),
+      [r0] "r" (r0), [r1] "r" (r1), [r2] "r" (r2), [r3] "r" (r3),
+      [r4] "r" (r4), [r5] "r" (r5), [r6] "r" (r6), [r7] "r" (r7)
+    : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
+      "x10", "x30", "memory"
+  );
+  vm->R[0] = result;
 #else
   typedef u32 (*fn32_t)(u32, u32, u32, u32);
   fn32_t fn = (fn32_t)(u32)addr;
