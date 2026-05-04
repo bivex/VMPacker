@@ -35,13 +35,23 @@ func (t *Translator) trADRP(instructions []vm.Instruction, idx int) (int, error)
 		next := instructions[idx+1]
 		if Op(next.Op) == ADD_IMM && next.Rd == inst.Rd && next.Rn == inst.Rd {
 			finalAddr := adrpResult + uint64(next.Imm)
+			
+			// Check if this points to an encrypted string
+			if sref, ok := t.stringRefs[finalAddr]; ok {
+				// Push address (with slide)
+				t.emit(vm.OpSLoadSlide)
+				t.sPushImm(sref.Addr)
+				t.emit(vm.OpSAdd)
+
+				t.sPushImm32(sref.Len)
+				t.sPushImm32(sref.Key)
+				t.emit(vm.OpSDecryptStr)
+				t.sVstore(rd)
+				return 1, nil
+			}
+
 			t.emitAddrWithSlide(rd, finalAddr)
 			return 1, nil
-		}
-		if (Op(next.Op) == LDR_IMM || Op(next.Op) == LDR_REG) && next.Rn == inst.Rd {
-			// ADRP + LDR: often used for loading constants
-			// We can't easily merge the LDR into a single VM op yet, 
-			// but we can ensure ADRP result is correct.
 		}
 	}
 

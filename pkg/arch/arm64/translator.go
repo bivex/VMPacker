@@ -78,6 +78,7 @@ type Translator struct {
 	dispPos     int            // VM offset of dispatcher
 	mba         bool           // Mixed Boolean-Arithmetic obfuscation
 	regMap      [64]byte       // Virtual register shuffling map (arch -> phys)
+	stringRefs  map[uint64]StringRef
 }
 
 type branchFixup struct {
@@ -118,6 +119,11 @@ func (t *Translator) SetCFF(enabled bool) {
 // SetMBA enables Mixed Boolean-Arithmetic obfuscation
 func (t *Translator) SetMBA(enabled bool) {
 	t.mba = enabled
+}
+
+// SetStringRefs sets the map of addresses to encrypted strings
+func (t *Translator) SetStringRefs(refs map[uint64]StringRef) {
+	t.stringRefs = refs
 }
 
 // identifyBasicBlocks scans instructions for branch targets to find block boundaries

@@ -122,7 +122,13 @@ func (p *Packer) Process() error {
 		fmt.Printf("    [+] %s VMP protected\n", fb.FI.Name)
 	}
 
-	// Phase 3: strip symbol table (optional)
+	// Phase 3: symbol mangling
+	if p.mangleSymbols {
+		p.MangleSymbols()
+		fmt.Println("[*] Symbols mangled")
+	}
+
+	// Phase 4: strip symbol table (optional)
 	if p.stripSymbols {
 		p.stripSections()
 		fmt.Println("[*] Symbols stripped")
@@ -234,9 +240,7 @@ func (p *Packer) translateFunction(f *elf.File, fi *vm.FuncInfo, code []byte, in
 		}
 		trans.SetCFF(p.cff) // Apply Control Flow Flattening if enabled
 		trans.SetMBA(p.mba) // Apply MBA obfuscation if enabled
-		
-		// Prepend string decryption logic before translating instructions
-		trans.EmitStringDecryption(refs)
+		trans.SetStringRefs(refs) // Pass encrypted strings
 		
 		r, terr := trans.Translate(insts)
 		if terr != nil {
@@ -419,9 +423,9 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 
 	encryptOpcodes(result.Bytecode, result.CodeLen, ocKey, true)
 
-	reverseOffset := result.CodeLen + 256 + int(mapCount)*8
+	reverseOffset := len(result.Bytecode) - 21
 	result.Bytecode[reverseOffset] = 1
-	ocKeyOffset := reverseOffset + 1
+	ocKeyOffset := len(result.Bytecode) - 20
 	binary.LittleEndian.PutUint32(result.Bytecode[ocKeyOffset:], ocKey)
 
 	if p.verbose {
@@ -501,8 +505,8 @@ func (p *Packer) makeSegmentsWritable(f *elf.File) {
 			}
 }
 
-func (p *Packer) extractAndEncryptStrings(f *elf.File, fi *vm.FuncInfo, insts []vm.Instruction) []arm64.StringRef {
-	var refs []arm64.StringRef
+func (p *Packer) extractAndEncryptStrings(f *elf.File, fi *vm.FuncInfo, insts []vm.Instruction) map[uint64]arm64.StringRef {
+	refs := make(map[uint64]arm64.StringRef)
 	if p.isARM32 {
 		return refs // Only ARM64 supported for now
 	}
@@ -516,6 +520,8 @@ func (p *Packer) extractAndEncryptStrings(f *elf.File, fi *vm.FuncInfo, insts []
 			pageBase := pc &^ 0xFFF
 			target := pageBase + uint64(inst.Imm) + uint64(next.Imm)
 			
+			if _, exists := refs[target]; exists { continue }
+
 			// Find offset in p.data
 			offset, secName, found := resolveFileOffsetBase(f, target)
 			if !found { continue }
@@ -532,9 +538,8 @@ func (p *Packer) extractAndEncryptStrings(f *elf.File, fi *vm.FuncInfo, insts []
 				strLen++
 			}
 			
-			if strLen == 0 || strLen > 4096 { continue } // Ignore empty or too large
+			if strLen == 0 || strLen > 4096 { continue }
 
-			// Heuristic: Ensure it only contains printable ASCII or common whitespace
 			isString := true
 			for j := uint32(0); j < strLen; j++ {
 				c := p.data[offset+uint64(j)]
@@ -547,26 +552,21 @@ func (p *Packer) extractAndEncryptStrings(f *elf.File, fi *vm.FuncInfo, insts []
 			}
 			if !isString { continue }
 
-			// Generate key and encrypt
+			// Generate key and encrypt IN-PLACE in p.data
 			var keyBuf [1]byte
 			rand.Read(keyBuf[:])
 			key := uint32(keyBuf[0])
-			if key == 0 {
-				key = 0xAA
-			}
+			if key == 0 { key = 0xAA }
 
-			// Do not re-encrypt if already handled (could be referenced multiple times)
-			// We can check if it's already encrypted by keeping a map, or since we XOR, just do it once.
-			// Let's do it right away.
-			for j := uint32(0); j <= strLen; j++ {
+			for j := uint32(0); j < strLen; j++ {
 				p.data[offset+uint64(j)] ^= byte(key)
 			}
 
-			refs = append(refs, arm64.StringRef{
+			refs[target] = arm64.StringRef{
 				Addr: target,
 				Len:  strLen,
 				Key:  key,
-			})
+			}
 		}
 	}
 	return refs

@@ -38,6 +38,10 @@ func (p *Packer) SetMBA(enabled bool) {
 	p.mba = enabled
 }
 
+func (p *Packer) SetMangle(enabled bool) {
+	p.mangleSymbols = enabled
+}
+
 // PrintELFInfo prints ELF information
 func PrintELFInfo(path string) error {
 	f, err := elf.Open(path)
