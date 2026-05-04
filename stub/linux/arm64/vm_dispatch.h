@@ -525,6 +525,9 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_st32(vm_ctx_t *vm) {
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_st64(vm_ctx_t *vm) {
   return h_s_st64(vm);
 }
+__attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_decrypt_str(vm_ctx_t *vm) {
+  return h_s_decrypt_str(vm);
+}
 
 /* ================================================================
  * Jump table runtime initialization (absolute function pointers)
@@ -712,6 +715,7 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_ID_SFMOVRV] = hw_fmov_rv;
   tbl[OP_ID_SFMOVVR] = hw_fmov_vr;
   tbl[OP_ID_SFCVT] = hw_fcvt;
+  tbl[OP_ID_SDECRYPTSTR] = hw_s_decrypt_str;
 }
 
 #endif /* VM_INDIRECT_DISPATCH */

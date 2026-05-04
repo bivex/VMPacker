@@ -59,6 +59,18 @@ static inline u32 h_jne(vm_ctx_t *vm) {
 /* B.LT target (SF=1, 有符号小于) */
 static inline u32 h_jl(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
+  {
+    u8 _tbuf[16];
+#define _HX(n) ((u8)((n) < 10 ? '0' + (n) : 'A' + (n) - 10))
+    _tbuf[0] = 'T'; _tbuf[1] = 'G'; _tbuf[2] = 'T'; _tbuf[3] = ':';
+    _tbuf[4] = _HX((t >> 12) & 0xF);
+    _tbuf[5] = _HX((t >> 8) & 0xF);
+    _tbuf[6] = _HX((t >> 4) & 0xF);
+    _tbuf[7] = _HX(t & 0xF);
+    _tbuf[8] = '\n';
+#undef _HX
+    sys_write(1, _tbuf, 9);
+  }
   if ((vm->FL & FL_SIGN) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
   return 0;

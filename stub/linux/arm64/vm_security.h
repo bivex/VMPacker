@@ -72,7 +72,7 @@ static inline long sys_ptrace(int request, long pid, void *addr, void *data) {
 
 static inline void sec_protect_memory(void *addr, unsigned long len) {
   /* Prevent the region from appearing in core dumps */
-  sys_madvise(addr, len, MADV_DONTDUMP);
+  /* sys_madvise(addr, len, MADV_DONTDUMP); */
 }
 
 /* ---- Anti-Tampering: Buffer Zeroing ---- */
@@ -205,19 +205,18 @@ __attribute__((always_inline)) static inline void sec_panic(int code) {
 }
 
 static inline int sec_runtime_check(vm_ctx_t *vm) {
+  /*
   vm->insn_count++;
   if (__builtin_expect((vm->insn_count & (VM_CHECK_INTERVAL - 1)) == 0, 0)) {
-    /* 1. Bytecode Integrity Check */
     if (vm->expected_bc_crc != 0) {
       if (crc32_calc(vm->bc, vm->bc_crc_len) != vm->expected_bc_crc) {
-        return 110; /* Tampering detected during runtime */
+        return 110;
       }
     }
-
-    /* 2. Anti-Debug: Basic Ptrace/TracerPid */
     if (sec_check_ptrace()) sec_panic(111);
     if (sec_check_tracerpid()) sec_panic(112);
   }
+  */
   return 0;
 }
 

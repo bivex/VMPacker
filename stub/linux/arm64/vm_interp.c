@@ -31,6 +31,7 @@
 #include "vm_handlers/h_stack_ops.h" /* Stack machine operation handlers (VLOAD/VSTORE/VADD...) */
 #include "vm_handlers/h_system.h" /* NOP, CALL_NAT, BR_REG, VLD16, VST16 */
 #include "vm_handlers/h_fpu.h"    /* FADD, FMUL, FCVT, ... */
+#include "vm_handlers/h_string.h" /* S_DECRYPT_STR */
 
 
 /* #define VM_DEBUG_TRACE */
@@ -168,6 +169,7 @@ vm_entry_token_inner(u64 *args, u32 token) {
 __attribute__((section(".text.entry"))) u64
 vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_ptr,
          u32 func_id) {
+  VM_DEBUG("[VM] vm_entry starting...\n");
   u64 ret = 0;
   
   /* ---- 1. Dynamically allocate bytecode buffer (mmap, replacing 64KB on stack) ---- */
@@ -222,36 +224,31 @@ if (bc_off <= (u64)bc_len - 8) {
 
   /* ---- 2b. Initialize VM context (mmap heap allocation) ---- */
   u32 ctx_alloc = (sizeof(vm_ctx_t) + 4095u) & ~4095u;
+  VM_DEBUG("[VM] allocating ctx...\n");
   vm_ctx_t *vm = (vm_ctx_t *)sys_mmap(ctx_alloc);
   if ((long)vm < 0) {
+    VM_DEBUG("[VM] ctx mmap failed!\n");
     sys_munmap(bc_buf, alloc_size);
     return 0;
   }
+  VM_DEBUG("[VM] initializing ctx...\n");
   vm_ctx_init(vm, args, bc_buf, bc_len);
+  VM_DEBUG("[VM] ctx init done.\n");
   vm->slide = slide;
+  VM_DEBUG("[VM] slide set.\n");
 
   /* ---- Anti-Tampering: Memory Dump Protection ---- */
   sec_protect_memory(bc_buf, alloc_size);
   sec_protect_memory(vm, ctx_alloc);
-
-  /* ---- Anti-Debug: Initial Checks ---- */
-  if (sec_check_tracerpid()) { sec_panic(101); }
-  if (sec_check_ptrace()) { sec_panic(102); }
-  
-  /* Scan for breakpoints in the interpreter entry code (first 256 bytes) */
-  extern u8 _vmp_stub_base;
-  if (sec_scan_breakpoints(&_vmp_stub_base, 256)) { sec_panic(103); }
+  /* if (sec_scan_breakpoints(&_vmp_stub_base, 256)) { sec_panic(103); } */
 
   /* Anti-Debug: Basic Timing Check (measure start time) */
-  unsigned long long start_time = sec_get_timer();
+  /* unsigned long long start_time = sec_get_timer(); */
   
   /* Do some dummy work to make timing check more effective */
-  for (volatile int _i = 0; _i < 1000; _i++) { __asm__ volatile("nop"); }
-  
-  unsigned long long end_time = sec_get_timer();
-  if ((end_time - start_time) > 1000000) { /* If it took > 1M cycles to do 1000 nops, we are being traced/emulated */
-    sec_panic(104);
-  }
+  /* for (volatile int _i = 0; _i < 1000; _i++) { __asm__ volatile("nop"); } */
+  /* unsigned long long end_time = sec_get_timer(); */
+  /* if ((end_time - start_time) > 1000000) { sec_panic(104); } */
 
   u8 *op_map = 0;
 
@@ -265,11 +262,19 @@ if (bc_off <= (u64)bc_len - 8) {
    * Fixed trailer size: 4+8+4+4+1 + 64(reg_map) = 85B
    */
   if (bc_len >= 85 + 256) { /* Minimum trailer: 85B + 256B(op_map) */
+    VM_DEBUG("[VM] bc_len check passed.\n");
     u32 trail_func_size = rd32(&bc_buf[bc_len - 4]);
     u64 trail_func_addr = rd64(&bc_buf[bc_len - 12]);
     u32 trail_map_count = rd32(&bc_buf[bc_len - 16]);
     u32 trail_oc_key = rd32(&bc_buf[bc_len - 20]);
     u8 trail_reverse = bc_buf[bc_len - 21];
+    {
+      u8 _rvbuf[4];
+      _rvbuf[0] = trail_reverse ? '1' : '0';
+      _rvbuf[1] = '\n';
+      VM_DEBUG("[VM] trail_reverse: ");
+      sys_write(1, _rvbuf, 2);
+    }
     u32 map_data_size =
         trail_map_count * 8 +
         85 + 256; // 85 (fixed) + 256 (op_map)
@@ -279,10 +284,13 @@ if (bc_off <= (u64)bc_len - 8) {
 
     if (trail_func_addr != 0 && trail_map_count > 0 &&
         map_data_size <= bc_len) {
+      VM_DEBUG("[VM] trailer validation passed.\n");
       vm->func_addr = trail_func_addr + vm->slide;
       vm->func_size = trail_func_size;
       vm->map_count = trail_map_count;
-      vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size + 256];
+      vm->reverse = trail_reverse;
+      vm->oc_key = trail_oc_key;
+      vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size + 320];
       /* 2d. Initialize registers with shuffling */
       for (int i = 0; i < 8; i++) {
         vm->R[reg_map[i] & 63] = args[i];
@@ -338,11 +346,12 @@ if (sec_scan_inline_hook((void *)sys_mmap)) { return 106; }
 if (sec_scan_inline_hook((void *)sys_ptrace)) { return 107; }
 
 /* ---- Anti-Debug: Timing Check (Verify execution time hasn't been delayed) ---- */
+/*
 end_time = sec_get_timer();
 if (end_time - start_time > 1000000) { 
-  /* Heuristic: Initialization shouldn't take this long */
   return 108;
 }
+*/
 
 /* ---- Anti-Debug: Breakpoint Scanning ---- */
 if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
@@ -364,6 +373,9 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   for (int i = 0; i < 256; i++)
     phys_insn_size[i] = 0;
 
+  u8 inv_map[256];
+  for (int i = 0; i < 256; i++) inv_map[i] = 255;
+
   if (op_map) {
     vm_handler_fn handlers[OP_ID_COUNT];
     vm_init_jump_table(handlers);
@@ -372,7 +384,19 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     for (int i = 0; i < OP_ID_COUNT; i++) {
       vm_jump_table[op_map[i]] = handlers[i];
       phys_insn_size[op_map[i]] = vm_logical_insn_size(i);
+      inv_map[op_map[i]] = (u8)i;
     }
+    VM_DEBUG("[VM] op_map[50] (CallNative): ");
+    {
+      u8 _opbuf[4];
+      u8 _op = op_map[50];
+      _opbuf[0] = (_op >> 4) < 10 ? '0' + (_op >> 4) : 'A' + (_op >> 4) - 10;
+      _opbuf[1] = (_op & 0xF) < 10 ? '0' + (_op & 0xF) : 'A' + (_op & 0xF) - 10;
+      _opbuf[2] = '\n';
+      sys_write(1, _opbuf, 3);
+    }
+    vm_jump_table[OP_S_DECRYPT_STR] = h_s_decrypt_str;
+    phys_insn_size[OP_S_DECRYPT_STR] = 1;
   } else {
     vm_init_jump_table(vm_jump_table);
     for (int i = 0; i < 256; i++)
@@ -383,8 +407,26 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   if (vm->reverse) {
     vm->pc = vm->bc_len;
   }
+  {
+    u8 _pcbuf[32];
+#define _HX(n) ((u8)((n) < 10 ? '0' + (n) : 'A' + (n) - 10))
+    _pcbuf[0] = 'P'; _pcbuf[1] = 'C'; _pcbuf[2] = ':';
+    _pcbuf[3] = _HX((vm->pc >> 12) & 0xF);
+    _pcbuf[4] = _HX((vm->pc >> 8) & 0xF);
+    _pcbuf[5] = _HX((vm->pc >> 4) & 0xF);
+    _pcbuf[6] = _HX(vm->pc & 0xF);
+    _pcbuf[7] = ' '; _pcbuf[8] = 'L'; _pcbuf[9] = 'E'; _pcbuf[10] = 'N'; _pcbuf[11] = ':';
+    _pcbuf[12] = _HX((vm->bc_len >> 12) & 0xF);
+    _pcbuf[13] = _HX((vm->bc_len >> 8) & 0xF);
+    _pcbuf[14] = _HX((vm->bc_len >> 4) & 0xF);
+    _pcbuf[15] = _HX(vm->bc_len & 0xF);
+    _pcbuf[16] = '\n';
+#undef _HX
+    sys_write(1, _pcbuf, 17);
+  }
 
   /* ---- Indirect Dispatch main loop ---- */
+  VM_DEBUG("[VM] entering main loop...\n");
   for (;;) {
     /* -- Runtime Security Periodic Check -- */
     int sec_res = sec_runtime_check(vm);
@@ -419,33 +461,28 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
       break;
 
     /* -- Indirect Dispatch: Call function pointer directly from jump table -- */
-#ifdef VM_DEBUG_TRACE
-    /* -- Debug trace: output pc+op to stderr -- */
     {
-      u8 _tbuf[16];
-/* Inline calculation of hex characters (avoid static data reference) */
+      u8 _dbgbuf[16];
 #define _HX(n) ((u8)((n) < 10 ? '0' + (n) : 'A' + (n) - 10))
-      _tbuf[0] = _HX((vm->pc >> 12) & 0xF);
-      _tbuf[1] = _HX((vm->pc >> 8) & 0xF);
-      _tbuf[2] = _HX((vm->pc >> 4) & 0xF);
-      _tbuf[3] = _HX(vm->pc & 0xF);
-      _tbuf[4] = ':';
-      _tbuf[5] = _HX((_dec_op >> 4) & 0xF);
-      _tbuf[6] = _HX(_dec_op & 0xF);
-      _tbuf[7] = '\n';
+      _dbgbuf[0] = _HX((vm->pc >> 12) & 0xF);
+      _dbgbuf[1] = _HX((vm->pc >> 8) & 0xF);
+      _dbgbuf[2] = _HX((vm->pc >> 4) & 0xF);
+      _dbgbuf[3] = _HX(vm->pc & 0xF);
+      _dbgbuf[4] = ':';
+      _dbgbuf[5] = _HX((_dec_op >> 4) & 0xF);
+      _dbgbuf[6] = _HX(_dec_op & 0xF);
+      _dbgbuf[7] = '(';
+      u8 _lid = inv_map[_dec_op];
+      _dbgbuf[8] = (_lid >> 4) < 10 ? '0' + (_lid >> 4) : 'A' + (_lid >> 4) - 10;
+      _dbgbuf[9] = (_lid & 0xF) < 10 ? '0' + (_lid & 0xF) : 'A' + (_lid & 0xF) - 10;
+      _dbgbuf[10] = ')';
+      _dbgbuf[11] = '\n';
 #undef _HX
-      register long _x8 __asm__("x8") = 64; /* __NR_write */
-      register long _x0 __asm__("x0") = 2;  /* stderr */
-      register long _x1 __asm__("x1") = (long)_tbuf;
-      register long _x2 __asm__("x2") = 8;
-      __asm__ volatile("svc #0"
-                       : "+r"(_x0)
-                       : "r"(_x8), "r"(_x1), "r"(_x2)
-                       : "memory");
+      sys_write(1, _dbgbuf, 12);
     }
-#endif
     vm_handler_fn _handler = vm_jump_table[_dec_op];
     u32 _step = _handler(vm);
+    VM_DEBUG("[VM] handler returned.\n");
 
     /* -- Check HALT/RET sentinel -- */
     if (__builtin_expect(_step == VM_STEP_HALT || _step == VM_STEP_RET, 0)) {
@@ -458,6 +495,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     /* _step > 0 and not reverse: Normal advancement */
     if (_step > 0 && !vm->reverse) {
       vm->pc += _step;
+      VM_DEBUG("[VM] PC advanced.\n");
     }
   }
 
@@ -639,6 +677,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     labels[OP_ID_SLOADSLIDE] = &&L_S_LDSIDE;
     labels[OP_ID_SVLD] = &&L_SVLD;
     labels[OP_ID_SVST] = &&L_SVST;
+    labels[OP_ID_SDECRYPTSTR] = &&L_S_DECRYPT_STR;
 
     for (int i = 0; i < OP_ID_COUNT; i++) {
       dtab[op_map[i]] = labels[i];
@@ -791,6 +830,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     dtab[OP_S_LOAD_SLIDE] = &&L_S_LDSIDE;
     dtab[OP_SVLD] = &&L_SVLD;
     dtab[OP_SVST] = &&L_SVST;
+    dtab[OP_S_DECRYPT_STR] = &&L_S_DECRYPT_STR;
 
     for (int i = 0; i < 256; i++)
       phys_insn_size[i] = vm_insn_size(i);
@@ -844,6 +884,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   }
 
   /* ---- Start Execution ---- */
+  VM_DEBUG("[VM] starting dispatch...\n");
   DISPATCH();
 
 /* ---- System ---- */

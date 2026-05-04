@@ -28,6 +28,17 @@ typedef short i16;
 #define FL_SIGN 2  /* N: Signed less than */
 #define FL_CARRY 4 /* C: Unsigned less than */
 
+/* ---- Low-level debug (no libc) ---- */
+static inline void sys_write(int fd, const void *buf, unsigned long len) {
+  register long x8 __asm__("x8") = 64; /* __NR_write */
+  register long x0 __asm__("x0") = (long)fd;
+  register long x1 __asm__("x1") = (long)buf;
+  register long x2 __asm__("x2") = (long)len;
+  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2) : "memory");
+}
+
+#define VM_DEBUG(msg) sys_write(1, msg, sizeof(msg)-1)
+
 /* ---- Native Function Pointer Type ---- */
 typedef u64 (*native_fn_t)(u64, u64, u64, u64, u64, u64, u64, u64);
 
@@ -73,6 +84,10 @@ typedef struct {
 
   /* SIMD temporary buffer */
   u8 vtmp[VM_SIMD_BUF] __attribute__((aligned(16)));
+
+  /* String decryption pool (circular buffer) */
+  u8 string_pool[4096] __attribute__((aligned(16)));
+  u32 str_ptr;
 
 
   /* BR indirect jump support */
@@ -157,6 +172,7 @@ static inline void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
   vm->expected_bc_crc = 0;
   vm->bc_crc_len = 0;
   vm->insn_count = 0;
+  vm->str_ptr = 0;
 }
 
 #endif /* VM_TYPES_H */

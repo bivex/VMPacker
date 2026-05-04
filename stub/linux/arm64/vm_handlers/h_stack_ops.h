@@ -433,18 +433,5 @@ static inline u32 h_s_vst(vm_ctx_t *vm) {
   return 3;
 }
 
-/* S_DECRYPT_STR: pop key, pop len, pop addr -> decrypt string */
-static inline u32 h_s_decrypt_str(vm_ctx_t *vm) {
-  u32 key = (u32)SPOP(vm);
-  u32 len = (u32)SPOP(vm);
-  u8 *ptr = (u8 *)SPOP(vm);
-
-  if (ptr != 0 && ptr[len] == key) {
-    for (u32 i = 0; i <= len; i++) {
-      ptr[i] ^= key;
-    }
-  }
-  return 1;
-}
 
 #endif /* H_STACK_OPS_H */

@@ -20,6 +20,18 @@ static inline u32 h_nop(vm_ctx_t *vm) {
  * runtime address (target_va + slide). Do NOT add slide again. */
 static inline u32 h_call_nat(vm_ctx_t *vm) {
   u64 addr = rd64(&vm->bc[vm->pc + 1]); /* final runtime address from RTLR */
+  {
+    u8 _dbgbuf[32];
+#define _HX(n) ((u8)((n) < 10 ? '0' + (n) : 'A' + (n) - 10))
+    _dbgbuf[0] = 'N'; _dbgbuf[1] = 'A'; _dbgbuf[2] = 'T'; _dbgbuf[3] = ':';
+    _dbgbuf[4] = _HX((addr >> 12) & 0xF);
+    _dbgbuf[5] = _HX((addr >> 8) & 0xF);
+    _dbgbuf[6] = _HX((addr >> 4) & 0xF);
+    _dbgbuf[7] = _HX(addr & 0xF);
+    _dbgbuf[8] = '\n';
+#undef _HX
+    sys_write(1, _dbgbuf, 9);
+  }
 #ifdef __aarch64__
   native_fn_t fn = (native_fn_t)addr;
   vm->R[0] = fn(vm->R[0], vm->R[1], vm->R[2], vm->R[3], vm->R[4], vm->R[5],
