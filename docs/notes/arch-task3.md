@@ -2,9 +2,12 @@
 
 ## Current Status
 
-**Fixed (Task 2 completion):**
+**Fixed (Task 2 completion & 2026-05-04 Fixes):**
 - RTLR double-slide bug in `h_call_nat` — VM no longer adds slide (packer already patches with final runtime address `target_va + slide`)
 - SIGSEGV on CALL_NAT resolved — all 4 protected functions reach completion
+- **Stub Compilation**: Fixed forward declaration of `sec_panic` and `end_time` redefinition in `vm_interp.c`.
+- **WSL2 Compatibility**: Verified build and execution (via QEMU) on Windows environments.
+- **Obfuscation**: Verified `-cff` and `-mba` stability on ARM64.
 
 ## Remaining Issues
 

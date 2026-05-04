@@ -3,10 +3,13 @@
 This document records the successful verification of VMPacker-protected binaries on the Android platform.
 
 ## Environment
-- **Host:** macOS (ARM64, M1/M2/M3)
-- **Target:** Android Emulator (`emulator-5554`)
+- **Host:** macOS (ARM64, M1/M2/M3) or Windows (WSL2)
+- **Target:** Android Emulator (`emulator-5554`) or Physical Device
 - **Architecture:** ARM64 (AArch64)
 - **OS:** Android (Linux Kernel)
+
+> [!IMPORTANT]
+> **PIE Requirement:** Android 5.0 (Lollipop) and later strictly require Position Independent Executables (PIE). When building your target binaries for Android, ensure you use the `-fPIE -pie` flags.
 
 ## Verified Features
 - [x] **VMP Stub Compatibility:** The core interpreter runs natively on the Android kernel.

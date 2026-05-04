@@ -6,12 +6,12 @@ This document describes the runtime security features implemented in the VMPacke
 
 The VM stub employs multiple layers of detection to identify if it is running under a debugger or being traced.
 
-| Mechanism | Description | Exit Code |
+| Mechanism | Description | Response |
 | :--- | :--- | :--- |
-| **TracerPid Check** | Scans `/proc/self/status` to check if `TracerPid` is non-zero. | `101` / `112` |
-| **Ptrace Check** | Attempts a `PTRACE_TRACEME` call. If it fails, a debugger is already attached. | `102` / `111` |
-| **Timing Check** | Measures the time taken for initialization and between instruction intervals using the ARM virtual timer (`CNTVCT_EL0`). Excessive delays trigger an abort. | `108` |
-| **Breakpoint Scanning** | Scans the entire bytecode region for software breakpoint instructions (`BRK #0`). | `109` |
+| **TracerPid Check** | Scans `/proc/self/status` to check if `TracerPid` is non-zero. | **Aggressive Panic** |
+| **Ptrace Check** | Attempts a `PTRACE_TRACEME` call. If it fails, a debugger is already attached. | **Aggressive Panic** |
+| **Timing Check** | Measures the time taken for initialization and between instruction intervals using the ARM virtual timer (`CNTVCT_EL0`). | **Aggressive Panic** |
+| **Breakpoint Scanning** | Scans the entire bytecode region for software breakpoint instructions (`BRK #0`). | **Aggressive Panic** |
 
 ## 2. Anti-Tampering & Integrity
 
@@ -28,9 +28,9 @@ These measures ensure that neither the interpreter stub nor the virtualized byte
 
 The VM includes an inline hook scanner that protects critical functions from being intercepted.
 
-| Mechanism | Description | Exit Code |
+| Mechanism | Description | Response |
 | :--- | :--- | :--- |
-| **Inline Hook Scanner** | Detects branches (`B`), calls (`BL`), or PC-relative loads (`LDR/ADR`) at the start of critical functions like `memcpy`, `mmap`, `ptrace`, and the VM entry point. | `104` - `107` |
+| **Inline Hook Scanner** | Detects branches (`B`), calls (`BL`), or PC-relative loads (`LDR/ADR`) at the start of critical functions like `memcpy`, `mmap`, `ptrace`, and the VM entry point. | **Aggressive Panic** |
 
 ## 4. Verification & Testing
 
@@ -58,12 +58,18 @@ Patch the start of `memcpy` in the stub with a NOP or Branch:
 ```bash
 # Detects modification of the interpreter's own code
 ./demo.vmp
-# Should exit with code 104 (if memcpy is hooked)
+# Should crash due to UDF (SIGILL)
 ```
 
-## 5. Security Exit Codes Summary
+## 5. Aggressive Panic (The "UDF" Trap)
 
-When a protection is triggered, the VM immediately halts and exits with one of the following status codes:
+When a protection mechanism is triggered, the VM does not perform a clean `exit()`. Instead, it executes an **Undefined Instruction (UDF)**:
+
+```c
+__asm__ volatile(".inst 0x00000000"); // Trigger SIGILL
+```
+
+This immediately crashes the process, making it significantly harder for an automated script or a researcher to simply "patch out" the exit call. The internal exit codes (101-112) are passed to the `sec_panic` function but are primarily used for internal logging during development; in production, any detection results in an immediate crash.
 
 - **101/112:** Debugger detected (TracerPid).
 - **102/111:** Debugger detected (Ptrace).

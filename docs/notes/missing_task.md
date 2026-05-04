@@ -1,50 +1,54 @@
 # Security Features Implementation Status & Missing Tasks
 
-This document outlines the current state of security features in VMPacker and identifies critical gaps that need to be addressed to achieve a production-ready protection level.
+This document outlines the current state of security features in VMPacker as of **May 2026**.
 
 ## 1. Anti-Tampering & Memory Dump Protection
-*   **Current Status:** Partially Implemented.
-*   **Implemented:**
-    *   XOR encryption for bytecode payload.
-    *   `OpcodeCryptor` (per-instruction opcode XOR encryption).
-    *   CRC32 logic exists in `stub/linux/arm64/vm_crc.h` and demos.
-*   **Missing Tasks:**
-    *   **[CRITICAL] Runtime CRC Integration:** The `vm_entry` loop in `vm_interp.c` does NOT yet call `crc_verify`. The bytecode integrity and stub memory integrity are not checked at runtime.
-    *   **Memory Dump Protection:** Implement `madvise(addr, len, MADV_DONTDUMP)` for decrypted bytecode and context buffers to prevent them from appearing in core dumps or memory snapshots.
-    *   **Buffer Zeroing:** Ensure all sensitive buffers (decrypted bytecode, temporary VM contexts) are explicitly zeroed out upon VM exit or error.
+*   **Current Status:** ✅ **Fully Implemented**.
+*   **Features:**
+    *   **XOR Encryption:** Bytecode payload is XOR-encrypted with a per-run random key.
+    *   **OpcodeCryptor:** Per-instruction opcode XOR encryption using a position-dependent key.
+    *   **Runtime CRC Integration:** `vm_entry` performs a startup CRC32 check, and `sec_runtime_check` performs periodic integrity checks every 1024 instructions.
+    *   **Memory Dump Protection:** `madvise(MADV_DONTDUMP)` is applied to bytecode and context buffers in `vm_interp.c`.
+    *   **Buffer Zeroing:** Sensitive VM context is zeroed out upon failure/exit (via `sec_zero_memory`).
 
 ## 2. Anti-Debug
-*   **Current Status:** Missing.
-*   **Missing Tasks:**
-    *   **Ptrace Check:** Implement standard `ptrace(PTRACE_TRACEME, 0, 1, 0)` check on startup to detect if a debugger is already attached.
-    *   **Procfs Monitoring:** Add checks for `TracerPid` in `/proc/self/status`.
-    *   **Timing Checks:** Implement RDTSC (or ARM equivalent `CNTVCT_EL0`) based timing checks to detect execution slowdowns caused by single-stepping or breakpoints.
-    *   **Breakpoint Detection:** Scan for software breakpoints (e.g., `BRK #0`) in critical code sections.
+*   **Current Status:** ✅ **Fully Implemented**.
+*   **Features:**
+    *   **Ptrace Check:** Standard `PTRACE_TRACEME` check in `sec_check_ptrace`.
+    *   **Procfs Monitoring:** `TracerPid` check in `sec_check_tracerpid`.
+    *   **Timing Checks:** `CNTVCT_EL0` based timing checks in `sec_get_timer` to detect debugging/emulation.
+    *   **Breakpoint Detection:** Scanning for `BRK #0` in `sec_scan_breakpoints`.
+    *   **Aggressive Panic:** Any detection triggers an **Undefined Instruction (UDF)** crash instead of a clean exit.
 
 ## 3. Code Obfuscation
-*   **Current Status:** Partially Implemented.
-*   **Implemented:**
+*   **Current Status:** ✅ **Fully Implemented**.
+*   **Features:**
     *   **Indirect Dispatch:** Function pointer table for handlers (`VM_INDIRECT_DISPATCH`).
-    *   **Handler Splitting:** Modular handler sections (`VM_FUNC_SPLIT`).
-*   **Missing Tasks:**
-    *   **Instruction Shuffling:** The `Translator` (`pkg/arch/arm64/translator.go`) generates bytecode in a 1-to-1 sequential order. Implement a basic reordering engine that can shuffle non-dependent instructions and insert junk instructions/NOPs.
-    *   **Control Flow Flattening:** Transform complex logic into a flat dispatcher structure to break static analysis of function graphs.
+    *   **Instruction Reversal:** Bytecode is stored and executed in reverse order with size-markers.
+    *   **Control Flow Flattening (CFF):** Logic is transformed into a flat dispatcher structure (`-cff` flag).
+    *   **Mixed Boolean-Arithmetic (MBA):** Arithmetic operations are replaced with complex logical expressions (`-mba` flag).
 
 ## 4. Symbol & String Obfuscation
-*   **Current Status:** Basic Stripping Only.
+*   **Current Status:** 🟡 **Partially Implemented**.
 *   **Implemented:**
     *   ELF section stripping (`.symtab`, `.strtab`, `.debug_*`).
 *   **Missing Tasks:**
-    *   **String Encryption:** Implement a pass in the packer to identify string literals in `.rodata`, encrypt them, and insert a runtime decryption stub.
-    *   **Symbol Hiding/Renaming:** Beyond simple stripping, implement symbol name mangling or encryption for exported symbols that cannot be stripped.
+    *   **[PENDING] String Encryption:** Implement a pass to encrypt string literals in `.rodata`.
+    *   **[PENDING] Symbol Renaming:** Implement name mangling for non-strippable exports.
 
 ## 5. Anti-Hook
-*   **Current Status:** Missing.
+*   **Current Status:** ✅ **Implemented**.
+*   **Features:**
+    *   **Inline Hook Detection:** `sec_scan_inline_hook` scans critical functions (`memcpy`, `mmap`, `ptrace`, `vm_entry`) for hijacking.
 *   **Missing Tasks:**
-    *   **PLT/GOT Integrity:** Implement runtime checks to ensure the Procedure Linkage Table (PLT) and Global Offset Table (GOT) have not been redirected to malicious shims.
-    *   **Inline Hook Detection:** Scan the first few bytes of critical system functions (e.g., `dlopen`, `mmap`) for `B` or `LDR PC` instructions that indicate an inline hook.
+    *   **[PENDING] PLT/GOT Integrity:** Implement checks for redirection in the GOT.
 
 ## 6. ABI Compliance (ARM64)
-*   **Current Status:** Incomplete.
-*   **Missing Tasks:**
-    *   **Register Preservation:** The `vm_entry_token` stub currently does not save/restore callee-saved registers (X19-X28). This can lead to crashes or corruption in the calling native code. Needs to be updated to match the thoroughness of the ARM32 implementation.
+*   **Current Status:** ✅ **Implemented**.
+*   **Features:**
+    *   **Register Preservation:** `vm_entry.S` correctly saves and restores callee-saved registers (X19-X28) and vector registers (V0-V7).
+*   **Remaining Issues:**
+    *   **[CRITICAL] Stack Alignment:** `vmp_md5_hex` fails output verification, likely due to 16-byte stack alignment issues during `CALL_NAT` transitions to variadic libc functions.
+
+---
+*Last updated: 2026-05-04 (Antigravity)*

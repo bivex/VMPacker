@@ -54,6 +54,15 @@ For PIE/ET_DYN binaries (Android .so), absolute addresses need ASLR fixup at run
 
 At runtime, each relocation entry patches the bytecode with `target_addr + slide`.
 
+## Expert Obfuscation Features
+
+### Control Flow Flattening (CFF)
+Enabled with the `-cff` flag. This transformation converts the function's control flow graph into a flat structure. All basic blocks are placed inside a central dispatcher loop, and a state variable determines which block to execute next. This completely breaks the logical flow visible in standard decompilers.
+
+### Mixed Boolean-Arithmetic (MBA)
+Enabled with the `-mba` flag. This replaces simple arithmetic operations with complex, logically equivalent boolean expressions. 
+For example, `a + b` might be replaced with `(a ^ b) + 2 * (a & b)`. When combined with the VM, these expressions are further broken down into individual VM opcodes, creating a massive explosion in instruction count that is extremely tedious to manually reverse.
+
 ## Supported ARM64 Instructions
 
 ### Arithmetic/Logic
