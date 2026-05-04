@@ -558,7 +558,7 @@ func (p *Packer) extractAndEncryptStrings(f *elf.File, fi *vm.FuncInfo, insts []
 			key := uint32(keyBuf[0])
 			if key == 0 { key = 0xAA }
 
-			for j := uint32(0); j < strLen; j++ {
+			for j := uint32(0); j <= strLen; j++ {
 				p.data[offset+uint64(j)] ^= byte(key)
 			}
 

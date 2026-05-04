@@ -105,7 +105,11 @@ func TestExtractAndEncryptStrings(t *testing.T) {
 		t.Fatalf("Expected 1 string reference, got %d", len(refs))
 	}
 
-	ref := refs[0]
+	ref, ok := refs[0x401000]
+	if !ok {
+		t.Fatalf("Expected string reference at 0x401000 not found")
+	}
+
 	if ref.Addr != 0x401000 {
 		t.Errorf("Expected string addr 0x401000, got 0x%X", ref.Addr)
 	}
