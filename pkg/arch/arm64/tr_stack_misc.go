@@ -59,6 +59,11 @@ func (t *Translator) trStackCBZ(inst vm.Instruction, isZero bool) error {
 		vmOp = vm.OpJne
 	}
 
+	if t.cff {
+		t.emitCFFCondBranch(vmOp, target, inst.Offset+4)
+		return nil
+	}
+
 	t.emit(vmOp)
 	fixPos := t.pos()
 	t.emitU32(0)

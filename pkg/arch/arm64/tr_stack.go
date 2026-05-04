@@ -1,6 +1,8 @@
 package arm64
 
 import (
+	"math/rand"
+
 	"github.com/vmpacker/pkg/vm"
 )
 
@@ -66,26 +68,26 @@ func (t *Translator) trStackAluReg(inst vm.Instruction, sOp byte) error {
 		return err
 	}
 
-	// XZR handling: push 0 instead of VLOAD
-	t.pushRegOrZero(inst.Rn, rn)
-
-	// Shift handling
-	if inst.Shift != 0 {
+	// Try MBA obfuscation (x+y, x-y, etc.)
+	pushX := func() { t.pushRegOrZero(inst.Rn, rn) }
+	pushY := func() {
 		t.pushRegOrZero(inst.Rm, rm)
-		t.emitShiftOnStack(inst.ShiftType, uint32(inst.Shift), inst.SF)
-	} else {
-		t.pushRegOrZero(inst.Rm, rm)
-	}
-
-	if sOp == vm.OpSRor {
-		if inst.SF {
-			t.sPushImm32(64)
-		} else {
-			t.sPushImm32(32)
+		if inst.Shift != 0 {
+			t.emitShiftOnStack(inst.ShiftType, uint32(inst.Shift), inst.SF)
 		}
 	}
-
-	t.emit(sOp) // Binary operation
+	if !t.emitStackMBA(sOp, pushX, pushY) {
+		pushX()
+		pushY()
+		if sOp == vm.OpSRor {
+			if inst.SF {
+				t.sPushImm32(64)
+			} else {
+				t.sPushImm32(32)
+			}
+		}
+		t.emit(sOp) // Binary operation
+	}
 
 	if !inst.SF {
 		t.emit(vm.OpSTrunc32) // W register mode truncation
@@ -106,16 +108,18 @@ func (t *Translator) trStackAluRegFlags(inst vm.Instruction, sOp byte, setFlags 
 		return err
 	}
 
-	t.pushRegOrZero(inst.Rn, rn)
-
-	if inst.Shift != 0 {
+	pushX := func() { t.pushRegOrZero(inst.Rn, rn) }
+	pushY := func() {
 		t.pushRegOrZero(inst.Rm, rm)
-		t.emitShiftOnStack(inst.ShiftType, uint32(inst.Shift), inst.SF)
-	} else {
-		t.pushRegOrZero(inst.Rm, rm)
+		if inst.Shift != 0 {
+			t.emitShiftOnStack(inst.ShiftType, uint32(inst.Shift), inst.SF)
+		}
 	}
-
-	t.emit(sOp)
+	if !t.emitStackMBA(sOp, pushX, pushY) {
+		pushX()
+		pushY()
+		t.emit(sOp)
+	}
 
 	if setFlags {
 		t.sDup()          // duplicate result for CMP
@@ -152,10 +156,14 @@ func (t *Translator) trStackAluImmFlags(inst vm.Instruction, sOp byte, setFlags 
 		return err
 	}
 
-	t.pushRegOrZero(inst.Rn, rn)
-	t.sPushImm(uint64(inst.Imm))
-
-	t.emit(sOp)
+	pushX := func() { t.pushRegOrZero(inst.Rn, rn) }
+	pushY := func() { t.sPushImm(uint64(inst.Imm)) }
+	
+	if !t.emitStackMBA(sOp, pushX, pushY) {
+		pushX()
+		pushY()
+		t.emit(sOp)
+	}
 
 	if setFlags {
 		t.sDup()
@@ -378,4 +386,94 @@ func (t *Translator) emitShiftOnStack(shiftType int, amount uint32, sf bool) {
 	if !sf {
 		t.emit(vm.OpSTrunc32)
 	}
+}
+
+// emitStackMBA attempts to obfuscate a binary operation using Mixed Boolean-Arithmetic
+// Returns true if obfuscated, false if the caller should emit the standard operation
+func (t *Translator) emitStackMBA(sOp byte, pushX func(), pushY func()) bool {
+	return t.emitStackMBAInternal(sOp, pushX, pushY, 0)
+}
+
+func (t *Translator) emitStackMBAInternal(sOp byte, pushX func(), pushY func(), depth int) bool {
+	if !t.mba {
+		return false
+	}
+	// If MBA is explicitly enabled, 100% chance at depth 0.
+	// For deeper levels, decrease chance to avoid exponential bloat.
+	chance := 1
+	if depth == 1 {
+		chance = 2 // 50% chance for second level
+	} else if depth >= 2 {
+		chance = 4 // 25% for third level
+	}
+	
+	if rand.Intn(chance) != 0 {
+		return false
+	}
+
+	// Internal helper to emit sub-expressions with potential MBA
+	emitSub := func(op byte, px func(), py func()) {
+		if depth < 1 && t.emitStackMBAInternal(op, px, py, depth+1) {
+			return
+		}
+		px(); py(); t.emit(op)
+	}
+
+	switch sOp {
+	case vm.OpSAdd:
+		// Identity: x + y == (x ^ y) + 2 * (x & y)
+		// Or: x + y == 2 * (x | y) - (x ^ y)
+		if rand.Intn(2) == 0 {
+			emitSub(vm.OpSXor, pushX, pushY)
+			px := func() { pushX(); pushY(); t.emit(vm.OpSAnd) }
+			py := func() { t.sPushImm32(1) }
+			emitSub(vm.OpSShl, px, py)
+			t.emit(vm.OpSAdd)
+		} else {
+			px := func() { pushX(); pushY(); t.emit(vm.OpSOr) }
+			py := func() { t.sPushImm32(1) }
+			emitSub(vm.OpSShl, px, py)
+			emitSub(vm.OpSXor, pushX, pushY)
+			t.emit(vm.OpSSub)
+		}
+		return true
+
+	case vm.OpSSub:
+		// Identity: x - y == (x ^ y) - 2 * (~x & y)
+		// Or: x - y == (x & ~y) - (~x & y)
+		if rand.Intn(2) == 0 {
+			emitSub(vm.OpSXor, pushX, pushY)
+			px := func() { pushX(); t.emit(vm.OpSNot); pushY(); t.emit(vm.OpSAnd) }
+			py := func() { t.sPushImm32(1) }
+			emitSub(vm.OpSShl, px, py)
+			t.emit(vm.OpSSub)
+		} else {
+			emitSub(vm.OpSAnd, pushX, func() { pushY(); t.emit(vm.OpSNot) })
+			emitSub(vm.OpSAnd, func() { pushX(); t.emit(vm.OpSNot) }, pushY)
+			t.emit(vm.OpSSub)
+		}
+		return true
+
+	case vm.OpSXor:
+		// Identity: x ^ y == (x | y) - (x & y)
+		emitSub(vm.OpSOr, pushX, pushY)
+		emitSub(vm.OpSAnd, pushX, pushY)
+		t.emit(vm.OpSSub)
+		return true
+
+	case vm.OpSAnd:
+		// Identity: x & y == (x | y) - (x ^ y)
+		emitSub(vm.OpSOr, pushX, pushY)
+		emitSub(vm.OpSXor, pushX, pushY)
+		t.emit(vm.OpSSub)
+		return true
+
+	case vm.OpSOr:
+		// Identity: x | y == (x & y) + (x ^ y)
+		emitSub(vm.OpSAnd, pushX, pushY)
+		emitSub(vm.OpSXor, pushX, pushY)
+		t.emit(vm.OpSAdd)
+		return true
+	}
+	return false
 }

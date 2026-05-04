@@ -225,6 +225,7 @@ static inline u8 vm_logical_insn_size(u8 id) {
   case OP_ID_SST16:
   case OP_ID_SST32:
   case OP_ID_SST64:
+  case OP_ID_SDECRYPTSTR:
     return 1;
   case OP_ID_RET:
   case OP_ID_PUSH:

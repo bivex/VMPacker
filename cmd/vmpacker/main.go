@@ -38,6 +38,8 @@ func main() {
 	strip := flag.Bool("strip", true, "strip symbol table (prevent strip from breaking protection)")
 	debug := flag.Bool("debug", false, "generate debug mapping file (ARM64 -> VM bytecode)")
 	tokenEntry := flag.Bool("token", true, "enable tokenized entry mode (3-inst trampoline) - default on")
+	cff := flag.Bool("cff", false, "enable Control Flow Flattening (CFF) obfuscation")
+	mba := flag.Bool("mba", false, "enable Mixed Boolean-Arithmetic (MBA) instruction substitution")
 	info := flag.Bool("info", false, "print ELF info only, do not protect")
 
 	flag.Usage = func() {
@@ -142,6 +144,8 @@ Examples:
 
 	packer := elfpacker.NewPacker(inputPath, outPath, funcs, addrSpecs, *verbose, *strip, *debug, *tokenEntry, interpBlob)
 	packer.SetInterpBlobARM32(interpBlobARM32)
+	packer.SetCFF(*cff)
+	packer.SetMBA(*mba)
 	if err := packer.Process(); err != nil {
 		fmt.Fprintf(os.Stderr, "\n[!] Failed: %v\n", err)
 		os.Exit(1)

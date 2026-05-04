@@ -46,6 +46,11 @@ func (p *Packer) Process() error {
 	fmt.Printf("[*] ELF: %s, Type: %s, Class: %s\n", f.Machine, f.Type, f.Class)
 	fmt.Printf("[*] VM interp blob: %d bytes (ARM32=%v)\n", len(activeBlob), p.isARM32)
 
+	// Make all data/rodata PT_LOAD segments writable in the ELF header
+	// This allows the VM to decrypt strings in-place at runtime.
+	// Better: just patch all PT_LOAD segments to be PF_R | PF_W | PF_X or at least PF_W if PF_R is present
+	p.makeSegmentsWritable(f)
+
 	// Phase 1: collect bytecode for all functions
 	entries := p.collectEntries(f)
 
@@ -73,7 +78,7 @@ func (p *Packer) Process() error {
 		isThumbFunc := p.isARM32 && p.thumbFuncs[fi.Addr]
 		insts := p.decodeInstructions(code, isThumbFunc)
 
-		result, err := p.translateFunction(fi, code, insts, isThumbFunc)
+		result, err := p.translateFunction(f, fi, code, insts, isThumbFunc)
 		if err != nil {
 			return err
 		}
@@ -188,7 +193,7 @@ func (p *Packer) decodeInstructions(code []byte, isThumbFunc bool) []vm.Instruct
 }
 
 // translateFunction dispatches to ARM32 or ARM64 translator
-func (p *Packer) translateFunction(fi *vm.FuncInfo, code []byte, insts []vm.Instruction, isThumbFunc bool) (*translationResult, error) {
+func (p *Packer) translateFunction(f *elf.File, fi *vm.FuncInfo, code []byte, insts []vm.Instruction, isThumbFunc bool) (*translationResult, error) {
 	if p.verbose {
 		fmt.Printf("    Instructions: %d (Thumb=%v)\n", len(insts), isThumbFunc && p.isARM32)
 		p.dumpDisasm(insts)
@@ -218,10 +223,21 @@ func (p *Packer) translateFunction(fi *vm.FuncInfo, code []byte, insts []vm.Inst
 			Relocations: r.Relocations,
 		}
 	} else {
+		refs := p.extractAndEncryptStrings(f, fi, insts)
+		if len(refs) > 0 {
+			fmt.Printf("    Encrypted %d strings in .rodata\n", len(refs))
+		}
+
 		trans := arm64.NewTranslator(fi.Addr, int(fi.Size))
 		if p.debug {
 			trans.SetDebug(true)
 		}
+		trans.SetCFF(p.cff) // Apply Control Flow Flattening if enabled
+		trans.SetMBA(p.mba) // Apply MBA obfuscation if enabled
+		
+		// Prepend string decryption logic before translating instructions
+		trans.EmitStringDecryption(refs)
+		
 		r, terr := trans.Translate(insts)
 		if terr != nil {
 			return nil, fmt.Errorf("translation failed: %v", terr)
@@ -437,4 +453,139 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 	}
 
 	return encrypted, xorKey, nil
+}
+
+func (p *Packer) makeSegmentsWritable(f *elf.File) {
+	var phOff uint64
+	var entSize uint64
+	var phNum uint16
+
+	if f.Class == elf.ELFCLASS64 {
+		phOff = binary.LittleEndian.Uint64(p.data[32:])
+		entSize = uint64(binary.LittleEndian.Uint16(p.data[54:]))
+		phNum = binary.LittleEndian.Uint16(p.data[56:])
+	} else {
+		phOff = uint64(binary.LittleEndian.Uint32(p.data[28:]))
+		entSize = uint64(binary.LittleEndian.Uint16(p.data[42:]))
+		phNum = binary.LittleEndian.Uint16(p.data[44:])
+	}
+	
+	for i := uint16(0); i < phNum; i++ {
+				entryOff := phOff + uint64(i)*entSize
+				if uint64(len(p.data)) < entryOff+entSize {
+					continue
+				}
+				
+				var pType uint32
+				if f.Class == elf.ELFCLASS64 {
+					pType = binary.LittleEndian.Uint32(p.data[entryOff:])
+				} else {
+					pType = binary.LittleEndian.Uint32(p.data[entryOff:])
+				}
+				
+				if pType == uint32(elf.PT_LOAD) {
+					var flags uint32
+					var flagsOff uint64
+					if f.Class == elf.ELFCLASS64 {
+						flagsOff = entryOff + 4
+						flags = binary.LittleEndian.Uint32(p.data[flagsOff:])
+					} else {
+						flagsOff = entryOff + 24
+						flags = binary.LittleEndian.Uint32(p.data[flagsOff:])
+					}
+					
+					// Add PF_W (write)
+					flags |= uint32(elf.PF_W)
+					binary.LittleEndian.PutUint32(p.data[flagsOff:], flags)
+				}
+			}
+}
+
+func (p *Packer) extractAndEncryptStrings(f *elf.File, fi *vm.FuncInfo, insts []vm.Instruction) []arm64.StringRef {
+	var refs []arm64.StringRef
+	if p.isARM32 {
+		return refs // Only ARM64 supported for now
+	}
+
+	for i := 0; i < len(insts)-1; i++ {
+		inst := insts[i]
+		next := insts[i+1]
+		
+		if arm64.Op(inst.Op) == arm64.ADRP && arm64.Op(next.Op) == arm64.ADD_IMM && inst.Rd == next.Rn {
+			pc := fi.Addr + uint64(inst.Offset)
+			pageBase := pc &^ 0xFFF
+			target := pageBase + uint64(inst.Imm) + uint64(next.Imm)
+			
+			// Find offset in p.data
+			offset, secName, found := resolveFileOffsetBase(f, target)
+			if !found { continue }
+			
+			// Simple check if it's in .rodata
+			if secName != ".rodata" && secName != ".data" && secName != "__LOAD_X" { continue }
+
+			// Find length of string (null terminated)
+			var strLen uint32 = 0
+			for offset+uint64(strLen) < uint64(len(p.data)) {
+				if p.data[offset+uint64(strLen)] == 0 {
+					break
+				}
+				strLen++
+			}
+			
+			if strLen == 0 || strLen > 4096 { continue } // Ignore empty or too large
+
+			// Heuristic: Ensure it only contains printable ASCII or common whitespace
+			isString := true
+			for j := uint32(0); j < strLen; j++ {
+				c := p.data[offset+uint64(j)]
+				if c < 32 || c > 126 {
+					if c != '\n' && c != '\r' && c != '\t' {
+						isString = false
+						break
+					}
+				}
+			}
+			if !isString { continue }
+
+			// Generate key and encrypt
+			var keyBuf [1]byte
+			rand.Read(keyBuf[:])
+			key := uint32(keyBuf[0])
+			if key == 0 {
+				key = 0xAA
+			}
+
+			// Do not re-encrypt if already handled (could be referenced multiple times)
+			// We can check if it's already encrypted by keeping a map, or since we XOR, just do it once.
+			// Let's do it right away.
+			for j := uint32(0); j <= strLen; j++ {
+				p.data[offset+uint64(j)] ^= byte(key)
+			}
+
+			refs = append(refs, arm64.StringRef{
+				Addr: target,
+				Len:  strLen,
+				Key:  key,
+			})
+		}
+	}
+	return refs
+}
+
+func resolveFileOffsetBase(f *elf.File, addr uint64) (uint64, string, bool) {
+	// Use section headers to get the exact section name to avoid encrypting .text
+	for _, sec := range f.Sections {
+		if sec.Type != elf.SHT_NOBITS && addr >= sec.Addr && addr < sec.Addr+sec.Size {
+			return sec.Offset + (addr - sec.Addr), sec.Name, true
+		}
+	}
+	// Fallback to PT_LOAD if sections are stripped
+	for _, ph := range f.Progs {
+		if ph.Type == elf.PT_LOAD {
+			if addr >= ph.Vaddr && addr < ph.Vaddr+ph.Memsz {
+				return ph.Off + (addr - ph.Vaddr), "__LOAD_X", true
+			}
+		}
+	}
+	return 0, "", false
 }

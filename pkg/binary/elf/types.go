@@ -35,4 +35,6 @@ type Packer struct {
 	isARM32         bool            // detected at Process() time
 	thumbFuncs      map[uint64]bool // Thumb-mode function addresses (bit0 stripped)
 	relocations     []vm.Relocation // relocations to be fixed at runtime (mainly for .so ASLR)
+	cff             bool            // Control Flow Flattening
+	mba             bool            // Mixed Boolean-Arithmetic
 }

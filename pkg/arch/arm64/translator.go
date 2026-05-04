@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
+	"math/rand"
 
 	"github.com/vmpacker/pkg/vm"
 )
@@ -52,6 +53,13 @@ type DebugEntry struct {
 	VMEnd       int    // Translated VM bytecode end position
 }
 
+// StringRef defines an encrypted string to be decrypted at runtime
+type StringRef struct {
+	Addr uint64
+	Len  uint32
+	Key  uint32
+}
+
 // Translator ARM64 → VM translator
 type Translator struct {
 	code        []byte          // output buffer
@@ -64,6 +72,12 @@ type Translator struct {
 	decoder     *Decoder     // decoder reference (for name lookup)
 	debug       bool         // debug mode
 	debugLog    []DebugEntry // debug mapping log
+	cff         bool         // Control Flow Flattening enabled
+	bbStates    map[int]uint32 // ARM64 offset -> State ID
+	bbLabels    map[int]int    // ARM64 offset -> VM offset (start of block)
+	dispPos     int            // VM offset of dispatcher
+	mba         bool           // Mixed Boolean-Arithmetic obfuscation
+	regMap      [64]byte       // Virtual register shuffling map (arch -> phys)
 }
 
 type branchFixup struct {
@@ -74,14 +88,77 @@ type branchFixup struct {
 
 // NewTranslator creates translator
 func NewTranslator(funcAddr uint64, funcSize int) *Translator {
-	return &Translator{
+	t := &Translator{
 		code:        make([]byte, 0, funcSize*4),
 		labels:      make(map[int]int),
 		relocations: make([]vm.Relocation, 0),
 		funcAddr:    funcAddr,
 		funcSize:    funcSize,
 		decoder:     NewDecoder(),
+		bbStates:    make(map[int]uint32),
+		bbLabels:    make(map[int]int),
 	}
+
+	// Initialize register map with random permutation (0..63)
+	for i := 0; i < 64; i++ {
+		t.regMap[i] = byte(i)
+	}
+	rand.Shuffle(64, func(i, j int) {
+		t.regMap[i], t.regMap[j] = t.regMap[j], t.regMap[i]
+	})
+
+	return t
+}
+
+// SetCFF enables Control Flow Flattening
+func (t *Translator) SetCFF(enabled bool) {
+	t.cff = enabled
+}
+
+// SetMBA enables Mixed Boolean-Arithmetic obfuscation
+func (t *Translator) SetMBA(enabled bool) {
+	t.mba = enabled
+}
+
+// identifyBasicBlocks scans instructions for branch targets to find block boundaries
+func (t *Translator) identifyBasicBlocks(instructions []vm.Instruction) map[int]bool {
+	starts := make(map[int]bool)
+	if len(instructions) == 0 {
+		return starts
+	}
+	starts[instructions[0].Offset] = true
+
+	for i, inst := range instructions {
+		op := Op(inst.Op)
+		isBr := false
+		var targets []int
+
+		// Determine if instruction ends a basic block or defines a new target
+		switch op {
+		case B, BL:
+			isBr = true
+			targets = append(targets, inst.Offset+int(inst.Imm))
+		case B_COND, CBZ, CBNZ, TBZ, TBNZ:
+			isBr = true
+			targets = append(targets, inst.Offset+int(inst.Imm))
+			// Conditional branches create a fallthrough start
+		case RET, BR, BLR:
+			isBr = true
+		}
+
+		if isBr {
+			for _, target := range targets {
+				if target >= 0 && target <= t.funcSize {
+					starts[target] = true
+				}
+			}
+			// Following instruction is also a BB start
+			if i+1 < len(instructions) {
+				starts[instructions[i+1].Offset] = true
+			}
+		}
+	}
+	return starts
 }
 
 // SetDebug enables debug mode
@@ -142,6 +219,61 @@ func (t *Translator) sext32(rd byte) {
 	t.emitU32(32)
 }
 
+func (t *Translator) emitCFFJump(targetAddr int) {
+	stateID := t.bbStates[targetAddr]
+	t.emit(vm.OpMovImm32, 62) // R62 = State Register
+	t.emitU32(stateID)
+	t.emit(vm.OpJmp)
+	t.emitU32(uint32(t.dispPos))
+}
+
+func (t *Translator) emitCFFCondBranch(vmOp byte, targetAddr int, nextAddr int) {
+	takenID := t.bbStates[targetAddr]
+	notTakenID := t.bbStates[nextAddr]
+
+	// 1. Conditional jump to taken handler
+	t.emit(vmOp)
+	fixPosTaken := t.pos()
+	t.emitU32(0)
+
+	// 2. Not Taken case: update state and jump to dispatcher
+	t.emit(vm.OpMovImm32, 62)
+	t.emitU32(notTakenID)
+	t.emit(vm.OpJmp)
+	t.emitU32(uint32(t.dispPos))
+
+	// 3. Taken case (stub): update state and jump to dispatcher
+	targetPos := t.pos()
+	binary.LittleEndian.PutUint32(t.code[fixPosTaken:], uint32(targetPos))
+	t.emit(vm.OpMovImm32, 62)
+	t.emitU32(takenID)
+	t.emit(vm.OpJmp)
+	t.emitU32(uint32(t.dispPos))
+}
+
+// insertJunkCode occasionally inserts an unconditional jump over garbage bytes
+// This implements control flow obfuscation / opaque predicates in the bytecode.
+func (t *Translator) insertJunkCode() {
+	// 25% chance to insert junk
+	if rand.Intn(4) != 0 {
+		return
+	}
+
+	t.emit(vm.OpJmp)
+	fixPos := t.pos()
+	t.emitU32(0) // placeholder for jump target
+
+	// Emit 1 to 12 bytes of garbage (confuses linear disassemblers)
+	junkLen := rand.Intn(12) + 1
+	for j := 0; j < junkLen; j++ {
+		t.emit(byte(rand.Intn(256)))
+	}
+
+	// Patch the jump to point past the garbage
+	targetPos := t.pos()
+	binary.LittleEndian.PutUint32(t.code[fixPos:], uint32(targetPos))
+}
+
 // mapReg maps ARM64 register → VM register
 func (t *Translator) mapReg(arm64Reg int) (byte, error) {
 	if arm64Reg == vm.REG_XZR {
@@ -152,15 +284,28 @@ func (t *Translator) mapReg(arm64Reg int) (byte, error) {
 		return byte(arm64Reg - vm.REG_V_BASE), nil
 	}
 	if arm64Reg < 0 || arm64Reg > 31 {
-		return 0, fmt.Errorf("register X%d/V%d out of VM range", arm64Reg, arm64Reg-vm.REG_V_BASE)
+		return 0, fmt.Errorf("register X%d out of VM range", arm64Reg)
 	}
-	return byte(arm64Reg), nil
+	return t.regMap[arm64Reg], nil
+}
+
+// EmitStringDecryption emits VM instructions to decrypt an array of strings at runtime
+func (t *Translator) EmitStringDecryption(refs []StringRef) {
+	for _, r := range refs {
+		t.sPushImm64(r.Addr)
+		t.sPushImm32(r.Len)
+		t.sPushImm32(r.Key)
+		t.emit(vm.OpSDecryptStr)
+	}
 }
 
 // Translate translates entire function
 func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult, error) {
-	result := &TranslateResult{TotalInsts: len(instructions)}
+	if t.cff {
+		return t.translateCFF(instructions)
+	}
 
+	result := &TranslateResult{TotalInsts: len(instructions)}
 	skip := 0
 	for i := 0; i < len(instructions); i++ {
 		if skip > 0 {
@@ -171,6 +316,7 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 		}
 
 		t.labels[instructions[i].Offset] = t.pos()
+		t.insertJunkCode()
 
 		vmStartPos := t.pos()
 		var err error
@@ -210,6 +356,92 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 		}
 	}
 
+	return t.finishTranslate(result)
+}
+
+func (t *Translator) translateCFF(instructions []vm.Instruction) (*TranslateResult, error) {
+	result := &TranslateResult{TotalInsts: len(instructions)}
+
+	// 1. Identify BB starts
+	starts := t.identifyBasicBlocks(instructions)
+
+	// 2. Assign random state IDs
+	for addr := range starts {
+		t.bbStates[addr] = uint32(rand.Int31())
+	}
+
+	// 3. Emit Prologue: Set initial state
+	firstAddr := instructions[0].Offset
+	t.emit(vm.OpMovImm32, 62) // R62 = State Register
+	t.emitU32(t.bbStates[firstAddr])
+	// Jump to dispatcher
+	t.emit(vm.OpJmp)
+	fixDisp := t.pos()
+	t.emitU32(0)
+
+	// 4. Emit Dispatcher
+	t.dispPos = t.pos()
+	binary.LittleEndian.PutUint32(t.code[fixDisp:], uint32(t.dispPos))
+
+	for addr, stateID := range t.bbStates {
+		t.emit(vm.OpCmpImm, 62)
+		t.emitU32(stateID)
+		t.emit(vm.OpJe)
+		fixPos := t.pos()
+		t.emitU32(0)
+		t.fixups = append(t.fixups, branchFixup{vmOffset: fixPos, arm64Target: addr})
+	}
+	t.emit(vm.OpHalt) // Should not be reached
+
+	// 5. Translate each block
+	skip := 0
+	for i := 0; i < len(instructions); i++ {
+		addr := instructions[i].Offset
+		t.labels[addr] = t.pos()
+
+		if skip > 0 {
+			skip--
+			result.TransInsts++
+			continue
+		}
+
+		// If this is a BB start, we might want to insert junk here too
+		if starts[addr] {
+			t.insertJunkCode()
+			t.labels[addr] = t.pos() // Update label after junk
+		}
+
+		var err error
+		skip, err = t.translateOne(instructions, i)
+
+		if err != nil {
+			t.unsupported = append(t.unsupported, fmt.Sprintf(
+				"offset 0x%04X: %s (raw=0x%08X) - %v",
+				addr, OpName(Op(instructions[i].Op)), instructions[i].Raw, err))
+			t.emit(vm.OpHalt)
+		} else {
+			result.TransInsts++
+		}
+
+		// 6. End of block fallthrough
+		nextIdx := i + skip + 1
+		if nextIdx < len(instructions) {
+			nextAddr := instructions[nextIdx].Offset
+			if starts[nextAddr] {
+				// This block ended without a branch, but next is a new BB start.
+				// We MUST update state and jump to dispatcher.
+				t.emit(vm.OpMovImm32, 62)
+				t.emitU32(t.bbStates[nextAddr])
+				t.emit(vm.OpJmp)
+				t.emitU32(uint32(t.dispPos))
+			}
+		}
+	}
+
+	return t.finishTranslate(result)
+}
+
+func (t *Translator) finishTranslate(result *TranslateResult) (*TranslateResult, error) {
 	t.labels[t.funcSize] = t.pos()
 	t.emit(vm.OpHalt)
 
@@ -224,29 +456,24 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 	// record pure bytecode length (before trailer)
 	result.CodeLen = t.pos()
 
-	// ---- append CRC section (24 bytes) ----
-	// Format: [stub_va:8][stub_size:4][stub_crc:4][bc_crc:4][magic:4]
-	// Note: stub_va, stub_size, stub_crc are filled by packer or left as 0
-	// Here we only fill bc_crc and magic.
+	// ---- append CRC section ----
 	bcCrc := crc32_calc(t.code[:result.CodeLen])
 	t.emitU64(0)          // stub_va placeholder
 	t.emitU32(0)          // stub_size placeholder
 	t.emitU32(0)          // stub_crc placeholder
 	t.emitU32(bcCrc)      // bc_crc
-	t.emitU32(0x43524332) // CRC_MAGIC ("CRC2")
+	t.emitU32(0x43524332) // CRC_MAGIC
 
-	// ---- append trailer (BR indirect jump mapping table + reverse + oc_key placeholder + op_map) ----
-	// First append the op_map (256 bytes) so C interpreter can read it
+	// ---- append trailer ----
+	t.emit(t.regMap[:]...)
 	t.emit(vm.GlobalOpMap[:]...)
-	// entry: [arm64_off:u32][vm_off:u32]
-	// reverse and oc_key are filled with actual values by packer
 	mapCount := uint32(len(t.labels))
 	for arm64Off, vmOff := range t.labels {
 		t.emitU32(uint32(arm64Off))
 		t.emitU32(uint32(vmOff))
 	}
-	t.emit(0)    // reverse placeholder (packer fills: 0=forward, 1=reverse)
-	t.emitU32(0) // oc_key placeholder (filled by packer)
+	t.emit(0)    // reverse placeholder
+	t.emitU32(0) // oc_key placeholder
 	t.emitU32(mapCount)
 	t.emitU64(t.funcAddr)
 	t.emitU32(uint32(t.funcSize))
@@ -282,9 +509,13 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 			}
 			if op == ADDS_IMM {
 				// CMN: flags from Xn + imm
-				t.pushRegOrZero(inst.Rn, rn)
-				t.sPushImm(uint64(inst.Imm))
-				t.emit(vm.OpSAdd)
+				px := func() { t.pushRegOrZero(inst.Rn, rn) }
+				py := func() { t.sPushImm(uint64(inst.Imm)) }
+				if !t.emitStackMBA(vm.OpSAdd, px, py) {
+					px()
+					py()
+					t.emit(vm.OpSAdd)
+				}
 				t.sPushImm32(0)
 				t.emit(vm.OpSCmp)
 				t.sDrop() // discard sum
@@ -393,9 +624,13 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 			}
 			if op == ADDS_REG {
 				// CMN: VLOAD(rn) VLOAD(rm) S_ADD PUSH(0) S_CMP DROP
-				t.pushRegOrZero(inst.Rn, rn)
-				t.pushRegOrZero(inst.Rm, rm)
-				t.emit(vm.OpSAdd)
+				px := func() { t.pushRegOrZero(inst.Rn, rn) }
+				py := func() { t.pushRegOrZero(inst.Rm, rm) }
+				if !t.emitStackMBA(vm.OpSAdd, px, py) {
+					px()
+					py()
+					t.emit(vm.OpSAdd)
+				}
 				t.sPushImm32(0)
 				t.emit(vm.OpSCmp)
 				t.sDrop()
@@ -423,9 +658,13 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 			if err != nil {
 				return 0, err
 			}
-			t.pushRegOrZero(inst.Rn, rn)
-			t.pushRegOrZero(inst.Rm, rm)
-			t.emit(vm.OpSAnd)
+			px := func() { t.pushRegOrZero(inst.Rn, rn) }
+			py := func() { t.pushRegOrZero(inst.Rm, rm) }
+			if !t.emitStackMBA(vm.OpSAnd, px, py) {
+				px()
+				py()
+				t.emit(vm.OpSAnd)
+			}
 			t.sPushImm32(0)
 			t.emit(vm.OpSCmp)
 			t.sDrop()

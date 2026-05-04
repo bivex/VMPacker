@@ -30,6 +30,14 @@ func (p *Packer) SetInterpBlobARM32(blob []byte) {
 	p.interpBlobARM32 = blob
 }
 
+func (p *Packer) SetCFF(enabled bool) {
+	p.cff = enabled
+}
+
+func (p *Packer) SetMBA(enabled bool) {
+	p.mba = enabled
+}
+
 // PrintELFInfo prints ELF information
 func PrintELFInfo(path string) error {
 	f, err := elf.Open(path)

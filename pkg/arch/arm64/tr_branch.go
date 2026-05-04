@@ -18,6 +18,11 @@ func (t *Translator) trBranch(inst vm.Instruction) error {
 		return fmt.Errorf("branch target 0x%X out of function range [0, 0x%X)", target, t.funcSize)
 	}
 
+	if t.cff {
+		t.emitCFFJump(target)
+		return nil
+	}
+
 	t.emit(vm.OpJmp)
 	fixPos := t.pos()
 	t.emitU32(0)
@@ -60,6 +65,11 @@ func (t *Translator) trBranchCond(inst vm.Instruction) error {
 		vmOp = vm.OpJge // PL: N==0 → FL_SIGN not set
 	default:
 		return fmt.Errorf("unsupported condition code 0x%X", inst.Cond)
+	}
+
+	if t.cff {
+		t.emitCFFCondBranch(vmOp, target, inst.Offset+4)
+		return nil
 	}
 
 	t.emit(vmOp)
@@ -117,6 +127,12 @@ func (t *Translator) trTBZ(inst vm.Instruction, isZero bool) error {
 		vmOp = vm.OpTbz
 	} else {
 		vmOp = vm.OpTbnz
+	}
+
+	if t.cff {
+		t.emit(vmOp, rd, byte(inst.Shift))
+		t.emitCFFCondBranch(vm.OpJe, target, inst.Offset+4)
+		return nil
 	}
 
 	t.emit(vmOp, rd, byte(inst.Shift))

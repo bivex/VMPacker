@@ -185,6 +185,7 @@ func buildOpTable() map[byte]opInfo {
 	OpSFMovRV: {"FMOV_RV", 4},
 	OpSFMovVR: {"FMOV_VR", 4},
 	OpSFCvt:   {"FCVT", 4},
+	OpSDecryptStr: {"S_DECRYPT_STR", 1},
 }
 }
 

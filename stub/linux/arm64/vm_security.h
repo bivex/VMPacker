@@ -195,6 +195,15 @@ static inline int sec_scan_inline_hook(void *func_addr) {
 
 #define VM_CHECK_INTERVAL 1024 /* Check every 1024 instructions */
 
+__attribute__((always_inline)) static inline void sec_panic(int code) {
+  /* Instead of a clean exit, we can make it more annoying for the researcher. */
+  /* 1. Corrupt some registers or stack? 
+   * 2. Trigger an illegal instruction. */
+  (void)code;
+  __asm__ volatile(".inst 0x00000000"); /* Trigger UDF (Undefined Instruction) */
+  while(1) { __asm__ volatile("yield"); }
+}
+
 static inline int sec_runtime_check(vm_ctx_t *vm) {
   vm->insn_count++;
   if (__builtin_expect((vm->insn_count & (VM_CHECK_INTERVAL - 1)) == 0, 0)) {
@@ -206,8 +215,8 @@ static inline int sec_runtime_check(vm_ctx_t *vm) {
     }
 
     /* 2. Anti-Debug: Basic Ptrace/TracerPid */
-    if (sec_check_ptrace()) return 111;
-    if (sec_check_tracerpid()) return 112;
+    if (sec_check_ptrace()) sec_panic(111);
+    if (sec_check_tracerpid()) sec_panic(112);
   }
   return 0;
 }

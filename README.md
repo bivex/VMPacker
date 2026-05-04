@@ -144,6 +144,43 @@ See [docs/Android_Test.md](docs/Android_Test.md) for the full Android testing gu
 
 Requirements: Go 1.21+, GCC cross-compiler (aarch64-linux-gnu-gcc) or Android NDK.
 
+## Windows (WSL2) Setup
+
+If you are on Windows, the recommended way to build and test VMPacker is using **WSL2** (Ubuntu).
+
+### 1. Install WSL & Dependencies
+Open PowerShell as Administrator:
+```powershell
+wsl --install
+# Restart your computer after installation
+```
+
+Inside WSL (Ubuntu), install the build toolchain:
+```bash
+sudo apt update
+sudo apt install -y golang-go make gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-user
+```
+
+### 2. Mount your Code Drive
+If your code is on a separate drive (e.g., `Y:`), mount it manually:
+```bash
+sudo mkdir /mnt/y
+sudo mount -t drvfs Y: /mnt/y
+cd /mnt/y/Code/VMPacker
+```
+
+### 3. Build & Run
+```bash
+sudo make all
+```
+
+**Troubleshooting QEMU:**
+If you see `Unable to find a guest_base` when running protected binaries, ensure you compile your targets as **PIE** (Position Independent Executable):
+```bash
+aarch64-linux-gnu-gcc -fPIE -pie -O1 -nostdlib demo/demo_simple.c -o build/demo_simple_pie
+qemu-aarch64 ./build/demo_simple_pie
+```
+
 ## Documentation
 
 | Document | Description |

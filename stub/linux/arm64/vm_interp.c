@@ -235,11 +235,23 @@ if (bc_off <= (u64)bc_len - 8) {
   sec_protect_memory(vm, ctx_alloc);
 
   /* ---- Anti-Debug: Initial Checks ---- */
-  if (sec_check_tracerpid()) { return 101; }
-  if (sec_check_ptrace()) { return 102; }
+  if (sec_check_tracerpid()) { sec_panic(101); }
+  if (sec_check_ptrace()) { sec_panic(102); }
   
+  /* Scan for breakpoints in the interpreter entry code (first 256 bytes) */
+  extern u8 _vmp_stub_base;
+  if (sec_scan_breakpoints(&_vmp_stub_base, 256)) { sec_panic(103); }
+
   /* Anti-Debug: Basic Timing Check (measure start time) */
   unsigned long long start_time = sec_get_timer();
+  
+  /* Do some dummy work to make timing check more effective */
+  for (volatile int _i = 0; _i < 1000; _i++) { __asm__ volatile("nop"); }
+  
+  unsigned long long end_time = sec_get_timer();
+  if ((end_time - start_time) > 1000000) { /* If it took > 1M cycles to do 1000 nops, we are being traced/emulated */
+    sec_panic(104);
+  }
 
   u8 *op_map = 0;
 
@@ -250,9 +262,9 @@ if (bc_off <= (u64)bc_len - 8) {
    *
    * Stripping order: func_size(4B) → func_addr(8B) → map_count(4B)
    *           → oc_key(4B) → reverse(1B) → BR map entries
-   * Fixed trailer size: 4+8+4+4+1 = 21B
+   * Fixed trailer size: 4+8+4+4+1 + 64(reg_map) = 85B
    */
-  if (bc_len >= 21 + 256) { /* Minimum trailer: 21B + 256B(op_map) */
+  if (bc_len >= 85 + 256) { /* Minimum trailer: 85B + 256B(op_map) */
     u32 trail_func_size = rd32(&bc_buf[bc_len - 4]);
     u64 trail_func_addr = rd64(&bc_buf[bc_len - 12]);
     u32 trail_map_count = rd32(&bc_buf[bc_len - 16]);
@@ -260,13 +272,10 @@ if (bc_off <= (u64)bc_len - 8) {
     u8 trail_reverse = bc_buf[bc_len - 21];
     u32 map_data_size =
         trail_map_count * 8 +
-        21 + 256; /* +21 for reverse+oc_key+map_count+func_addr+func_size + 256 for op_map */
-
-    /* Set OpcodeCryptor key + reverse flag */
-    vm->oc_key = trail_oc_key;
-    vm->reverse = trail_reverse;
-
-    op_map = &bc_buf[bc_len - map_data_size];
+        85 + 256; // 85 (fixed) + 256 (op_map)
+    
+    u8 *reg_map = &bc_buf[bc_len - map_data_size];
+    op_map = reg_map + 64;
 
     if (trail_func_addr != 0 && trail_map_count > 0 &&
         map_data_size <= bc_len) {
@@ -274,6 +283,13 @@ if (bc_off <= (u64)bc_len - 8) {
       vm->func_size = trail_func_size;
       vm->map_count = trail_map_count;
       vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size + 256];
+      /* 2d. Initialize registers with shuffling */
+      for (int i = 0; i < 8; i++) {
+        vm->R[reg_map[i] & 63] = args[i];
+      }
+      /* Save regMap[0] for return */
+      vm->ret_reg = reg_map[0] & 63;
+      
       vm->bc_len = bc_len - map_data_size; /* Actual bytecode does not include trailer */
 
       /* Insertion sort addr_map (ascending by arm64_off, for binary search) */
@@ -322,7 +338,7 @@ if (sec_scan_inline_hook((void *)sys_mmap)) { return 106; }
 if (sec_scan_inline_hook((void *)sys_ptrace)) { return 107; }
 
 /* ---- Anti-Debug: Timing Check (Verify execution time hasn't been delayed) ---- */
-unsigned long long end_time = sec_get_timer();
+end_time = sec_get_timer();
 if (end_time - start_time > 1000000) { 
   /* Heuristic: Initialization shouldn't take this long */
   return 108;
@@ -433,7 +449,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
 
     /* -- Check HALT/RET sentinel -- */
     if (__builtin_expect(_step == VM_STEP_HALT || _step == VM_STEP_RET, 0)) {
-      ret = vm->R[0];
+      ret = vm->R[vm->ret_reg];
       goto cleanup;
     }
 
@@ -575,6 +591,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     labels[OP_ID_SFMOVRV] = &&L_SFMOVRV;
     labels[OP_ID_SFMOVVR] = &&L_SFMOVVR;
     labels[OP_ID_SFCVT] = &&L_SFCVT;
+    labels[OP_ID_SDECRYPTSTR] = &&L_S_DECRYPT_STR;
 
     /* ---- Stack Machine Opcodes ---- */
     labels[OP_ID_SVLOAD] = &&L_S_VLOAD;
@@ -833,10 +850,10 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
 L_NOP:
   NEXT(h_nop(vm));
 L_HALT:
-  ret = vm->R[0];
+  ret = vm->R[vm->ret_reg];
   goto cleanup;
 L_RET: {
-  ret = vm->R[0];
+  ret = vm->R[vm->ret_reg];
   goto cleanup;
 }
 
@@ -1135,6 +1152,8 @@ L_S_SEXT32:
   NEXT(h_s_sext32(vm));
 L_S_CMP:
   NEXT(h_s_cmp(vm));
+L_S_DECRYPT_STR:
+  NEXT(h_s_decrypt_str(vm));
 
 /* ---- Unknown Instruction ---- */
 L_UNKNOWN:

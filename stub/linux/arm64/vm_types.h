@@ -63,6 +63,11 @@ typedef struct {
   u64 eval_stk[VM_EVAL_STACK_SIZE] __attribute__((aligned(16)));
   int eval_sp; /* Stack pointer, 0 = empty */
 
+  u8 ret_reg;   /* Shuffled index of R0 (X0 return value) */
+  u8 reverse;   /* Opcode reverse flag */
+  u16 padding;
+  u32 oc_key;   /* OpcodeCryptor key */
+
   /* Memory stack (R[31] points to the end of this space) */
   u8 vm_stk[VM_MEM_STACK] __attribute__((aligned(16)));
 
@@ -75,12 +80,6 @@ typedef struct {
   u32 func_size;              /* Size of the protected function */
   addr_map_entry_t *addr_map; /* ARM64 offset → VM offset mapping table */
   u32 map_count;              /* Mapping table entry count */
-
-  /* OpcodeCryptor: Instruction-level opcode encryption */
-  u32 oc_key; /* Opcode encryption key (4B, read from trailer) */
-
-  /* PC reverse traversal */
-  u8 reverse; /* 1=reverse execution (pc decrementing), 0=forward */
 
   /* PIE/ASLR: runtime load base slide for CALL_NAT absolute addresses.
    * slide = runtime_base - link_time_base.  0 for ET_EXEC. */
