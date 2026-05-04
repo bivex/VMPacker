@@ -69,10 +69,10 @@ type Translator struct {
 	funcSize    int             // original function size in bytes
 	funcAddr    uint64          // original function start address
 	unsupported []string
-	decoder     *Decoder     // decoder reference (for name lookup)
-	debug       bool         // debug mode
-	debugLog    []DebugEntry // debug mapping log
-	cff         bool         // Control Flow Flattening enabled
+	decoder     *Decoder       // decoder reference (for name lookup)
+	debug       bool           // debug mode
+	debugLog    []DebugEntry   // debug mapping log
+	cff         bool           // Control Flow Flattening enabled
 	bbStates    map[int]uint32 // ARM64 offset -> State ID
 	bbLabels    map[int]int    // ARM64 offset -> VM offset (start of block)
 	dispPos     int            // VM offset of dispatcher
@@ -298,7 +298,12 @@ func (t *Translator) mapReg(arm64Reg int) (byte, error) {
 // EmitStringDecryption emits VM instructions to decrypt an array of strings at runtime
 func (t *Translator) EmitStringDecryption(refs []StringRef) {
 	for _, r := range refs {
-		t.sPushImm64(r.Addr)
+		// Emit S_PUSH_IMM64 with string address
+		t.emit(vm.OpSPushImm64)
+		t.emitU64(r.Addr)
+		// Record relocation for this immediate (will be adjusted at runtime by RTLR)
+		t.addReloc(t.pos()-8, r.Addr, false)
+
 		t.sPushImm32(r.Len)
 		t.sPushImm32(r.Key)
 		t.emit(vm.OpSDecryptStr)
@@ -321,8 +326,8 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 			continue
 		}
 
-		t.labels[instructions[i].Offset] = t.pos()
 		t.insertJunkCode()
+		t.labels[instructions[i].Offset] = t.pos()
 
 		vmStartPos := t.pos()
 		var err error

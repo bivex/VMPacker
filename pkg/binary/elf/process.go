@@ -498,9 +498,12 @@ func (p *Packer) makeSegmentsWritable(f *elf.File) {
 						flags = binary.LittleEndian.Uint32(p.data[flagsOff:])
 					}
 					
-					// Add PF_W (write)
-					flags |= uint32(elf.PF_W)
-					binary.LittleEndian.PutUint32(p.data[flagsOff:], flags)
+					// Add PF_W only to non-executable segments.
+					// Adding W to executable segments creates W+X which Android bans.
+					if flags&uint32(elf.PF_X) == 0 {
+						flags |= uint32(elf.PF_W)
+						binary.LittleEndian.PutUint32(p.data[flagsOff:], flags)
+					}
 				}
 			}
 }

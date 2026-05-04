@@ -161,13 +161,11 @@ func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int, map
 		inst := insts[i]
 		newInstStart := len(output)
 		output = append(output, bytecode[inst.offset:inst.offset+inst.size]...)
+		// Record the position of the size marker (right after instruction bytes)
+		offsetMap[inst.offset] = len(output)
 		output = append(output, byte(inst.size))
 
-		// offsetMap points to where this instruction ends (after size marker)
-		// because the reverse DISPATCH will start here to locate the instruction.
-		offsetMap[inst.offset] = len(output)
-
-		// byteMap provides a 1:1 mapping for every byte within the instruction
+		// Record per-byte mapping for relocations
 		for k := 0; k < inst.size; k++ {
 			byteMap[inst.offset+k] = newInstStart + k
 		}
@@ -197,8 +195,34 @@ func remapBranchTargets(bytecode []byte, codeLen int, offsetMap map[int]int, ver
 				}
 				binary.LittleEndian.PutUint32(bytecode[pc+toff:], uint32(newTarget))
 			} else if verbose {
-				fmt.Printf("      [REMAP] pc=0x%04X op=0x%02X target: 0x%04X → NOT FOUND!\n",
-					pc, op, oldTarget)
+				fmt.Printf("      [REMAP] pc=0x%04X op=0x%02X target: 0x%04X → NOT FOUND!", pc, op, oldTarget)
+				if oldTarget < uint32(codeLen) {
+					fmt.Printf(" (internal, offsetMap size=%d)", len(offsetMap))
+					// fallback: find nearest key in offsetMap
+					bestDiff := int(^uint(0) >> 1) // max int
+					bestKey := 0
+					for k := range offsetMap {
+						diff := k - int(oldTarget)
+						if diff < 0 {
+							diff = -diff
+						}
+						if diff < bestDiff {
+							bestDiff = diff
+							bestKey = k
+						}
+					}
+					if bestDiff < 10 {
+						newTarget = offsetMap[bestKey]
+						fmt.Printf(" → FALLBACK (nearest key 0x%X diff %d, newTarget 0x%X)\n", bestKey, bestDiff, newTarget)
+						binary.LittleEndian.PutUint32(bytecode[pc+toff:], uint32(newTarget))
+						pc += sz + 1
+						continue
+					} else {
+						fmt.Printf(" (no close key, best diff %d)\n", bestDiff)
+					}
+				} else {
+					fmt.Printf(" (external)\n")
+				}
 			}
 		}
 		// Skip instruction + size marker (every instruction has a 1B size marker after reversal)

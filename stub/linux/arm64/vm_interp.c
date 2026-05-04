@@ -137,6 +137,13 @@ vm_entry_token_inner(u64 *args, u32 token) {
   u64 self_va;
   __asm__ volatile("adr %0, _vmp_stub_base" : "=r"(self_va));
   u64 tbl_off = *(volatile u64 *)&_token_table_va;
+  /* DEBUG: print tbl_off */
+  {
+    u8 _tb[32];
+    _tb[0]='T';_tb[1]=':';_tb[2]='0';_tb[3]='x';
+    for(int _i=0;_i<16;_i++) _tb[4+_i]="0123456789ABCDEF"[(tbl_off>>((15-_i)*4))&0xF];
+    _tb[20]='\n'; sys_write(1,_tb,21);
+  }
   if (__builtin_expect(tbl_off == 0, 0))
     return 0; /* Table not initialized, safe exit */
 
@@ -171,6 +178,14 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
          u32 func_id) {
   VM_DEBUG("[VM] vm_entry starting...\n");
   u64 ret = 0;
+  
+  /* DEBUG: print incoming bc_len */
+  {
+    u8 _b[32];
+    _b[0]='I';_b[1]=':';_b[2]='0';_b[3]='x';
+    for(int _i=0;_i<8;_i++) _b[4+_i]="0123456789ABCDEF"[(bc_len>>((7-_i)*4))&0xF];
+    _b[12]='\n'; sys_write(1,_b,13);
+  }
   
   /* ---- 1. Dynamically allocate bytecode buffer (mmap, replacing 64KB on stack) ---- */
   if (bc_len > VM_BYTECODE_MAX)
@@ -275,9 +290,23 @@ if (bc_off <= (u64)bc_len - 8) {
       VM_DEBUG("[VM] trail_reverse: ");
       sys_write(1, _rvbuf, 2);
     }
+    /* DEBUG: print trail_map_count */
+    {
+      u8 _mb[16];
+      _mb[0]='M';_mb[1]=':';_mb[2]='0';_mb[3]='x';
+      for(int _i=0;_i<4;_i++) _mb[4+_i]="0123456789ABCDEF"[(trail_map_count>>((3-_i)*4))&0xF];
+      _mb[8]='\n'; sys_write(1,_mb,9);
+    }
     u32 map_data_size =
         trail_map_count * 8 +
         85 + 256; // 85 (fixed) + 256 (op_map)
+    /* DEBUG: print map_data_size */
+    {
+      u8 _md[20];
+      _md[0]='D';_md[1]=':';_md[2]='0';_md[3]='x';
+      for(int _i=0;_i<8;_i++) _md[4+_i]="0123456789ABCDEF"[(map_data_size>>((7-_i)*4))&0xF];
+      _md[12]='\n'; sys_write(1,_md,13);
+    }
     
     u8 *reg_map = &bc_buf[bc_len - map_data_size];
     op_map = reg_map + 64;
@@ -406,6 +435,29 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   /* ---- PC initialization: reverse mode starts from bc_len ---- */
   if (vm->reverse) {
     vm->pc = vm->bc_len;
+  }
+  /* DEBUG: dump oc_key, bc_len, first 4 opcodes at bc_len-size-1 */
+  {
+    u8 _db[64];
+    _db[0]='O';_db[1]='K';_db[2]=':';_db[3]='0';_db[4]='x';
+    u32 _ok=vm->oc_key;
+    for(int _i=0;_i<8;_i++){_db[5+_i]="0123456789ABCDEF"[(_ok>>((7-_i)*4))&0xF];}
+    _db[13]=' ';_db[14]='B';_db[15]='L';_db[16]=':';
+    u32 _bl=vm->bc_len;
+    for(int _i=0;_i<4;_i++){_db[17+_i]="0123456789ABCDEF"[(_bl>>((3-_i)*4))&0xF];}
+    _db[21]=' ';_db[22]='S';_db[23]='Z';_db[24]=':';
+    u8 _sz0=vm->bc[vm->bc_len-1];
+    for(int _i=0;_i<2;_i++){_db[25+_i]="0123456789ABCDEF"[(_sz0>>((1-_i)*4))&0xF];}
+    u32 _p0=vm->bc_len-1-_sz0;
+    _db[27]=' ';_db[28]='P';_db[29]='0';_db[30]=':';
+    for(int _i=0;_i<4;_i++){_db[31+_i]="0123456789ABCDEF"[(_p0>>((3-_i)*4))&0xF];}
+    _db[35]=' ';_db[36]='O';_db[37]='P';_db[38]=':';
+    u8 _raw=vm->bc[_p0];
+    u8 _dec=vm->oc_key?(_raw^(u8)(vm->oc_key^((u32)_p0*0x9E3779B9u))):_raw;
+    for(int _i=0;_i<2;_i++){_db[39+_i]="0123456789ABCDEF"[(_raw>>((1-_i)*4))&0xF];}
+    _db[41]='>';for(int _i=0;_i<2;_i++){_db[42+_i]="0123456789ABCDEF"[(_dec>>((1-_i)*4))&0xF];}
+    _db[44]='\n';
+    sys_write(1,_db,45);
   }
   {
     u8 _pcbuf[32];
