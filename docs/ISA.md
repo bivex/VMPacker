@@ -12,7 +12,7 @@ VMPacker defines a custom Instruction Set Architecture with **randomly mapped op
 | Branch/Jump | 13 | `JMP`, `JE`, `JNE`, `JL`, `JGE`, `JGT`, `JLE`, `JB`, `JAE`, `JBE`, `JA`, `TBZ`, `TBNZ` |
 | Compare | 6 | `CMP`, `CMP_IMM`, `CCMP_REG`, `CCMP_IMM`, `CCMN_REG`, `CCMN_IMM` |
 | Stack | 10 | `S_PUSH_IMM32`, `S_PUSH_IMM64`, `S_VLOAD`, `S_VSTORE`, `S_DUP`, `S_SWAP`, `S_DROP`, `S_CMP`, `S_TRUNC32`, `S_SEXT32` |
-| System/Special | 8 | `NOP`, `HALT`, `RET`, `CALL_NATIVE`, `CALL_REG`, `BR_REG`, `SVC`, `MRS` |
+| System/Special | 9 | `NOP`, `HALT`, `RET`, `CALL_NATIVE`, `CALL_REG`, `BR_REG`, `SVC`, `MRS`, `S_DECRYPT_STR` |
 | SIMD | 2 | `VLD16`, `VST16` |
 | **Total** | **63+** | |
 
@@ -62,6 +62,14 @@ Enabled with the `-cff` flag. This transformation converts the function's contro
 ### Mixed Boolean-Arithmetic (MBA)
 Enabled with the `-mba` flag. This replaces simple arithmetic operations with complex, logically equivalent boolean expressions. 
 For example, `a + b` might be replaced with `(a ^ b) + 2 * (a & b)`. When combined with the VM, these expressions are further broken down into individual VM opcodes, creating a massive explosion in instruction count that is extremely tedious to manually reverse.
+
+### String Decryption
+The VM provides an on-demand string decryption mechanism. Strings identified as such during translation are encrypted in the ELF data sections. At runtime, the `S_DECRYPT_STR` opcode is used to:
+1. Pop the XOR key, length, and encrypted address.
+2. Decrypt the string into a secure, circular VM-internal buffer.
+3. Return the pointer to the decrypted string on the stack.
+
+This prevents static string analysis and "string dumping" from memory, as strings only exist in their plaintext form temporarily within the VM's private memory.
 
 ## Supported ARM64 Instructions
 
