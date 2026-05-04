@@ -20,8 +20,14 @@ type opInfo struct {
 
 var opTable map[byte]opInfo
 
-func init() {
-	opTable = map[byte]opInfo{
+// RebuildOpTable rebuilds the opcode lookup table.
+// Must be called after GenerateDynamicISA() since Op* variables change.
+func RebuildOpTable() {
+	opTable = buildOpTable()
+}
+
+func buildOpTable() map[byte]opInfo {
+	return map[byte]opInfo{
 		OpNop:      {"NOP", 1},
 		OpMovImm:   {"MOV_IMM64", 10}, // op + r + imm64
 		OpMovImm32: {"MOV_IMM32", 6},  // op + r + imm32
@@ -180,6 +186,10 @@ func init() {
 	OpSFMovVR: {"FMOV_VR", 4},
 	OpSFCvt:   {"FCVT", 4},
 }
+}
+
+func init() {
+	opTable = buildOpTable()
 }
 
 // InstructionSize returns total byte count for the given opcode (0 = unknown)

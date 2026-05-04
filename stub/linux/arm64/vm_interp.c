@@ -344,7 +344,10 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
 
   /* ---- Runtime initialization of jump table (stack allocation, RX blob non-writable BSS) ---- */
   vm_handler_fn vm_jump_table[256];
-  
+  u8 phys_insn_size[256];
+  for (int i = 0; i < 256; i++)
+    phys_insn_size[i] = 0;
+
   if (op_map) {
     vm_handler_fn handlers[OP_ID_COUNT];
     vm_init_jump_table(handlers);
@@ -352,9 +355,12 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
       vm_jump_table[i] = hw_unknown;
     for (int i = 0; i < OP_ID_COUNT; i++) {
       vm_jump_table[op_map[i]] = handlers[i];
+      phys_insn_size[op_map[i]] = vm_logical_insn_size(i);
     }
   } else {
     vm_init_jump_table(vm_jump_table);
+    for (int i = 0; i < 256; i++)
+      phys_insn_size[i] = vm_insn_size(i);
   }
 
   /* ---- PC initialization: reverse mode starts from bc_len ---- */
@@ -392,19 +398,9 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     u8 _dec_op = vm->oc_key ? (_raw_op ^ OC_DECRYPT(vm->pc, vm->oc_key)) : _raw_op;
 
     /* -- Instruction size validation -- */
-    u8 _isz = vm_insn_size(_dec_op);
+    u8 _isz = phys_insn_size[_dec_op];
     if (__builtin_expect(_isz == 0 || vm->pc + _isz > vm->bc_len, 0))
       break;
-
-    /* -- Special handling: HALT / RET (bypassing jump table) -- */
-    if (_dec_op == OP_HALT) {
-      ret = vm->R[0];
-      goto cleanup;
-    }
-    if (_dec_op == OP_RET) {
-      ret = vm->R[0];
-      goto cleanup;
-    }
 
     /* -- Indirect Dispatch: Call function pointer directly from jump table -- */
 #ifdef VM_DEBUG_TRACE
@@ -459,8 +455,11 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
   /* GCC extension: &&label gets label address, goto *ptr jumps */
   /* Note: Use loop to fill defaults to avoid [0...255] range initialization generating implicit memcpy */
   const void *dtab[256];
-  for (int _i = 0; _i < 256; _i++)
+  u8 phys_insn_size[256];
+  for (int _i = 0; _i < 256; _i++) {
     dtab[_i] = &&L_UNKNOWN;
+    phys_insn_size[_i] = 0;
+  }
 
   if (op_map) {
     const void *labels[OP_ID_COUNT];
@@ -626,6 +625,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
 
     for (int i = 0; i < OP_ID_COUNT; i++) {
       dtab[op_map[i]] = labels[i];
+      phys_insn_size[op_map[i]] = vm_logical_insn_size(i);
     }
   } else {
     /* Fallback (no op_map): use hardcoded OP_xxx values as indices */
@@ -774,6 +774,9 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     dtab[OP_S_LOAD_SLIDE] = &&L_S_LDSIDE;
     dtab[OP_SVLD] = &&L_SVLD;
     dtab[OP_SVST] = &&L_SVST;
+
+    for (int i = 0; i < 256; i++)
+      phys_insn_size[i] = vm_insn_size(i);
   }
 
 /* Reverse mode: pc points after the size marker at the end of instruction
@@ -801,7 +804,7 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
     }                                                                          \
     u8 _raw_op = vm->bc[vm->pc];                                               \
     u8 _dec_op = vm->oc_key ? (_raw_op ^ OC_DECRYPT(vm->pc, vm->oc_key)) : _raw_op;\
-    u8 _isz = vm_insn_size(_dec_op);                                           \
+    u8 _isz = phys_insn_size[_dec_op];                                         \
     if (__builtin_expect(_isz == 0 || vm->pc + _isz > vm->bc_len, 0))          \
       goto cleanup;                                                            \
     goto *dtab[_dec_op];                                                       \

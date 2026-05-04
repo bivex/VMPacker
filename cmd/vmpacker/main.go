@@ -138,6 +138,7 @@ Examples:
 
 	// generate dynamic opcodes
 	vm.GenerateDynamicISA()
+	vm.RebuildOpTable()
 
 	packer := elfpacker.NewPacker(inputPath, outPath, funcs, addrSpecs, *verbose, *strip, *debug, *tokenEntry, interpBlob)
 	packer.SetInterpBlobARM32(interpBlobARM32)
