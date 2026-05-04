@@ -40,6 +40,7 @@ func main() {
 	tokenEntry := flag.Bool("token", true, "enable tokenized entry mode (3-inst trampoline) - default on")
 	cff := flag.Bool("cff", false, "enable Control Flow Flattening (CFF) obfuscation")
 	mba := flag.Bool("mba", false, "enable Mixed Boolean-Arithmetic (MBA) instruction substitution")
+	mangle := flag.Bool("mangle", false, "enable Symbol Mangling for protected functions")
 	info := flag.Bool("info", false, "print ELF info only, do not protect")
 
 	flag.Usage = func() {
@@ -146,6 +147,7 @@ Examples:
 	packer.SetInterpBlobARM32(interpBlobARM32)
 	packer.SetCFF(*cff)
 	packer.SetMBA(*mba)
+	packer.SetMangle(*mangle)
 	if err := packer.Process(); err != nil {
 		fmt.Fprintf(os.Stderr, "\n[!] Failed: %v\n", err)
 		os.Exit(1)

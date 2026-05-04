@@ -59,7 +59,7 @@ endif
 # Compilation options
 STUB_CFLAGS = -g -c -O1 -mcmodel=tiny -fno-stack-protector \
               -fno-builtin -fno-builtin-memcpy -nostdlib -march=armv8-a \
-              -DVM_FUNC_SPLIT -DVM_TOKEN_ENTRY -DVM_INDIRECT_DISPATCH
+              -DVM_FUNC_SPLIT -DVM_TOKEN_ENTRY -DVM_INDIRECT_DISPATCH -DVM_DEBUG_TRACE
 
 DEMO_CFLAGS = -static -O0 -march=armv8-a
 
@@ -123,7 +123,7 @@ endif
 
 # ------ Go packer ------
 packer: $(STUB_BIN) | $(BUILD_DIR)
-	$(GO) build -o $(PACKER) ./$(CMD_DIR)/
+	$(GO) build -buildvcs=false -o $(PACKER) ./$(CMD_DIR)/
 	@echo "[+] packer: $(PACKER)"
 
 # ------ Demo ------
