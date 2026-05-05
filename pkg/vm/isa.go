@@ -142,6 +142,7 @@ const (
 	OpIdSFMovVR
 	OpIdSFCvt
 	OpIdSDecryptStr
+	OpIdSnprintf
 	OpIdCount
 )
 
@@ -287,6 +288,7 @@ var opPtrs = [](*byte){
 		&OpSFMovVR,
 		&OpSFCvt,
 		&OpSDecryptStr,
+		&OpSnprintf,
 }
 
 func GenerateDynamicISA() {

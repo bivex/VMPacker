@@ -92,6 +92,7 @@ var (
 
 	// PIE/ASLR
 	OpSLoadSlide byte = 0xC4 // push vm->slide  1B
+	OpSnprintf   byte = 0xAC // call snprintf with proper ABI  9B
 
 	// TBZ/TBNZ: [op][reg][bit][target32] = 7B
 	OpTbz  byte = 0x16 // TBZ  Xt, #bit, target

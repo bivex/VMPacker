@@ -328,6 +328,7 @@ static inline u8 vm_logical_insn_size(u8 id) {
     return 7;
   case OP_ID_CALLNATIVE:
   case OP_ID_SPUSHIMM64:
+  case OP_ID_SPRINTF:
     return 9;
   case OP_ID_MOVIMM:
     return 10;
