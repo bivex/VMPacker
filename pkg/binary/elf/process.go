@@ -100,6 +100,19 @@ func (p *Packer) Process() error {
 			p.relocations = append(p.relocations, result.Relocations...)
 		}
 
+		snprintfPLT := p.findSnprintfPLT(f)
+		if snprintfPLT != 0 {
+			for i := range result.Relocations {
+				if result.Relocations[i].TargetAddr == snprintfPLT {
+					bcOff := result.Relocations[i].BcOffset
+					if bcOff > 0 && result.Bytecode[bcOff-1] == vm.OpCallNative {
+						fmt.Printf("    [+] Found snprintf call at 0x%X (bcOff=%d) -> Patching to OpSnprintf\n", snprintfPLT, bcOff)
+						result.Bytecode[bcOff-1] = vm.OpSnprintf
+					}
+				}
+			}
+		}
+
 		encrypted, xorKey, err := p.postProcessBytecode(result, insts)
 		if err != nil {
 			return err
@@ -397,7 +410,8 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 		entryOff := trailerStart + j*8
 		vmOff := binary.LittleEndian.Uint32(result.Bytecode[entryOff+4:])
 		if newVmOff, ok := offsetMap[int(vmOff)]; ok {
-			binary.LittleEndian.PutUint32(result.Bytecode[entryOff+4:], uint32(newVmOff))
+			// +1: offsetMap gives size-marker pos; reverse dispatch does pc-- first
+			binary.LittleEndian.PutUint32(result.Bytecode[entryOff+4:], uint32(newVmOff+1))
 		}
 	}
 

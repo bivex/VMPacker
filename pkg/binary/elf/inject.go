@@ -182,8 +182,8 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 	vmEntryTokenVA := payloadVA + tokenEntryOff
 	fmt.Printf("    [TOKEN] vm_entry_token VA: 0x%X\n", vmEntryTokenVA)
 
-	return writeTrampolines(p.data, funcs, vmEntryTokenVA, 0, func(_ int, fb FuncBytecode) []byte {
-		token := (uint32(fb.XorKey) << 24) | (0 << 12)
+	return writeTrampolines(p.data, funcs, vmEntryTokenVA, 0, func(i int, fb FuncBytecode) []byte {
+		token := (uint32(fb.XorKey) << 24) | (uint32(i) & 0xFFF)
 		return BuildTokenTrampoline(fb.FI.Addr, vmEntryTokenVA, token)
 	})
 }
@@ -275,8 +275,8 @@ func (p *Packer) injectVMPBatch32(funcs []FuncBytecode) error {
 	vmEntryTokenVA := payloadVA + uint32(tokenEntryOff)
 	fmt.Printf("    [TOKEN] vm_entry_token VA: 0x%X\n", vmEntryTokenVA)
 
-	return writeTrampolines(p.data, funcs, uint64(vmEntryTokenVA), 0, func(_ int, fb FuncBytecode) []byte {
-		token := (uint32(fb.XorKey) << 24) | (0 << 12)
+	return writeTrampolines(p.data, funcs, uint64(vmEntryTokenVA), 0, func(i int, fb FuncBytecode) []byte {
+		token := (uint32(fb.XorKey) << 24) | (uint32(i) & 0xFFF)
 		if p.thumbFuncs[fb.FI.Addr] {
 			return BuildTokenTrampolineThumb(uint32(fb.FI.Addr), vmEntryTokenVA, token)
 		}
@@ -396,7 +396,7 @@ func patchTokenHeader64(data []byte, payloadFileOff uint64, tokenTableVAOff uint
 	tblRelOff := tokenTableVA - selfVA
 	binary.LittleEndian.PutUint64(data[payloadFileOff+tokenTableVAOff:], tblRelOff)
 	binary.LittleEndian.PutUint64(data[payloadFileOff+tokenTableVAOff+8:], selfVA)
-	binary.LittleEndian.PutUint64(data[payloadFileOff+tokenTableVAOff+16:], uint64(rtlrOff)-tokenTableVAOff)
+	binary.LittleEndian.PutUint64(data[payloadFileOff+tokenTableVAOff+16:], uint64(rtlrOff))
 }
 
 // ---- ELF32 helpers ----

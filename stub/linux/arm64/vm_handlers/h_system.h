@@ -33,14 +33,13 @@ static inline u32 h_call_nat(vm_ctx_t *vm) {
     sys_write(1, _dbgbuf, 9);
   }
 #ifdef __aarch64__
+  /* Load VM registers into temporaries */
   u64 r0 = vm->R[0], r1 = vm->R[1], r2 = vm->R[2], r3 = vm->R[3];
   u64 r4 = vm->R[4], r5 = vm->R[5], r6 = vm->R[6], r7 = vm->R[7];
-  u64 result;
+  u64 result, saved_sp;
   __asm__ volatile(
-    "mov x9, sp\n\t"              /* save original SP */
-    "mov x10, #15\n\t"            /* bitmask: lower 4 bits */
-    "bic x9, x9, x10\n\t"        /* x9 = sp & ~15 (align to 16) */
-    "mov sp, x9\n\t"              /* update SP */
+    "mov %[sp_save], sp\n\t"
+    "bic sp, sp, #15\n\t"          /* Align SP to 16 bytes */
     "mov x0, %[r0]\n\t"
     "mov x1, %[r1]\n\t"
     "mov x2, %[r2]\n\t"
@@ -49,16 +48,16 @@ static inline u32 h_call_nat(vm_ctx_t *vm) {
     "mov x5, %[r5]\n\t"
     "mov x6, %[r6]\n\t"
     "mov x7, %[r7]\n\t"
-    "mov x8, #0\n\t"              /* variadic: X8 = # of FP args = 0 */
     "mov x10, %[addr]\n\t"
     "blr x10\n\t"
     "mov %[result], x0\n\t"
-    : [result] "=r" (result)
+    "mov sp, %[sp_save]\n\t"
+    : [result] "=r" (result), [sp_save] "=r" (saved_sp)
     : [addr] "r" (addr),
       [r0] "r" (r0), [r1] "r" (r1), [r2] "r" (r2), [r3] "r" (r3),
       [r4] "r" (r4), [r5] "r" (r5), [r6] "r" (r6), [r7] "r" (r7)
     : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
-      "x8", "x9", "x10", "x30", "memory"
+      "x10", "x30", "memory"
   );
   vm->R[0] = result;
 #else

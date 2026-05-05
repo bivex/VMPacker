@@ -189,11 +189,14 @@ func remapBranchTargets(bytecode []byte, codeLen int, offsetMap map[int]int, ver
 		if toff := branchTargetOffset(op); toff > 0 && pc+toff+4 <= codeLen {
 			oldTarget := binary.LittleEndian.Uint32(bytecode[pc+toff:])
 			if newTarget, ok := offsetMap[int(oldTarget)]; ok {
+				// +1: offsetMap gives size-marker position; reverse-mode
+				// dispatch does pc-- first, so target must be past the marker.
+				remapped := uint32(newTarget + 1)
 				if verbose {
 					fmt.Printf("      [REMAP] pc=0x%04X op=0x%02X target: 0x%04X → 0x%04X\n",
-						pc, op, oldTarget, newTarget)
+						pc, op, oldTarget, remapped)
 				}
-				binary.LittleEndian.PutUint32(bytecode[pc+toff:], uint32(newTarget))
+				binary.LittleEndian.PutUint32(bytecode[pc+toff:], remapped)
 			} else if verbose {
 				fmt.Printf("      [REMAP] pc=0x%04X op=0x%02X target: 0x%04X → NOT FOUND!", pc, op, oldTarget)
 				if oldTarget < uint32(codeLen) {
@@ -212,9 +215,9 @@ func remapBranchTargets(bytecode []byte, codeLen int, offsetMap map[int]int, ver
 						}
 					}
 					if bestDiff < 10 {
-						newTarget = offsetMap[bestKey]
-						fmt.Printf(" → FALLBACK (nearest key 0x%X diff %d, newTarget 0x%X)\n", bestKey, bestDiff, newTarget)
-						binary.LittleEndian.PutUint32(bytecode[pc+toff:], uint32(newTarget))
+							remapped := uint32(offsetMap[bestKey] + 1)
+							fmt.Printf(" â FALLBACK (nearest key 0x%X diff %d â 0x%04X)\n", bestKey, bestDiff, remapped)
+							binary.LittleEndian.PutUint32(bytecode[pc+toff:], remapped)
 						pc += sz + 1
 						continue
 					} else {
@@ -232,30 +235,40 @@ func remapBranchTargets(bytecode []byte, codeLen int, offsetMap map[int]int, ver
 
 // encryptOpcodes encrypts the opcode byte of each instruction (OpcodeCryptor).
 //
-// Iterates through bytecode[0:codeLen], uses vm.InstructionSize to determine size of each instruction,
-// encrypts only the first byte (opcode), leaving operands untouched.
-//
-// When reversed=true, each instruction has a 1B size marker, step size is size+1.
+// When reversed=true, traverses backward using embedded size markers — exactly
+// matching the C dispatch loop — so positions always align regardless of
+// vm.InstructionSize quirks.
 //
 // Encryption formula: encrypted_opcode[pc] = opcode[pc] ^ (u8)(ocKey ^ (pc * 0x9E3779B9))
 func encryptOpcodes(bytecode []byte, codeLen int, ocKey uint32, reversed bool) {
+	if reversed {
+		// Backward traversal using size markers, mirrors C dispatch:
+		//   pc--; sz = bc[pc]; pc -= sz;   → opcode at pc
+		pc := codeLen
+		for pc > 0 {
+			pc--
+			sz := int(bytecode[pc])
+			pc -= sz
+			if pc < 0 {
+				break
+			}
+			mask := byte(ocKey ^ (uint32(pc) * 0x9E3779B9))
+			bytecode[pc] ^= mask
+		}
+		return
+	}
+
+	// Forward traversal (non-reversed mode)
 	pc := 0
 	for pc < codeLen {
 		op := bytecode[pc]
 		size := vm.InstructionSize(op)
 		if size == 0 {
-			// unknown opcode, skip 1 byte (should not happen)
 			pc++
 			continue
 		}
-		// Encrypt opcode byte
 		mask := byte(ocKey ^ (uint32(pc) * 0x9E3779B9))
 		bytecode[pc] = op ^ mask
-		// Go to next instruction
-		if reversed {
-			pc += size + 1 // +1 for size marker byte
-		} else {
-			pc += size
-		}
+		pc += size
 	}
 }
