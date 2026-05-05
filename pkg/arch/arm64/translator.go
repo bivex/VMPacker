@@ -270,9 +270,19 @@ func (t *Translator) insertJunkCode() {
 	t.emitU32(0) // placeholder for jump target
 
 	// Emit 1 to 12 bytes of garbage (confuses linear disassemblers)
+	// Only use bytes where vm.InstructionSize returns 0 so the forward
+	// parser in reverseInstructions treats each as a 1-byte instruction,
+	// keeping instruction boundaries aligned.
 	junkLen := rand.Intn(12) + 1
 	for j := 0; j < junkLen; j++ {
-		t.emit(byte(rand.Intn(256)))
+		var b byte
+		for {
+			b = byte(rand.Intn(256))
+			if vm.InstructionSize(b) == 0 {
+				break
+			}
+		}
+		t.emit(b)
 	}
 
 	// Patch the jump to point past the garbage

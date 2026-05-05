@@ -3,6 +3,7 @@ package arm64
 import (
 	"encoding/binary"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/vmpacker/pkg/vm"
@@ -11,7 +12,7 @@ import (
 func TestInsertJunkCode(t *testing.T) {
 	// Initialize dummy opcodes if needed, but vm.OpJmp is just a byte
 	vm.GenerateDynamicISA()
-	
+
 	rand.Seed(42) // for determinism in testing
 	tr := NewTranslator(0x1000, 0x100)
 
@@ -59,7 +60,7 @@ func TestEmitStackMBA(t *testing.T) {
 		{"SSub_MBA", vm.OpSSub, []byte{vm.OpSXor, vm.OpSAnd}},
 		{"SXor_MBA", vm.OpSXor, []byte{vm.OpSOr, vm.OpSAnd, vm.OpSSub}},
 		{"SAnd_MBA", vm.OpSAnd, []byte{vm.OpSOr, vm.OpSXor, vm.OpSSub}},
-		{"SOr_MBA",  vm.OpSOr,  []byte{vm.OpSAnd, vm.OpSXor, vm.OpSAdd}},
+		{"SOr_MBA", vm.OpSOr, []byte{vm.OpSAnd, vm.OpSXor, vm.OpSAdd}},
 	}
 
 	for _, tc := range tests {
@@ -77,13 +78,7 @@ func TestEmitStackMBA(t *testing.T) {
 					// (Recursive MBA might have replaced some, so we try multiple times)
 					allFound := true
 					for _, op := range tc.contains {
-						found := false
-						for _, b := range tr.code {
-							if b == op {
-								found = true
-								break
-							}
-						}
+						found := slices.Contains(tr.code, op)
 						if !found {
 							allFound = false
 							break

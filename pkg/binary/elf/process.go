@@ -405,9 +405,10 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 
 	// Remap vm_off in addr_map (BR indirect jumps)
 	mapCount := binary.LittleEndian.Uint32(result.Bytecode[len(result.Bytecode)-16:])
-	trailerStart := result.CodeLen
+	// Trailer layout after CodeLen: CRC(24) + regMap(64) + opMap(256) + addrMap(mapCount*8) + tail(21)
+	addrMapStart := result.CodeLen + 24 + 64 + 256
 	for j := 0; j < int(mapCount); j++ {
-		entryOff := trailerStart + j*8
+		entryOff := addrMapStart + j*8
 		vmOff := binary.LittleEndian.Uint32(result.Bytecode[entryOff+4:])
 		if newVmOff, ok := offsetMap[int(vmOff)]; ok {
 			// +1: offsetMap gives size-marker pos; reverse dispatch does pc-- first

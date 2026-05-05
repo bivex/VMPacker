@@ -193,39 +193,13 @@ func remapBranchTargets(bytecode []byte, codeLen int, offsetMap map[int]int, ver
 				// dispatch does pc-- first, so target must be past the marker.
 				remapped := uint32(newTarget + 1)
 				if verbose {
-					fmt.Printf("      [REMAP] pc=0x%04X op=0x%02X target: 0x%04X → 0x%04X\n",
+					fmt.Printf("      [REMAP] pc=0x%04X op=0x%02X target: 0x%04X -> 0x%04X\n",
 						pc, op, oldTarget, remapped)
 				}
 				binary.LittleEndian.PutUint32(bytecode[pc+toff:], remapped)
-			} else if verbose {
-				fmt.Printf("      [REMAP] pc=0x%04X op=0x%02X target: 0x%04X → NOT FOUND!", pc, op, oldTarget)
-				if oldTarget < uint32(codeLen) {
-					fmt.Printf(" (internal, offsetMap size=%d)", len(offsetMap))
-					// fallback: find nearest key in offsetMap
-					bestDiff := int(^uint(0) >> 1) // max int
-					bestKey := 0
-					for k := range offsetMap {
-						diff := k - int(oldTarget)
-						if diff < 0 {
-							diff = -diff
-						}
-						if diff < bestDiff {
-							bestDiff = diff
-							bestKey = k
-						}
-					}
-					if bestDiff < 10 {
-							remapped := uint32(offsetMap[bestKey] + 1)
-							fmt.Printf(" â FALLBACK (nearest key 0x%X diff %d â 0x%04X)\n", bestKey, bestDiff, remapped)
-							binary.LittleEndian.PutUint32(bytecode[pc+toff:], remapped)
-						pc += sz + 1
-						continue
-					} else {
-						fmt.Printf(" (no close key, best diff %d)\n", bestDiff)
-					}
-				} else {
-					fmt.Printf(" (external)\n")
-				}
+			} else {
+				fmt.Printf("      [REMAP] pc=0x%04X op=0x%02X target: 0x%04X -> NOT FOUND! (offsetMap size=%d)\n",
+					pc, op, oldTarget, len(offsetMap))
 			}
 		}
 		// Skip instruction + size marker (every instruction has a 1B size marker after reversal)
