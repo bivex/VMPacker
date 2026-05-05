@@ -89,12 +89,16 @@ func (t *Translator) trStackMADD(inst vm.Instruction, isSub bool) error {
 	}
 
 	// Ra from bits[14:10]
-	ra := byte((inst.Raw >> 10) & 0x1F)
+	raIdx := int((inst.Raw >> 10) & 0x1F)
 
-	// push Ra
-	if ra == 31 {
+	// push Ra (mapped through regMap for register shuffling)
+	if raIdx == 31 || raIdx == vm.REG_XZR {
 		t.sPushImm32(0) // XZR
 	} else {
+		ra, err := t.mapReg(raIdx)
+		if err != nil {
+			return err
+		}
 		t.sVload(ra)
 	}
 

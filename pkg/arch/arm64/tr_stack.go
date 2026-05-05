@@ -121,14 +121,14 @@ func (t *Translator) trStackAluRegFlags(inst vm.Instruction, sOp byte, setFlags 
 		t.emit(sOp)
 	}
 
+	if !inst.SF {
+		t.emit(vm.OpSTrunc32)
+	}
+
 	if setFlags {
 		t.sDup()          // duplicate result for CMP
 		t.sPushImm32(0)   // push 0
-		t.emit(vm.OpSCmp) // compare result with 0 → set flags
-	}
-
-	if !inst.SF {
-		t.emit(vm.OpSTrunc32)
+		t.emit(vm.OpSCmp) // compare truncated result with 0 → set flags
 	}
 
 	if inst.Rd == vm.REG_XZR {
@@ -165,14 +165,14 @@ func (t *Translator) trStackAluImmFlags(inst vm.Instruction, sOp byte, setFlags 
 		t.emit(sOp)
 	}
 
+	if !inst.SF {
+		t.emit(vm.OpSTrunc32)
+	}
+
 	if setFlags {
 		t.sDup()
 		t.sPushImm32(0)
 		t.emit(vm.OpSCmp)
-	}
-
-	if !inst.SF {
-		t.emit(vm.OpSTrunc32)
 	}
 
 	if inst.Rd == vm.REG_XZR {

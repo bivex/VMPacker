@@ -383,6 +383,10 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 func (t *Translator) translateCFF(instructions []vm.Instruction) (*TranslateResult, error) {
 	result := &TranslateResult{TotalInsts: len(instructions)}
 
+	if len(instructions) == 0 {
+		return t.finishTranslate(result)
+	}
+
 	// 1. Identify BB starts
 	starts := t.identifyBasicBlocks(instructions)
 
@@ -691,7 +695,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 			t.sDrop()
 			return 0, nil
 		}
-		return 0, t.trStackAluReg(inst, vm.OpSAnd)
+		return 0, t.trStackAluRegFlags(inst, vm.OpSAnd, true)
 
 	case BIC:
 		return 0, t.trStackBitLogicalNot(inst, vm.OpSAnd, false)

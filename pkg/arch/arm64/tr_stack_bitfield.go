@@ -37,7 +37,7 @@ func (t *Translator) trStackBFM(inst vm.Instruction) error {
 		dstLSB = regsize - immr
 	}
 
-	mask := uint64((1 << width) - 1)
+	mask := (uint64(1) << width) - 1
 
 	// --- Stack op: extracted = (Rn >> srcLSB) & mask ---
 	t.sVload(rn)
@@ -173,14 +173,14 @@ func (t *Translator) trStackUBFM(inst vm.Instruction) error {
 			t.sVload(rn)
 			t.sPushImm32(immr)
 			t.emit(vm.OpSShr)
-			mask := uint64((1 << width) - 1)
+			mask := (uint64(1) << width) - 1
 			t.sPushImm(mask)
 			t.emit(vm.OpSAnd)
 		} else {
 			// UBFIZ: (Rn & mask) << shift
 			width := imms + 1
 			shift := regSize - immr
-			mask := uint64((1 << width) - 1)
+			mask := (uint64(1) << width) - 1
 			t.sVload(rn)
 			t.sPushImm(mask)
 			t.emit(vm.OpSAnd)

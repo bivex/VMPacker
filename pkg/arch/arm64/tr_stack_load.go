@@ -195,7 +195,11 @@ func (t *Translator) trStackLoadReg(inst vm.Instruction) error {
 	}
 
 	t.emit(sLdOp)
-	t.sVstore(rd)
+	if inst.Rd == vm.REG_XZR {
+		t.sDrop()
+	} else {
+		t.sVstore(rd)
+	}
 	return nil
 }
 
@@ -259,7 +263,11 @@ func (t *Translator) trStackLoadRegSigned(inst vm.Instruction) error {
 		t.emit(vm.OpSAsr)
 	}
 
-	t.sVstore(rd)
+	if inst.Rd == vm.REG_XZR {
+		t.sDrop()
+	} else {
+		t.sVstore(rd)
+	}
 	return nil
 }
 
@@ -271,7 +279,9 @@ func (t *Translator) trStackLdrLiteral(inst vm.Instruction) error {
 		return err
 	}
 
-	absAddr := uint64(inst.Imm)
+	// Compute absolute address: PC + PC-relative offset
+	// inst.Offset is the ARM64 offset of this instruction within the function (= PC - funcBase)
+	absAddr := uint64(int64(inst.Offset) + inst.Imm)
 
 	// push absolute address on stack
 	t.sPushImm(absAddr)

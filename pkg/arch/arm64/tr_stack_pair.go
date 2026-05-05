@@ -117,9 +117,11 @@ func (t *Translator) trStackSTP(inst vm.Instruction) error {
 
 func (t *Translator) trStackSTPSIMD(inst vm.Instruction, rt1, rt2, rn byte) error {
 	szType := byte(inst.Shift)
-	stride := inst.Imm / int64(t.imm7(inst.Raw)) // scale derived from Imm/imm7
+	var stride int64
 	if t.imm7(inst.Raw) == 0 {
 		stride = int64(1 << szType)
+	} else {
+		stride = inst.Imm / int64(t.imm7(inst.Raw))
 	}
 
 	emitWriteback := func() {
@@ -170,9 +172,11 @@ func (t *Translator) trStackSTPSIMD(inst vm.Instruction, rt1, rt2, rn byte) erro
 
 func (t *Translator) trStackLDPSIMD(inst vm.Instruction, rt1, rt2, rn byte) error {
 	szType := byte(inst.Shift)
-	stride := inst.Imm / int64(t.imm7(inst.Raw))
+	var stride int64
 	if t.imm7(inst.Raw) == 0 {
 		stride = int64(1 << szType)
+	} else {
+		stride = inst.Imm / int64(t.imm7(inst.Raw))
 	}
 
 	emitWriteback := func() {
