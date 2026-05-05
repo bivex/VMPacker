@@ -32,6 +32,7 @@
 #include "vm_handlers/h_system.h" /* NOP, CALL_NAT, BR_REG, VLD16, VST16 */
 #include "vm_handlers/h_fpu.h"    /* FADD, FMUL, FCVT, ... */
 #include "vm_handlers/h_string.h" /* S_DECRYPT_STR */
+#include "vm_handlers/h_snprintf.h" /* S_PRINTF */
 
 
 /* #define VM_DEBUG_TRACE */
@@ -297,9 +298,14 @@ if (bc_off <= (u64)bc_len - 8) {
       for(int _i=0;_i<4;_i++) _mb[4+_i]="0123456789ABCDEF"[(trail_map_count>>((3-_i)*4))&0xF];
       _mb[8]='\n'; sys_write(1,_mb,9);
     }
+    /* Trailer layout (from Go translator):
+     *   [bytecode][CRC(24)][regMap(64)][OpMap(256)][addrMap(N*8)]
+     *            [reverse(1)][ocKey(4)][mapCount(4)][funcAddr(8)][funcSize(4)]
+     * map_data_size must include CRC section so vm->bc_len excludes it. */
+    u32 crc_size = 24;
     u32 map_data_size =
         trail_map_count * 8 +
-        85 + 256; // 85 (fixed) + 256 (op_map)
+        85 + 256 + crc_size; // 85 (fixed) + 256 (op_map) + 24 (CRC)
     /* DEBUG: print map_data_size */
     {
       u8 _md[20];
@@ -307,8 +313,8 @@ if (bc_off <= (u64)bc_len - 8) {
       for(int _i=0;_i<8;_i++) _md[4+_i]="0123456789ABCDEF"[(map_data_size>>((7-_i)*4))&0xF];
       _md[12]='\n'; sys_write(1,_md,13);
     }
-    
-    u8 *reg_map = &bc_buf[bc_len - map_data_size];
+
+    u8 *reg_map = &bc_buf[bc_len - map_data_size + crc_size];
     op_map = reg_map + 64;
 
     if (trail_func_addr != 0 && trail_map_count > 0 &&
@@ -319,7 +325,7 @@ if (bc_off <= (u64)bc_len - 8) {
       vm->map_count = trail_map_count;
       vm->reverse = trail_reverse;
       vm->oc_key = trail_oc_key;
-      vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size + 320];
+      vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size + crc_size + 320];
       /* 2d. Initialize registers with shuffling */
       for (int i = 0; i < 8; i++) {
         vm->R[reg_map[i] & 63] = args[i];
@@ -424,8 +430,6 @@ if (sec_scan_breakpoints(bc_buf, vm->bc_len)) { return 109; }
       _opbuf[2] = '\n';
       sys_write(1, _opbuf, 3);
     }
-    vm_jump_table[OP_S_DECRYPT_STR] = h_s_decrypt_str;
-    phys_insn_size[OP_S_DECRYPT_STR] = 1;
   } else {
     vm_init_jump_table(vm_jump_table);
     for (int i = 0; i < 256; i++)

@@ -39,7 +39,10 @@ static inline u32 h_call_nat(vm_ctx_t *vm) {
   u64 result, saved_sp;
   __asm__ volatile(
     "mov %[sp_save], sp\n\t"
-    "bic sp, sp, #15\n\t"          /* Align SP to 16 bytes */
+    "mov x9, sp\n\t"
+    "mov x10, #15\n\t"
+    "bic x9, x9, x10\n\t"
+    "mov sp, x9\n\t"
     "mov x0, %[r0]\n\t"
     "mov x1, %[r1]\n\t"
     "mov x2, %[r2]\n\t"
@@ -48,6 +51,7 @@ static inline u32 h_call_nat(vm_ctx_t *vm) {
     "mov x5, %[r5]\n\t"
     "mov x6, %[r6]\n\t"
     "mov x7, %[r7]\n\t"
+    "mov x8, #0\n\t"            /* AAPCS64: variadic functions need X8 = #FP args = 0 */
     "mov x10, %[addr]\n\t"
     "blr x10\n\t"
     "mov %[result], x0\n\t"
@@ -57,7 +61,8 @@ static inline u32 h_call_nat(vm_ctx_t *vm) {
       [r0] "r" (r0), [r1] "r" (r1), [r2] "r" (r2), [r3] "r" (r3),
       [r4] "r" (r4), [r5] "r" (r5), [r6] "r" (r6), [r7] "r" (r7)
     : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
-      "x10", "x30", "memory"
+      "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15",
+      "x16", "x17", "x30", "memory"
   );
   vm->R[0] = result;
 #else
