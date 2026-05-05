@@ -37,5 +37,6 @@ type Packer struct {
 	relocations     []vm.Relocation // relocations to be fixed at runtime (mainly for .so ASLR)
 	cff             bool            // Control Flow Flattening
 	mba             bool            // Mixed Boolean-Arithmetic
-	mangleSymbols   bool            // Symbol mangling
+	mangleSymbols     bool            // Symbol mangling
+	encryptedStrings  map[uint64]bool // strings already encrypted in-place (prevents double-encrypt)
 }

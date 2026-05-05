@@ -158,8 +158,9 @@ func (p *Packer) FindFunctionByAddr(f *elf.File, spec AddrSpec) (*vm.FuncInfo, e
 
 // findExecSection locates the executable section (.text or LOAD_X segment) containing addr
 func findExecSection(f *elf.File, addr uint64) (*execSection, error) {
+	// Try .text section first, but only if the address is within it
 	textSec := f.Section(".text")
-	if textSec != nil {
+	if textSec != nil && addr >= textSec.Addr && addr < textSec.Addr+textSec.Size {
 		d, err := textSec.Data()
 		if err != nil {
 			return nil, fmt.Errorf("reading .text failed: %v", err)
@@ -170,7 +171,7 @@ func findExecSection(f *elf.File, addr uint64) (*execSection, error) {
 		}, nil
 	}
 
-	// Fallback: executable LOAD segment
+	// Fallback: executable LOAD segment containing the address
 	for _, prog := range f.Progs {
 		if prog.Type != elf.PT_LOAD || prog.Flags&elf.PF_X == 0 {
 			continue

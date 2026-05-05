@@ -59,8 +59,15 @@ func TestMakeSegmentsWritable(t *testing.T) {
 
 	for _, prog := range f2.Progs {
 		if prog.Type == elf.PT_LOAD {
-			if prog.Flags&elf.PF_W == 0 && prog.Flags&elf.PF_R != 0 {
-				t.Errorf("Segment at Vaddr 0x%X has Flags %v, expected PF_W to be set", prog.Vaddr, prog.Flags)
+			// Executable segments should NOT have PF_W (avoid W+X pages)
+			// Non-executable readable segments MUST have PF_W
+			if prog.Flags&elf.PF_X == 0 && prog.Flags&elf.PF_R != 0 {
+				if prog.Flags&elf.PF_W == 0 {
+					t.Errorf("Non-exec segment at Vaddr 0x%X has Flags %v, expected PF_W to be set", prog.Vaddr, prog.Flags)
+				}
+			}
+			if prog.Flags&elf.PF_X != 0 && prog.Flags&elf.PF_W != 0 {
+				t.Errorf("Exec segment at Vaddr 0x%X has W+X flags %v, security risk", prog.Vaddr, prog.Flags)
 			}
 		}
 	}

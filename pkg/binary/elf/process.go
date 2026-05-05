@@ -570,7 +570,17 @@ func (p *Packer) extractAndEncryptStrings(f *elf.File, fi *vm.FuncInfo, insts []
 			}
 			if !isString { continue }
 
-			// Generate key and encrypt IN-PLACE in p.data
+			// Generate key and encrypt IN-PLACE in p.data.
+			// Skip strings that were already encrypted by a prior function
+			// to avoid corrupting the ciphertext for shared .rodata.
+			if p.encryptedStrings == nil {
+				p.encryptedStrings = make(map[uint64]bool)
+			}
+			if p.encryptedStrings[target] {
+				continue // already encrypted by a previous function
+			}
+			p.encryptedStrings[target] = true
+
 			var keyBuf [1]byte
 			rand.Read(keyBuf[:])
 			key := uint32(keyBuf[0])

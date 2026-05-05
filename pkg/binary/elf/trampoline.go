@@ -158,7 +158,7 @@ func writeThumb32MovT(w io.Writer, rd int, imm16 uint32) {
 }
 
 func writeThumb32BranchW(w io.Writer, offset int32) {
-	imm := offset >> 1
+	imm := int64(offset) >> 1
 	s := uint16(0)
 	if imm < 0 { s = 1 }
 	imm10 := uint16((imm >> 11) & 0x3FF)
