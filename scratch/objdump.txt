@@ -1,0 +1,848 @@
+
+test/android/build/libnative_test_arm64.so:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+0000000000005184 <__on_dlclose>:
+    5184: d503245f     	bti	c
+    5188: d503201f     	nop
+    518c: 100261a0     	adr	x0, 0x9dc0 <__dso_handle>
+    5190: 140002d4     	b	0x5ce0 <__cxa_finalize@plt>
+
+0000000000005194 <__emutls_unregister_key>:
+    5194: d503245f     	bti	c
+    5198: d65f03c0     	ret
+
+000000000000519c <__on_dlclose_late>:
+    519c: d503245f     	bti	c
+    51a0: 17fffffd     	b	0x5194 <__emutls_unregister_key>
+
+00000000000051a4 <__atexit_handler_wrapper>:
+    51a4: d503245f     	bti	c
+    51a8: b4000060     	cbz	x0, 0x51b4 <__atexit_handler_wrapper+0x10>
+    51ac: aa0003f0     	mov	x16, x0
+    51b0: d61f0200     	br	x16
+    51b4: d65f03c0     	ret
+
+00000000000051b8 <atexit>:
+    51b8: d503245f     	bti	c
+    51bc: aa0003e1     	mov	x1, x0
+    51c0: d503201f     	nop
+    51c4: 10ffff00     	adr	x0, 0x51a4 <__atexit_handler_wrapper>
+    51c8: d503201f     	nop
+    51cc: 10025fa2     	adr	x2, 0x9dc0 <__dso_handle>
+    51d0: 140002c8     	b	0x5cf0 <__cxa_atexit@plt>
+
+00000000000051d4 <Java_com_vmpacker_test_NativeTest_nativeCompute>:
+    51d4: a9bc7bfd     	stp	x29, x30, [sp, #-0x40]!
+    51d8: a9015ff8     	stp	x24, x23, [sp, #0x10]
+    51dc: a90257f6     	stp	x22, x21, [sp, #0x20]
+    51e0: a9034ff4     	stp	x20, x19, [sp, #0x30]
+    51e4: 910003fd     	mov	x29, sp
+    51e8: 2a0403f4     	mov	w20, w4
+    51ec: 2a0303f5     	mov	w21, w3
+    51f0: b4000462     	cbz	x2, 0x527c <Java_com_vmpacker_test_NativeTest_nativeCompute+0xa8>
+    51f4: f9400008     	ldr	x8, [x0]
+    51f8: aa0203f3     	mov	x19, x2
+    51fc: aa0203e1     	mov	x1, x2
+    5200: aa1f03e2     	mov	x2, xzr
+    5204: aa0003f6     	mov	x22, x0
+    5208: f942a508     	ldr	x8, [x8, #0x548]
+    520c: d63f0100     	blr	x8
+    5210: 2a1503e1     	mov	w1, w21
+    5214: 2a1403e2     	mov	w2, w20
+    5218: aa0003f7     	mov	x23, x0
+    521c: 940002b9     	bl	0x5d00 <vmp_compute@plt>
+    5220: 2a0003f8     	mov	w24, w0
+    5224: d503201f     	nop
+    5228: 30fdd101     	adr	x1, 0xc49 <strlen+0xc49>
+    522c: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    5230: 91315c42     	add	x2, x2, #0xc57
+    5234: 52800080     	mov	w0, #0x4                // =4
+    5238: aa1703e3     	mov	x3, x23
+    523c: 2a1503e4     	mov	w4, w21
+    5240: 2a1403e5     	mov	w5, w20
+    5244: 2a1803e6     	mov	w6, w24
+    5248: 940002b2     	bl	0x5d10 <__android_log_print@plt>
+    524c: f94002c8     	ldr	x8, [x22]
+    5250: aa1603e0     	mov	x0, x22
+    5254: aa1303e1     	mov	x1, x19
+    5258: aa1703e2     	mov	x2, x23
+    525c: f942a908     	ldr	x8, [x8, #0x550]
+    5260: d63f0100     	blr	x8
+    5264: 2a1803e0     	mov	w0, w24
+    5268: a9434ff4     	ldp	x20, x19, [sp, #0x30]
+    526c: a94257f6     	ldp	x22, x21, [sp, #0x20]
+    5270: a9415ff8     	ldp	x24, x23, [sp, #0x10]
+    5274: a8c47bfd     	ldp	x29, x30, [sp], #0x40
+    5278: d65f03c0     	ret
+    527c: aa1f03e0     	mov	x0, xzr
+    5280: 2a1503e1     	mov	w1, w21
+    5284: 2a1403e2     	mov	w2, w20
+    5288: a9434ff4     	ldp	x20, x19, [sp, #0x30]
+    528c: a94257f6     	ldp	x22, x21, [sp, #0x20]
+    5290: a9415ff8     	ldp	x24, x23, [sp, #0x10]
+    5294: a8c47bfd     	ldp	x29, x30, [sp], #0x40
+    5298: 1400029a     	b	0x5d00 <vmp_compute@plt>
+
+000000000000529c <Java_com_vmpacker_test_NativeTest_nativeVerifyKey>:
+    529c: a9bc7bfd     	stp	x29, x30, [sp, #-0x40]!
+    52a0: f9000bf7     	str	x23, [sp, #0x10]
+    52a4: a90257f6     	stp	x22, x21, [sp, #0x20]
+    52a8: a9034ff4     	stp	x20, x19, [sp, #0x30]
+    52ac: 910003fd     	mov	x29, sp
+    52b0: 2a0303f4     	mov	w20, w3
+    52b4: b4000422     	cbz	x2, 0x5338 <Java_com_vmpacker_test_NativeTest_nativeVerifyKey+0x9c>
+    52b8: f9400008     	ldr	x8, [x0]
+    52bc: aa0203f3     	mov	x19, x2
+    52c0: aa0203e1     	mov	x1, x2
+    52c4: aa1f03e2     	mov	x2, xzr
+    52c8: aa0003f5     	mov	x21, x0
+    52cc: f942a508     	ldr	x8, [x8, #0x548]
+    52d0: d63f0100     	blr	x8
+    52d4: 2a1403e1     	mov	w1, w20
+    52d8: aa0003f6     	mov	x22, x0
+    52dc: 94000291     	bl	0x5d20 <vmp_verify_key@plt>
+    52e0: 2a0003f7     	mov	w23, w0
+    52e4: d503201f     	nop
+    52e8: 30fdcb01     	adr	x1, 0xc49 <strlen+0xc49>
+    52ec: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    52f0: 912f2c42     	add	x2, x2, #0xbcb
+    52f4: 52800080     	mov	w0, #0x4                // =4
+    52f8: aa1603e3     	mov	x3, x22
+    52fc: 2a1403e4     	mov	w4, w20
+    5300: 2a1703e5     	mov	w5, w23
+    5304: 94000283     	bl	0x5d10 <__android_log_print@plt>
+    5308: f94002a8     	ldr	x8, [x21]
+    530c: aa1503e0     	mov	x0, x21
+    5310: aa1303e1     	mov	x1, x19
+    5314: aa1603e2     	mov	x2, x22
+    5318: f942a908     	ldr	x8, [x8, #0x550]
+    531c: d63f0100     	blr	x8
+    5320: 2a1703e0     	mov	w0, w23
+    5324: a9434ff4     	ldp	x20, x19, [sp, #0x30]
+    5328: f9400bf7     	ldr	x23, [sp, #0x10]
+    532c: a94257f6     	ldp	x22, x21, [sp, #0x20]
+    5330: a8c47bfd     	ldp	x29, x30, [sp], #0x40
+    5334: d65f03c0     	ret
+    5338: aa1f03e0     	mov	x0, xzr
+    533c: 2a1403e1     	mov	w1, w20
+    5340: a9434ff4     	ldp	x20, x19, [sp, #0x30]
+    5344: f9400bf7     	ldr	x23, [sp, #0x10]
+    5348: a94257f6     	ldp	x22, x21, [sp, #0x20]
+    534c: a8c47bfd     	ldp	x29, x30, [sp], #0x40
+    5350: 14000274     	b	0x5d20 <vmp_verify_key@plt>
+
+0000000000005354 <Java_com_vmpacker_test_NativeTest_nativeMd5Hex>:
+    5354: b40005a2     	cbz	x2, 0x5408 <Java_com_vmpacker_test_NativeTest_nativeMd5Hex+0xb4>
+    5358: d101c3ff     	sub	sp, sp, #0x70
+    535c: a9047bfd     	stp	x29, x30, [sp, #0x40]
+    5360: a90557f6     	stp	x22, x21, [sp, #0x50]
+    5364: a9064ff4     	stp	x20, x19, [sp, #0x60]
+    5368: 910103fd     	add	x29, sp, #0x40
+    536c: f9400008     	ldr	x8, [x0]
+    5370: aa0203f4     	mov	x20, x2
+    5374: aa0203e1     	mov	x1, x2
+    5378: aa1f03e2     	mov	x2, xzr
+    537c: aa0003f3     	mov	x19, x0
+    5380: f942a508     	ldr	x8, [x8, #0x548]
+    5384: d63f0100     	blr	x8
+    5388: 910003e1     	mov	x1, sp
+    538c: 52800802     	mov	w2, #0x40               // =64
+    5390: aa0003f5     	mov	x21, x0
+    5394: 94000267     	bl	0x5d30 <vmp_md5_hex@plt>
+    5398: 2a0003f6     	mov	w22, w0
+    539c: d503201f     	nop
+    53a0: 30fdc541     	adr	x1, 0xc49 <strlen+0xc49>
+    53a4: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    53a8: 912fa442     	add	x2, x2, #0xbe9
+    53ac: 910003e4     	mov	x4, sp
+    53b0: 52800080     	mov	w0, #0x4                // =4
+    53b4: aa1503e3     	mov	x3, x21
+    53b8: 2a1603e5     	mov	w5, w22
+    53bc: 94000255     	bl	0x5d10 <__android_log_print@plt>
+    53c0: f9400268     	ldr	x8, [x19]
+    53c4: aa1303e0     	mov	x0, x19
+    53c8: aa1403e1     	mov	x1, x20
+    53cc: aa1503e2     	mov	x2, x21
+    53d0: f942a908     	ldr	x8, [x8, #0x550]
+    53d4: d63f0100     	blr	x8
+    53d8: aa1f03e0     	mov	x0, xzr
+    53dc: 350000d6     	cbnz	w22, 0x53f4 <Java_com_vmpacker_test_NativeTest_nativeMd5Hex+0xa0>
+    53e0: f9400268     	ldr	x8, [x19]
+    53e4: 910003e1     	mov	x1, sp
+    53e8: aa1303e0     	mov	x0, x19
+    53ec: f9429d08     	ldr	x8, [x8, #0x538]
+    53f0: d63f0100     	blr	x8
+    53f4: a9464ff4     	ldp	x20, x19, [sp, #0x60]
+    53f8: a94557f6     	ldp	x22, x21, [sp, #0x50]
+    53fc: a9447bfd     	ldp	x29, x30, [sp, #0x40]
+    5400: 9101c3ff     	add	sp, sp, #0x70
+    5404: d65f03c0     	ret
+    5408: aa1f03e0     	mov	x0, xzr
+    540c: d65f03c0     	ret
+
+0000000000005410 <Java_com_vmpacker_test_NativeTest_nativeGetProcessName>:
+    5410: d104c3ff     	sub	sp, sp, #0x130
+    5414: a9107bfd     	stp	x29, x30, [sp, #0x100]
+    5418: f9008bfc     	str	x28, [sp, #0x110]
+    541c: a9124ff4     	stp	x20, x19, [sp, #0x120]
+    5420: 910403fd     	add	x29, sp, #0x100
+    5424: aa0003f3     	mov	x19, x0
+    5428: 910003e0     	mov	x0, sp
+    542c: 52802001     	mov	w1, #0x100              // =256
+    5430: 94000244     	bl	0x5d40 <vmp_get_process_name@plt>
+    5434: 7100041f     	cmp	w0, #0x1
+    5438: 5400014b     	b.lt	0x5460 <Java_com_vmpacker_test_NativeTest_nativeGetProcessName+0x50>
+    543c: d503201f     	nop
+    5440: 30fdc041     	adr	x1, 0xc49 <strlen+0xc49>
+    5444: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    5448: 912bb042     	add	x2, x2, #0xaec
+    544c: 910003e3     	mov	x3, sp
+    5450: 52800080     	mov	w0, #0x4                // =4
+    5454: 910003f4     	mov	x20, sp
+    5458: 9400022e     	bl	0x5d10 <__android_log_print@plt>
+    545c: 14000003     	b	0x5468 <Java_com_vmpacker_test_NativeTest_nativeGetProcessName+0x58>
+    5460: f0ffffd4     	adrp	x20, 0x0 <strlen>
+    5464: 912b8a94     	add	x20, x20, #0xae2
+    5468: f9400268     	ldr	x8, [x19]
+    546c: aa1303e0     	mov	x0, x19
+    5470: aa1403e1     	mov	x1, x20
+    5474: f9429d08     	ldr	x8, [x8, #0x538]
+    5478: d63f0100     	blr	x8
+    547c: a9524ff4     	ldp	x20, x19, [sp, #0x120]
+    5480: f9408bfc     	ldr	x28, [sp, #0x110]
+    5484: a9507bfd     	ldp	x29, x30, [sp, #0x100]
+    5488: 9104c3ff     	add	sp, sp, #0x130
+    548c: d65f03c0     	ret
+
+0000000000005490 <Java_com_vmpacker_test_NativeTest_runAllTests>:
+    5490: a9ba7bfd     	stp	x29, x30, [sp, #-0x60]!
+    5494: f9000bfc     	str	x28, [sp, #0x10]
+    5498: a90267fa     	stp	x26, x25, [sp, #0x20]
+    549c: a9035ff8     	stp	x24, x23, [sp, #0x30]
+    54a0: a90457f6     	stp	x22, x21, [sp, #0x40]
+    54a4: a9054ff4     	stp	x20, x19, [sp, #0x50]
+    54a8: 910003fd     	mov	x29, sp
+    54ac: d12303ff     	sub	sp, sp, #0x8c0
+    54b0: 528147a8     	mov	w8, #0xa3d              // =2621
+    54b4: f0ffffc9     	adrp	x9, 0x0 <strlen>
+    54b8: 9128b929     	add	x9, x9, #0xa2e
+    54bc: 72a00148     	movk	w8, #0xa, lsl #16
+    54c0: 910303f7     	add	x23, sp, #0xc0
+    54c4: f0ffffd4     	adrp	x20, 0x0 <strlen>
+    54c8: 912a6694     	add	x20, x20, #0xa99
+    54cc: b900e3e8     	str	w8, [sp, #0xe0]
+    54d0: aa0003f3     	mov	x19, x0
+    54d4: a940212a     	ldp	x10, x8, [x9]
+    54d8: aa1403e0     	mov	x0, x20
+    54dc: 2a1f03e1     	mov	w1, wzr
+    54e0: 52800542     	mov	w2, #0x2a               // =42
+    54e4: a90c23ea     	stp	x10, x8, [sp, #0xc0]
+    54e8: a941212b     	ldp	x11, x8, [x9, #0x10]
+    54ec: f0ffffc9     	adrp	x9, 0x0 <strlen>
+    54f0: 91294929     	add	x9, x9, #0xa52
+    54f4: a90d23eb     	stp	x11, x8, [sp, #0xd0]
+    54f8: 52800148     	mov	w8, #0xa                // =10
+    54fc: 7803b2e8     	sturh	w8, [x23, #0x3b]
+    5500: a940212a     	ldp	x10, x8, [x9]
+    5504: f9400929     	ldr	x9, [x9, #0x10]
+    5508: f80232ea     	stur	x10, [x23, #0x23]
+    550c: f802b2e8     	stur	x8, [x23, #0x2b]
+    5510: f80332e9     	stur	x9, [x23, #0x33]
+    5514: 940001fb     	bl	0x5d00 <vmp_compute@plt>
+    5518: 2a0003e3     	mov	w3, w0
+    551c: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    5520: 912d5842     	add	x2, x2, #0xb56
+    5524: 9100f2e0     	add	x0, x23, #0x3c
+    5528: 5280f881     	mov	w1, #0x7c4              // =1988
+    552c: 94000209     	bl	0x5d50 <snprintf@plt>
+    5530: 93407c08     	sxtw	x8, w0
+    5534: 52810018     	mov	w24, #0x800             // =2048
+    5538: 52800021     	mov	w1, #0x1                // =1
+    553c: aa1403e0     	mov	x0, x20
+    5540: 52800542     	mov	w2, #0x2a               // =42
+    5544: 9100f116     	add	x22, x8, #0x3c
+    5548: 93407ed9     	sxtw	x25, w22
+    554c: cb190315     	sub	x21, x24, x25
+    5550: 940001ec     	bl	0x5d00 <vmp_compute@plt>
+    5554: 2a0003e3     	mov	w3, w0
+    5558: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    555c: 9127c042     	add	x2, x2, #0x9f0
+    5560: 8b1902e0     	add	x0, x23, x25
+    5564: aa1503e1     	mov	x1, x21
+    5568: 940001fa     	bl	0x5d50 <snprintf@plt>
+    556c: 8b20c2d6     	add	x22, x22, w0, sxtw
+    5570: aa1403e0     	mov	x0, x20
+    5574: 52800041     	mov	w1, #0x2                // =2
+    5578: 52800542     	mov	w2, #0x2a               // =42
+    557c: cb160315     	sub	x21, x24, x22
+    5580: 940001e0     	bl	0x5d00 <vmp_compute@plt>
+    5584: 2a0003e3     	mov	w3, w0
+    5588: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    558c: 912c2042     	add	x2, x2, #0xb08
+    5590: 8b1602e0     	add	x0, x23, x22
+    5594: aa1503e1     	mov	x1, x21
+    5598: 940001ee     	bl	0x5d50 <snprintf@plt>
+    559c: 0b160016     	add	w22, w0, w22
+    55a0: f0ffffc0     	adrp	x0, 0x0 <strlen>
+    55a4: 91264000     	add	x0, x0, #0x990
+    55a8: 93407ed9     	sxtw	x25, w22
+    55ac: 2a1f03e1     	mov	w1, wzr
+    55b0: 52800542     	mov	w2, #0x2a               // =42
+    55b4: cb190315     	sub	x21, x24, x25
+    55b8: 940001d2     	bl	0x5d00 <vmp_compute@plt>
+    55bc: 2a0003e3     	mov	w3, w0
+    55c0: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    55c4: 91252042     	add	x2, x2, #0x948
+    55c8: 8b1902e0     	add	x0, x23, x25
+    55cc: aa1503e1     	mov	x1, x21
+    55d0: 940001e0     	bl	0x5d50 <snprintf@plt>
+    55d4: 0b160016     	add	w22, w0, w22
+    55d8: aa1f03e0     	mov	x0, xzr
+    55dc: 2a1f03e1     	mov	w1, wzr
+    55e0: 93407ed9     	sxtw	x25, w22
+    55e4: 2a1f03e2     	mov	w2, wzr
+    55e8: cb190315     	sub	x21, x24, x25
+    55ec: 940001c5     	bl	0x5d00 <vmp_compute@plt>
+    55f0: 2a0003e3     	mov	w3, w0
+    55f4: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    55f8: 91273c42     	add	x2, x2, #0x9cf
+    55fc: 8b1902e0     	add	x0, x23, x25
+    5600: aa1503e1     	mov	x1, x21
+    5604: 940001d3     	bl	0x5d50 <snprintf@plt>
+    5608: 0b160016     	add	w22, w0, w22
+    560c: f0ffffd5     	adrp	x21, 0x0 <strlen>
+    5610: 912d52b5     	add	x21, x21, #0xb54
+    5614: 93407ec8     	sxtw	x8, w22
+    5618: aa1503e2     	mov	x2, x21
+    561c: cb080301     	sub	x1, x24, x8
+    5620: 8b0802e0     	add	x0, x23, x8
+    5624: 940001cb     	bl	0x5d50 <snprintf@plt>
+    5628: 0b0002d9     	add	w25, w22, w0
+    562c: f0ffffc0     	adrp	x0, 0x0 <strlen>
+    5630: 912b4c00     	add	x0, x0, #0xad3
+    5634: 93407f3a     	sxtw	x26, w25
+    5638: 52800c81     	mov	w1, #0x64               // =100
+    563c: cb1a0316     	sub	x22, x24, x26
+    5640: 940001b8     	bl	0x5d20 <vmp_verify_key@plt>
+    5644: 2a0003e3     	mov	w3, w0
+    5648: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    564c: 912a7c42     	add	x2, x2, #0xa9f
+    5650: 8b1a02e0     	add	x0, x23, x26
+    5654: aa1603e1     	mov	x1, x22
+    5658: 940001be     	bl	0x5d50 <snprintf@plt>
+    565c: 0b190019     	add	w25, w0, w25
+    5660: f0ffffc0     	adrp	x0, 0x0 <strlen>
+    5664: 912b2800     	add	x0, x0, #0xaca
+    5668: 93407f3a     	sxtw	x26, w25
+    566c: 52800c81     	mov	w1, #0x64               // =100
+    5670: cb1a0316     	sub	x22, x24, x26
+    5674: 940001ab     	bl	0x5d20 <vmp_verify_key@plt>
+    5678: 2a0003e3     	mov	w3, w0
+    567c: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    5680: 912ca042     	add	x2, x2, #0xb28
+    5684: 8b1a02e0     	add	x0, x23, x26
+    5688: aa1603e1     	mov	x1, x22
+    568c: 940001b1     	bl	0x5d50 <snprintf@plt>
+    5690: 0b190019     	add	w25, w0, w25
+    5694: aa1f03e0     	mov	x0, xzr
+    5698: 52800c81     	mov	w1, #0x64               // =100
+    569c: 93407f3a     	sxtw	x26, w25
+    56a0: cb1a0316     	sub	x22, x24, x26
+    56a4: 9400019f     	bl	0x5d20 <vmp_verify_key@plt>
+    56a8: 2a0003e3     	mov	w3, w0
+    56ac: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    56b0: 912dd842     	add	x2, x2, #0xb76
+    56b4: 8b1a02e0     	add	x0, x23, x26
+    56b8: aa1603e1     	mov	x1, x22
+    56bc: 940001a5     	bl	0x5d50 <snprintf@plt>
+    56c0: 0b190016     	add	w22, w0, w25
+    56c4: aa1503e2     	mov	x2, x21
+    56c8: 93407ec8     	sxtw	x8, w22
+    56cc: cb080301     	sub	x1, x24, x8
+    56d0: 8b0802e0     	add	x0, x23, x8
+    56d4: 9400019f     	bl	0x5d50 <snprintf@plt>
+    56d8: 0b0002d6     	add	w22, w22, w0
+    56dc: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    56e0: 91284042     	add	x2, x2, #0xa10
+    56e4: 93407ec8     	sxtw	x8, w22
+    56e8: cb080301     	sub	x1, x24, x8
+    56ec: 8b0802e0     	add	x0, x23, x8
+    56f0: 94000198     	bl	0x5d50 <snprintf@plt>
+    56f4: 0b0002d6     	add	w22, w22, w0
+    56f8: 910203e1     	add	x1, sp, #0x80
+    56fc: aa1403e0     	mov	x0, x20
+    5700: 52800802     	mov	w2, #0x40               // =64
+    5704: 9400018b     	bl	0x5d30 <vmp_md5_hex@plt>
+    5708: 93407ec8     	sxtw	x8, w22
+    570c: 2a0003e4     	mov	w4, w0
+    5710: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    5714: 912e8c42     	add	x2, x2, #0xba3
+    5718: 910203e3     	add	x3, sp, #0x80
+    571c: cb080301     	sub	x1, x24, x8
+    5720: 8b0802e0     	add	x0, x23, x8
+    5724: 9400018b     	bl	0x5d50 <snprintf@plt>
+    5728: 0b160014     	add	w20, w0, w22
+    572c: f0ffffc0     	adrp	x0, 0x0 <strlen>
+    5730: 9129b000     	add	x0, x0, #0xa6c
+    5734: 910203e1     	add	x1, sp, #0x80
+    5738: 52800802     	mov	w2, #0x40               // =64
+    573c: 9400017d     	bl	0x5d30 <vmp_md5_hex@plt>
+    5740: 93407e88     	sxtw	x8, w20
+    5744: 2a0003e4     	mov	w4, w0
+    5748: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    574c: 91302042     	add	x2, x2, #0xc08
+    5750: 910203e3     	add	x3, sp, #0x80
+    5754: cb080301     	sub	x1, x24, x8
+    5758: 8b0802e0     	add	x0, x23, x8
+    575c: 9400017d     	bl	0x5d50 <snprintf@plt>
+    5760: 0b140014     	add	w20, w0, w20
+    5764: f0ffffc0     	adrp	x0, 0x0 <strlen>
+    5768: 9129b400     	add	x0, x0, #0xa6d
+    576c: 910203e1     	add	x1, sp, #0x80
+    5770: 52800802     	mov	w2, #0x40               // =64
+    5774: 9400016f     	bl	0x5d30 <vmp_md5_hex@plt>
+    5778: 93407e88     	sxtw	x8, w20
+    577c: 2a0003e4     	mov	w4, w0
+    5780: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    5784: 9125a042     	add	x2, x2, #0x968
+    5788: 910203e3     	add	x3, sp, #0x80
+    578c: cb080301     	sub	x1, x24, x8
+    5790: 8b0802e0     	add	x0, x23, x8
+    5794: 9400016f     	bl	0x5d50 <snprintf@plt>
+    5798: 0b140014     	add	w20, w0, w20
+    579c: aa1503e2     	mov	x2, x21
+    57a0: 93407e88     	sxtw	x8, w20
+    57a4: cb080301     	sub	x1, x24, x8
+    57a8: 8b0802e0     	add	x0, x23, x8
+    57ac: 94000169     	bl	0x5d50 <snprintf@plt>
+    57b0: 0b000294     	add	w20, w20, w0
+    57b4: 910003e0     	mov	x0, sp
+    57b8: 52801001     	mov	w1, #0x80               // =128
+    57bc: 94000161     	bl	0x5d40 <vmp_get_process_name@plt>
+    57c0: 93407e88     	sxtw	x8, w20
+    57c4: 2a0003e4     	mov	w4, w0
+    57c8: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    57cc: 91265842     	add	x2, x2, #0x996
+    57d0: 910003e3     	mov	x3, sp
+    57d4: cb080301     	sub	x1, x24, x8
+    57d8: 8b0802e0     	add	x0, x23, x8
+    57dc: 9400015d     	bl	0x5d50 <snprintf@plt>
+    57e0: 0b140008     	add	w8, w0, w20
+    57e4: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    57e8: 9130c042     	add	x2, x2, #0xc30
+    57ec: 93407d08     	sxtw	x8, w8
+    57f0: cb080301     	sub	x1, x24, x8
+    57f4: 8b0802e0     	add	x0, x23, x8
+    57f8: 94000156     	bl	0x5d50 <snprintf@plt>
+    57fc: d503201f     	nop
+    5800: 30fda241     	adr	x1, 0xc49 <strlen+0xc49>
+    5804: f0ffffc2     	adrp	x2, 0x0 <strlen>
+    5808: 912b4042     	add	x2, x2, #0xad0
+    580c: 910303e3     	add	x3, sp, #0xc0
+    5810: 52800080     	mov	w0, #0x4                // =4
+    5814: 9400013f     	bl	0x5d10 <__android_log_print@plt>
+    5818: f9400268     	ldr	x8, [x19]
+    581c: 910303e1     	add	x1, sp, #0xc0
+    5820: aa1303e0     	mov	x0, x19
+    5824: f9429d08     	ldr	x8, [x8, #0x538]
+    5828: d63f0100     	blr	x8
+    582c: 912303ff     	add	sp, sp, #0x8c0
+    5830: a9454ff4     	ldp	x20, x19, [sp, #0x50]
+    5834: f9400bfc     	ldr	x28, [sp, #0x10]
+    5838: a94457f6     	ldp	x22, x21, [sp, #0x40]
+    583c: a9435ff8     	ldp	x24, x23, [sp, #0x30]
+    5840: a94267fa     	ldp	x26, x25, [sp, #0x20]
+    5844: a8c67bfd     	ldp	x29, x30, [sp], #0x60
+    5848: d65f03c0     	ret
+
+000000000000584c <vmp_compute>:
+    584c: b4000580     	cbz	x0, 0x58fc <vmp_compute+0xb0>
+    5850: 5294b4a8     	mov	w8, #0xa5a5             // =42405
+    5854: 3940000b     	ldrb	w11, [x0]
+    5858: 72b4b4a8     	movk	w8, #0xa5a5, lsl #16
+    585c: 4a080048     	eor	w8, w2, w8
+    5860: 3400018b     	cbz	w11, 0x5890 <vmp_compute+0x44>
+    5864: 5280326c     	mov	w12, #0x193             // =403
+    5868: aa1f03e9     	mov	x9, xzr
+    586c: 9100040a     	add	x10, x0, #0x1
+    5870: 72a0200c     	movk	w12, #0x100, lsl #16
+    5874: 4a0b0108     	eor	w8, w8, w11
+    5878: f101f93f     	cmp	x9, #0x7e
+    587c: 1b0c7d08     	mul	w8, w8, w12
+    5880: 54000088     	b.hi	0x5890 <vmp_compute+0x44>
+    5884: 3869694b     	ldrb	w11, [x10, x9]
+    5888: 91000529     	add	x9, x9, #0x1
+    588c: 35ffff4b     	cbnz	w11, 0x5874 <vmp_compute+0x28>
+    5890: 0b010429     	add	w9, w1, w1, lsl #1
+    5894: 531d6d0a     	ubfiz	w10, w8, #3, #28
+    5898: 5297dded     	mov	w13, #0xbeef            // =48879
+    589c: 72abd5ad     	movk	w13, #0x5ead, lsl #16
+    58a0: 7100043f     	cmp	w1, #0x1
+    58a4: 1100092b     	add	w11, w9, #0x2
+    58a8: 1100052c     	add	w12, w9, #0x1
+    58ac: 4a48114a     	eor	w10, w10, w8, lsr #4
+    58b0: 9bac7d6b     	umull	x11, w11, w12
+    58b4: 531d710c     	lsl	w12, w8, #3
+    58b8: 4a0d010d     	eor	w13, w8, w13
+    58bc: 1a8a11aa     	csel	w10, w13, w10, ne
+    58c0: 7100083f     	cmp	w1, #0x2
+    58c4: 11000d29     	add	w9, w9, #0x3
+    58c8: 4b080188     	sub	w8, w12, w8
+    58cc: 0b010c2c     	add	w12, w1, w1, lsl #3
+    58d0: d341fd6b     	lsr	x11, x11, #1
+    58d4: 11003508     	add	w8, w8, #0xd
+    58d8: 1a8a0108     	csel	w8, w8, w10, eq
+    58dc: 7100053f     	cmp	w9, #0x1
+    58e0: 0b0b096a     	add	w10, w11, w11, lsl #2
+    58e4: 0b0c010b     	add	w11, w8, w12
+    58e8: 0b0a016a     	add	w10, w11, w10
+    58ec: 11001149     	add	w9, w10, #0x4
+    58f0: 1a89b108     	csel	w8, w8, w9, lt
+    58f4: 12003d00     	and	w0, w8, #0xffff
+    58f8: d65f03c0     	ret
+    58fc: 12800000     	mov	w0, #-0x1               // =-1
+    5900: d65f03c0     	ret
+
+0000000000005904 <vmp_verify_key>:
+    5904: b4000420     	cbz	x0, 0x5988 <vmp_verify_key+0x84>
+    5908: 528f3628     	mov	w8, #0x79b1             // =31153
+    590c: 3940000c     	ldrb	w12, [x0]
+    5910: 72b3c6e8     	movk	w8, #0x9e37, lsl #16
+    5914: 1b087c28     	mul	w8, w1, w8
+    5918: 3400026c     	cbz	w12, 0x5964 <vmp_verify_key+0x60>
+    591c: aa1f03eb     	mov	x11, xzr
+    5920: 9100040a     	add	x10, x0, #0x1
+    5924: 128000c9     	mov	w9, #-0x7               // =-7
+    5928: 4ac86d8d     	eor	w13, w12, w8, ror #27
+    592c: f100797f     	cmp	x11, #0x1e
+    5930: 11001d29     	add	w9, w9, #0x7
+    5934: 9100056e     	add	x14, x11, #0x1
+    5938: 540000a8     	b.hi	0x594c <vmp_verify_key+0x48>
+    593c: 386b694c     	ldrb	w12, [x10, x11]
+    5940: 0b0d0128     	add	w8, w9, w13
+    5944: aa0e03eb     	mov	x11, x14
+    5948: 35ffff0c     	cbnz	w12, 0x5928 <vmp_verify_key+0x24>
+    594c: f27e75df     	tst	x14, #0xfffffffc
+    5950: 0b0901a8     	add	w8, w13, w9
+    5954: 1a9f17ea     	cset	w10, eq
+    5958: 360000aa     	tbz	w10, #0x0, 0x596c <vmp_verify_key+0x68>
+    595c: 2a1f03e0     	mov	w0, wzr
+    5960: d65f03c0     	ret
+    5964: 5280002a     	mov	w10, #0x1               // =1
+    5968: 3707ffaa     	tbnz	w10, #0x0, 0x595c <vmp_verify_key+0x58>
+    596c: 528ab549     	mov	w9, #0x55aa             // =21930
+    5970: 4a090029     	eor	w9, w1, w9
+    5974: 531b692a     	lsl	w10, w9, #5
+    5978: 4b090149     	sub	w9, w10, w9
+    597c: 4a090108     	eor	w8, w8, w9
+    5980: 72003d1f     	tst	w8, #0xffff
+    5984: 1a9f17e0     	cset	w0, eq
+    5988: d65f03c0     	ret
+
+000000000000598c <vmp_md5_hex>:
+    598c: d10243ff     	sub	sp, sp, #0x90
+    5990: a9057bfd     	stp	x29, x30, [sp, #0x50]
+    5994: a9065ff8     	stp	x24, x23, [sp, #0x60]
+    5998: a90757f6     	stp	x22, x21, [sp, #0x70]
+    599c: a9084ff4     	stp	x20, x19, [sp, #0x80]
+    59a0: 910143fd     	add	x29, sp, #0x50
+    59a4: aa0003f5     	mov	x21, x0
+    59a8: 12800000     	mov	w0, #-0x1               // =-1
+    59ac: b40008d5     	cbz	x21, 0x5ac4 <vmp_md5_hex+0x138>
+    59b0: aa0103f3     	mov	x19, x1
+    59b4: b4000881     	cbz	x1, 0x5ac4 <vmp_md5_hex+0x138>
+    59b8: 7100845f     	cmp	w2, #0x21
+    59bc: 5400084b     	b.lt	0x5ac4 <vmp_md5_hex+0x138>
+    59c0: d503201f     	nop
+    59c4: 10fd95a8     	adr	x8, 0xc78 <strlen+0xc78>
+    59c8: aa1503e0     	mov	x0, x21
+    59cc: a9402109     	ldp	x9, x8, [x8]
+    59d0: a93f23a9     	stp	x9, x8, [x29, #-0x10]
+    59d4: 940000e3     	bl	0x5d60 <strlen@plt>
+    59d8: aa0003f4     	mov	x20, x0
+    59dc: f101001f     	cmp	x0, #0x40
+    59e0: 54000062     	b.hs	0x59ec <vmp_md5_hex+0x60>
+    59e4: aa1f03f7     	mov	x23, xzr
+    59e8: 1400000a     	b	0x5a10 <vmp_md5_hex+0x84>
+    59ec: aa1f03f6     	mov	x22, xzr
+    59f0: d10043a0     	sub	x0, x29, #0x10
+    59f4: 8b1602a1     	add	x1, x21, x22
+    59f8: 94000039     	bl	0x5adc <md5_transform>
+    59fc: 910202c8     	add	x8, x22, #0x80
+    5a00: 910102d7     	add	x23, x22, #0x40
+    5a04: eb14011f     	cmp	x8, x20
+    5a08: aa1703f6     	mov	x22, x23
+    5a0c: 54ffff29     	b.ls	0x59f0 <vmp_md5_hex+0x64>
+    5a10: cb170296     	sub	x22, x20, x23
+    5a14: 52800808     	mov	w8, #0x40               // =64
+    5a18: 910003f8     	mov	x24, sp
+    5a1c: cb160108     	sub	x8, x8, x22
+    5a20: f100fedf     	cmp	x22, #0x3f
+    5a24: 8b160300     	add	x0, x24, x22
+    5a28: 9a8883e2     	csel	x2, xzr, x8, hi
+    5a2c: 2a1f03e1     	mov	w1, wzr
+    5a30: 940000d0     	bl	0x5d70 <memset@plt>
+    5a34: 910003e0     	mov	x0, sp
+    5a38: 8b1702a1     	add	x1, x21, x23
+    5a3c: aa1603e2     	mov	x2, x22
+    5a40: 940000d0     	bl	0x5d80 <memcpy@plt>
+    5a44: f100e2df     	cmp	x22, #0x38
+    5a48: 52801008     	mov	w8, #0x80               // =128
+    5a4c: 38366b08     	strb	w8, [x24, x22]
+    5a50: 54000103     	b.lo	0x5a70 <vmp_md5_hex+0xe4>
+    5a54: d10043a0     	sub	x0, x29, #0x10
+    5a58: 910003e1     	mov	x1, sp
+    5a5c: 94000020     	bl	0x5adc <md5_transform>
+    5a60: a9037fff     	stp	xzr, xzr, [sp, #0x30]
+    5a64: a9027fff     	stp	xzr, xzr, [sp, #0x20]
+    5a68: a9017fff     	stp	xzr, xzr, [sp, #0x10]
+    5a6c: a9007fff     	stp	xzr, xzr, [sp]
+    5a70: d37df288     	lsl	x8, x20, #3
+    5a74: d10043a0     	sub	x0, x29, #0x10
+    5a78: 910003e1     	mov	x1, sp
+    5a7c: d10043b6     	sub	x22, x29, #0x10
+    5a80: f9001fe8     	str	x8, [sp, #0x38]
+    5a84: 94000016     	bl	0x5adc <md5_transform>
+    5a88: aa1f03f7     	mov	x23, xzr
+    5a8c: d503201f     	nop
+    5a90: 50fd8e14     	adr	x20, 0xc52 <strlen+0xc52>
+    5a94: aa1303f5     	mov	x21, x19
+    5a98: 38776ac3     	ldrb	w3, [x22, x23]
+    5a9c: aa1503e0     	mov	x0, x21
+    5aa0: 52800061     	mov	w1, #0x3                // =3
+    5aa4: aa1403e2     	mov	x2, x20
+    5aa8: 940000aa     	bl	0x5d50 <snprintf@plt>
+    5aac: 910006f7     	add	x23, x23, #0x1
+    5ab0: 91000ab5     	add	x21, x21, #0x2
+    5ab4: f10042ff     	cmp	x23, #0x10
+    5ab8: 54ffff01     	b.ne	0x5a98 <vmp_md5_hex+0x10c>
+    5abc: 2a1f03e0     	mov	w0, wzr
+    5ac0: 3900827f     	strb	wzr, [x19, #0x20]
+    5ac4: a9484ff4     	ldp	x20, x19, [sp, #0x80]
+    5ac8: a94757f6     	ldp	x22, x21, [sp, #0x70]
+    5acc: a9465ff8     	ldp	x24, x23, [sp, #0x60]
+    5ad0: a9457bfd     	ldp	x29, x30, [sp, #0x50]
+    5ad4: 910243ff     	add	sp, sp, #0x90
+    5ad8: d65f03c0     	ret
+
+0000000000005adc <md5_transform>:
+    5adc: d10143ff     	sub	sp, sp, #0x50
+    5ae0: a9044ff4     	stp	x20, x19, [sp, #0x40]
+    5ae4: a9422c2a     	ldp	x10, x11, [x1, #0x20]
+    5ae8: aa1f03e8     	mov	x8, xzr
+    5aec: 2940380f     	ldp	w15, w14, [x0]
+    5af0: aa1f03e9     	mov	x9, xzr
+    5af4: d503201f     	nop
+    5af8: 10fd8c8d     	adr	x13, 0xc88 <md5_t>
+    5afc: a9022fea     	stp	x10, x11, [sp, #0x20]
+    5b00: a943302a     	ldp	x10, x12, [x1, #0x30]
+    5b04: 52800030     	mov	w16, #0x1               // =1
+    5b08: 910003f1     	mov	x17, sp
+    5b0c: 2a0f03e5     	mov	w5, w15
+    5b10: 2a0e03e6     	mov	w6, w14
+    5b14: a90333ea     	stp	x10, x12, [sp, #0x30]
+    5b18: a940282b     	ldp	x11, x10, [x1]
+    5b1c: a9002beb     	stp	x11, x10, [sp]
+    5b20: a9412c2c     	ldp	x12, x11, [x1, #0x10]
+    5b24: 528000aa     	mov	w10, #0x5               // =5
+    5b28: f0ffffc1     	adrp	x1, 0x0 <strlen>
+    5b2c: 91362021     	add	x1, x1, #0xd88
+    5b30: a9012fec     	stp	x12, x11, [sp, #0x10]
+    5b34: 29412c0c     	ldp	w12, w11, [x0, #0x8]
+    5b38: 2a0b03e7     	mov	w7, w11
+    5b3c: 2a0c03f3     	mov	w19, w12
+    5b40: 14000024     	b	0x5bd0 <md5_transform+0xf4>
+    5b44: 2a240066     	orn	w6, w3, w4
+    5b48: 4a030053     	eor	w19, w2, w3
+    5b4c: f100bd3f     	cmp	x9, #0x2f
+    5b50: 92400d07     	and	x7, x8, #0xf
+    5b54: 92400d54     	and	x20, x10, #0xf
+    5b58: 4a0200c6     	eor	w6, w6, w2
+    5b5c: 4a040273     	eor	w19, w19, w4
+    5b60: 9a9480e7     	csel	x7, x7, x20, hi
+    5b64: 0a240054     	bic	w20, w2, w4
+    5b68: 1a9380c6     	csel	w6, w6, w19, hi
+    5b6c: 0a030093     	and	w19, w4, w3
+    5b70: f1007d3f     	cmp	x9, #0x1f
+    5b74: 2a140273     	orr	w19, w19, w20
+    5b78: 92400e14     	and	x20, x16, #0xf
+    5b7c: 1a9380c6     	csel	w6, w6, w19, hi
+    5b80: 9a9480e7     	csel	x7, x7, x20, hi
+    5b84: d37ef533     	lsl	x19, x9, #2
+    5b88: b8677a27     	ldr	w7, [x17, x7, lsl #2]
+    5b8c: 0b0500c5     	add	w5, w6, w5
+    5b90: 91000529     	add	x9, x9, #0x1
+    5b94: 91001d08     	add	x8, x8, #0x7
+    5b98: 91000d4a     	add	x10, x10, #0x3
+    5b9c: b87369a6     	ldr	w6, [x13, x19]
+    5ba0: b8736833     	ldr	w19, [x1, x19]
+    5ba4: 0b0700a5     	add	w5, w5, w7
+    5ba8: 91001610     	add	x16, x16, #0x5
+    5bac: f101013f     	cmp	x9, #0x40
+    5bb0: 2a0203e7     	mov	w7, w2
+    5bb4: 0b0600a5     	add	w5, w5, w6
+    5bb8: 4b1303e6     	neg	w6, w19
+    5bbc: 2a0303f3     	mov	w19, w3
+    5bc0: 1ac62ca5     	ror	w5, w5, w6
+    5bc4: 0b0300a6     	add	w6, w5, w3
+    5bc8: 2a0403e5     	mov	w5, w4
+    5bcc: 54000160     	b.eq	0x5bf8 <md5_transform+0x11c>
+    5bd0: f1003d3f     	cmp	x9, #0xf
+    5bd4: 2a0603e3     	mov	w3, w6
+    5bd8: 2a1303e2     	mov	w2, w19
+    5bdc: 2a0703e4     	mov	w4, w7
+    5be0: 54fffb28     	b.hi	0x5b44 <md5_transform+0x68>
+    5be4: 0a030046     	and	w6, w2, w3
+    5be8: 0a230087     	bic	w7, w4, w3
+    5bec: 2a0600e6     	orr	w6, w7, w6
+    5bf0: aa0903e7     	mov	x7, x9
+    5bf4: 17ffffe4     	b	0x5b84 <md5_transform+0xa8>
+    5bf8: 0b0f0088     	add	w8, w4, w15
+    5bfc: 0b0e00c9     	add	w9, w6, w14
+    5c00: a9444ff4     	ldp	x20, x19, [sp, #0x40]
+    5c04: 29002408     	stp	w8, w9, [x0]
+    5c08: 0b0c0068     	add	w8, w3, w12
+    5c0c: 0b0b0049     	add	w9, w2, w11
+    5c10: 29012408     	stp	w8, w9, [x0, #0x8]
+    5c14: 910143ff     	add	sp, sp, #0x50
+    5c18: d65f03c0     	ret
+
+0000000000005c1c <vmp_get_process_name>:
+    5c1c: a9bd7bfd     	stp	x29, x30, [sp, #-0x30]!
+    5c20: f9000bf5     	str	x21, [sp, #0x10]
+    5c24: a9024ff4     	stp	x20, x19, [sp, #0x20]
+    5c28: 910003fd     	mov	x29, sp
+    5c2c: 12800014     	mov	w20, #-0x1              // =-1
+    5c30: b40003c0     	cbz	x0, 0x5ca8 <vmp_get_process_name+0x8c>
+    5c34: 2a0103f5     	mov	w21, w1
+    5c38: 7100083f     	cmp	w1, #0x2
+    5c3c: 5400036b     	b.lt	0x5ca8 <vmp_get_process_name+0x8c>
+    5c40: 2a1503e2     	mov	w2, w21
+    5c44: 2a1f03e1     	mov	w1, wzr
+    5c48: aa0003f3     	mov	x19, x0
+    5c4c: 94000049     	bl	0x5d70 <memset@plt>
+    5c50: f0ffffc0     	adrp	x0, 0x0 <strlen>
+    5c54: 9126fc00     	add	x0, x0, #0x9bf
+    5c58: 2a1f03e1     	mov	w1, wzr
+    5c5c: 9400004d     	bl	0x5d90 <open@plt>
+    5c60: 37f80220     	tbnz	w0, #0x1f, 0x5ca4 <vmp_get_process_name+0x88>
+    5c64: 510006a2     	sub	w2, w21, #0x1
+    5c68: aa1303e1     	mov	x1, x19
+    5c6c: 2a0003f5     	mov	w21, w0
+    5c70: 9400004c     	bl	0x5da0 <read@plt>
+    5c74: aa0003f4     	mov	x20, x0
+    5c78: 2a1503e0     	mov	w0, w21
+    5c7c: 9400004d     	bl	0x5db0 <close@plt>
+    5c80: 71000688     	subs	w8, w20, #0x1
+    5c84: 5400010b     	b.lt	0x5ca4 <vmp_get_process_name+0x88>
+    5c88: 51000689     	sub	w9, w20, #0x1
+    5c8c: 38694a6a     	ldrb	w10, [x19, w9, uxtw]
+    5c90: 7100295f     	cmp	w10, #0xa
+    5c94: 540000a1     	b.ne	0x5ca8 <vmp_get_process_name+0x8c>
+    5c98: 2a0803f4     	mov	w20, w8
+    5c9c: 38294a7f     	strb	wzr, [x19, w9, uxtw]
+    5ca0: 14000002     	b	0x5ca8 <vmp_get_process_name+0x8c>
+    5ca4: 12800014     	mov	w20, #-0x1              // =-1
+    5ca8: 2a1403e0     	mov	w0, w20
+    5cac: a9424ff4     	ldp	x20, x19, [sp, #0x20]
+    5cb0: f9400bf5     	ldr	x21, [sp, #0x10]
+    5cb4: a8c37bfd     	ldp	x29, x30, [sp], #0x30
+    5cb8: d65f03c0     	ret
+
+Disassembly of section .plt:
+
+0000000000005cc0 <.plt>:
+    5cc0: a9bf7bf0     	stp	x16, x30, [sp, #-0x10]!
+    5cc4: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5cc8: f947c611     	ldr	x17, [x16, #0xf88]
+    5ccc: 913e2210     	add	x16, x16, #0xf88
+    5cd0: d61f0220     	br	x17
+    5cd4: d503201f     	nop
+    5cd8: d503201f     	nop
+    5cdc: d503201f     	nop
+
+0000000000005ce0 <__cxa_finalize@plt>:
+    5ce0: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5ce4: f947ca11     	ldr	x17, [x16, #0xf90]
+    5ce8: 913e4210     	add	x16, x16, #0xf90
+    5cec: d61f0220     	br	x17
+
+0000000000005cf0 <__cxa_atexit@plt>:
+    5cf0: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5cf4: f947ce11     	ldr	x17, [x16, #0xf98]
+    5cf8: 913e6210     	add	x16, x16, #0xf98
+    5cfc: d61f0220     	br	x17
+
+0000000000005d00 <vmp_compute@plt>:
+    5d00: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d04: f947d211     	ldr	x17, [x16, #0xfa0]
+    5d08: 913e8210     	add	x16, x16, #0xfa0
+    5d0c: d61f0220     	br	x17
+
+0000000000005d10 <__android_log_print@plt>:
+    5d10: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d14: f947d611     	ldr	x17, [x16, #0xfa8]
+    5d18: 913ea210     	add	x16, x16, #0xfa8
+    5d1c: d61f0220     	br	x17
+
+0000000000005d20 <vmp_verify_key@plt>:
+    5d20: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d24: f947da11     	ldr	x17, [x16, #0xfb0]
+    5d28: 913ec210     	add	x16, x16, #0xfb0
+    5d2c: d61f0220     	br	x17
+
+0000000000005d30 <vmp_md5_hex@plt>:
+    5d30: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d34: f947de11     	ldr	x17, [x16, #0xfb8]
+    5d38: 913ee210     	add	x16, x16, #0xfb8
+    5d3c: d61f0220     	br	x17
+
+0000000000005d40 <vmp_get_process_name@plt>:
+    5d40: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d44: f947e211     	ldr	x17, [x16, #0xfc0]
+    5d48: 913f0210     	add	x16, x16, #0xfc0
+    5d4c: d61f0220     	br	x17
+
+0000000000005d50 <snprintf@plt>:
+    5d50: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d54: f947e611     	ldr	x17, [x16, #0xfc8]
+    5d58: 913f2210     	add	x16, x16, #0xfc8
+    5d5c: d61f0220     	br	x17
+
+0000000000005d60 <strlen@plt>:
+    5d60: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d64: f947ea11     	ldr	x17, [x16, #0xfd0]
+    5d68: 913f4210     	add	x16, x16, #0xfd0
+    5d6c: d61f0220     	br	x17
+
+0000000000005d70 <memset@plt>:
+    5d70: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d74: f947ee11     	ldr	x17, [x16, #0xfd8]
+    5d78: 913f6210     	add	x16, x16, #0xfd8
+    5d7c: d61f0220     	br	x17
+
+0000000000005d80 <memcpy@plt>:
+    5d80: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d84: f947f211     	ldr	x17, [x16, #0xfe0]
+    5d88: 913f8210     	add	x16, x16, #0xfe0
+    5d8c: d61f0220     	br	x17
+
+0000000000005d90 <open@plt>:
+    5d90: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5d94: f947f611     	ldr	x17, [x16, #0xfe8]
+    5d98: 913fa210     	add	x16, x16, #0xfe8
+    5d9c: d61f0220     	br	x17
+
+0000000000005da0 <read@plt>:
+    5da0: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5da4: f947fa11     	ldr	x17, [x16, #0xff0]
+    5da8: 913fc210     	add	x16, x16, #0xff0
+    5dac: d61f0220     	br	x17
+
+0000000000005db0 <close@plt>:
+    5db0: 90000030     	adrp	x16, 0x9000 <close@plt+0x3250>
+    5db4: f947fe11     	ldr	x17, [x16, #0xff8]
+    5db8: 913fe210     	add	x16, x16, #0xff8
+    5dbc: d61f0220     	br	x17
