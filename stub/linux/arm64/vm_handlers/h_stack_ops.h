@@ -37,14 +37,29 @@
 /* VLOAD r: push R[r] → 操作栈 */
 static inline u32 h_s_vload(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
-  SPUSH(vm, vm->R[r & 63]);
+  SPUSH(vm, VMP_REG_GET(vm, r));
   return 2;
 }
 
 /* VSTORE r: pop → R[r] */
 static inline u32 h_s_vstore(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
-  vm->R[r & 63] = SPOP(vm);
+  VMP_REG_SET(vm, r, SPOP(vm));
+  return 2;
+}
+
+/* VLOAD_V r: push V[r].low → 操作栈 */
+static inline u32 h_s_vload_v(vm_ctx_t *vm) {
+  u8 r = vm->bc[vm->pc + 1];
+  SPUSH(vm, vm->V[r & 31][0]);
+  return 2;
+}
+
+/* VSTORE_V r: pop → V[r].low */
+static inline u32 h_s_vstore_v(vm_ctx_t *vm) {
+  u8 r = vm->bc[vm->pc + 1];
+  vm->V[r & 31][0] = SPOP(vm);
+  vm->V[r & 31][1] = 0; /* Zero high part as per AArch64 scalar behavior */
   return 2;
 }
 
@@ -290,14 +305,11 @@ static inline u32 h_s_load_slide(vm_ctx_t *vm) {
 /* VCMP: pop b, pop a → set flags(a - b) */
 static inline u32 h_s_cmp(vm_ctx_t *vm) {
   u64 b = SPOP(vm), a = SPOP(vm);
-  u64 diff = a - b;
+  u64 res = a - b;
   u32 fl = 0;
-  if (diff == 0)
-    fl |= FL_ZERO;
-  if ((i64)a < (i64)b)
-    fl |= FL_SIGN;
-  if (a < b)
-    fl |= FL_CARRY;
+  if (res == 0) fl |= FL_ZERO;
+  if (a >= b) fl |= FL_CARRY;
+  if (res >> 63) fl |= FL_SIGN;
   vm->FL = fl;
   return 1;
 }
@@ -309,7 +321,7 @@ static inline u32 h_s_cmp(vm_ctx_t *vm) {
 /* LD8: pop addr → push *(u8*)addr */
 static inline u32 h_s_ld8(vm_ctx_t *vm) {
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+  if (__builtin_expect(addr != 0, 1)) {
     SPUSH(vm, *(u8 *)addr);
   } else {
     SPUSH(vm, 0);
@@ -319,7 +331,7 @@ static inline u32 h_s_ld8(vm_ctx_t *vm) {
 
 static inline u32 h_s_ld16(vm_ctx_t *vm) {
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+  if (__builtin_expect(addr != 0, 1)) {
     SPUSH(vm, *(u16 *)addr);
   } else {
     SPUSH(vm, 0);
@@ -329,7 +341,7 @@ static inline u32 h_s_ld16(vm_ctx_t *vm) {
 
 static inline u32 h_s_ld32(vm_ctx_t *vm) {
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+  if (__builtin_expect(addr != 0, 1)) {
     SPUSH(vm, *(u32 *)addr);
   } else {
     SPUSH(vm, 0);
@@ -339,7 +351,7 @@ static inline u32 h_s_ld32(vm_ctx_t *vm) {
 
 static inline u32 h_s_ld64(vm_ctx_t *vm) {
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+  if (__builtin_expect(addr != 0, 1)) {
     SPUSH(vm, *(u64 *)addr);
   } else {
     SPUSH(vm, 0);
@@ -351,7 +363,7 @@ static inline u32 h_s_ld64(vm_ctx_t *vm) {
 static inline u32 h_s_st8(vm_ctx_t *vm) {
   u64 val = SPOP(vm);
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+  if (__builtin_expect(addr != 0, 1)) {
     *(u8 *)addr = (u8)val;
   }
   return 1;
@@ -360,7 +372,7 @@ static inline u32 h_s_st8(vm_ctx_t *vm) {
 static inline u32 h_s_st16(vm_ctx_t *vm) {
   u64 val = SPOP(vm);
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+  if (__builtin_expect(addr != 0, 1)) {
     *(u16 *)addr = (u16)val;
   }
   return 1;
@@ -369,7 +381,7 @@ static inline u32 h_s_st16(vm_ctx_t *vm) {
 static inline u32 h_s_st32(vm_ctx_t *vm) {
   u64 val = SPOP(vm);
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+  if (__builtin_expect(addr != 0, 1)) {
     *(u32 *)addr = (u32)val;
   }
   return 1;
@@ -379,7 +391,7 @@ static inline u32 h_s_st32(vm_ctx_t *vm) {
 static inline u32 h_s_st64(vm_ctx_t *vm) {
   u64 val = SPOP(vm);
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr != 0 && addr != (u64)&vm->R[63], 1)) {
+  if (__builtin_expect(addr != 0, 1)) {
     *(u64 *)addr = val;
   }
   return 1;
@@ -394,7 +406,7 @@ static inline u32 h_s_vld(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
   u8 sz_type = vm->bc[vm->pc + 2];
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr == 0 || addr == (u64)&vm->R[63], 0)) return 3;
+  if (__builtin_expect(addr == 0, 0)) return 3;
   u8 *dst = (u8 *)&vm->V[r & 31][0];
 
   u32 width = 0;
@@ -416,7 +428,7 @@ static inline u32 h_s_vst(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
   u8 sz_type = vm->bc[vm->pc + 2];
   u64 addr = SPOP(vm);
-  if (__builtin_expect(addr == 0 || addr == (u64)&vm->R[63], 0)) return 3;
+  if (__builtin_expect(addr == 0, 0)) return 3;
   u8 *src = (u8 *)&vm->V[r & 31][0];
 
   u32 width = 0;
