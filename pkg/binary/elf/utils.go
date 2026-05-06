@@ -176,8 +176,10 @@ func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int, map
 	// offsetMap[0]+1 == len(output) == bc_len, which fails BRANCH_TARGET_VALID(t < bc_len)
 	// in the C VM, suppressing the branch and potentially creating infinite cycles
 	// in nested loops. The C VM executes this NOP harmlessly at startup.
-	output = append(output, vm.OpNop)
-	output = append(output, byte(1)) // size marker for the NOP
+	if len(output) > 0 {
+		output = append(output, vm.OpNop)
+		output = append(output, byte(1)) // size marker for the NOP
+	}
 
 	return output, offsetMap, byteMap
 }

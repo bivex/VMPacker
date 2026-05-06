@@ -159,7 +159,7 @@ func TestReverseInstructions_Simple(t *testing.T) {
 
 	// Each instruction gets a 1-byte size marker appended
 	// HALT (1B) + size(1B) + NOP (1B) + size(1B) = 4 bytes
-	expectedLen := len(original) + 2 // 2 instructions, 2 size markers
+	expectedLen := len(original) + 2 + 2 // 2 instructions, 2 size markers, 2 trailing NOP bytes
 	if len(reversed) != expectedLen {
 		t.Errorf("Expected %d reversed bytes, got %d", expectedLen, len(reversed))
 	}
@@ -183,9 +183,9 @@ func TestReverseInstructions_MultiByteInstruction(t *testing.T) {
 	original := []byte{vm.OpPush, 5, vm.OpHalt}
 	reversed, _, _ := reverseInstructions(original, len(original))
 
-	// HALT(1B) + size(1B) + PUSH(2B) + size(1B) = 5 bytes
-	if len(reversed) != 5 {
-		t.Errorf("Expected 5 reversed bytes, got %d", len(reversed))
+	// HALT(1B) + size(1B) + PUSH(2B) + size(1B) + NOP(2B) = 7 bytes
+	if len(reversed) != 7 {
+		t.Errorf("Expected 7 reversed bytes, got %d", len(reversed))
 	}
 
 	// First instruction should be HALT (was last in original)
@@ -202,9 +202,9 @@ func TestReverseInstructions_ThreeInstructions(t *testing.T) {
 	original := []byte{vm.OpNop, vm.OpNop, vm.OpHalt}
 	reversed, _, _ := reverseInstructions(original, len(original))
 
-	// HALT(1)+size(1) + NOP(1)+size(1) + NOP(1)+size(1) = 6 bytes
-	if len(reversed) != 6 {
-		t.Errorf("Expected 6 bytes, got %d", len(reversed))
+	// HALT(1)+size(1) + NOP(1)+size(1) + NOP(1)+size(1) + NOP(2) = 8 bytes
+	if len(reversed) != 8 {
+		t.Errorf("Expected 8 bytes, got %d", len(reversed))
 	}
 
 	// Verify reversal: HALT should be first, NOP last

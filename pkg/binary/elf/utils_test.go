@@ -38,6 +38,9 @@ func TestReverseInstructions_TrailingNOP(t *testing.T) {
 }
 
 func TestRemapBranchTargets_FirstInstructionTarget(t *testing.T) {
+	vm.GenerateDynamicISA()
+	vm.RebuildOpTable()
+
 	// Simulate a loop: OpJmp at offset 5 targets offset 0 (first instruction).
 	// After reversal + remap, the target must be < len(reversed) (i.e. < bc_len).
 	bc := buildBytecode([][]byte{
