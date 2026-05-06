@@ -100,11 +100,13 @@ func NewTranslator(funcAddr uint64, funcSize int) *Translator {
 		bbLabels:    make(map[int]int),
 	}
 
-	// Initialize register map with random permutation (0..63)
+	// Initialize register map
 	for i := 0; i < 64; i++ {
 		t.regMap[i] = byte(i)
 	}
-	rand.Shuffle(64, func(i, j int) {
+	// Only shuffle the first 32 registers (X0-X31) because the C VM's R array is size 32.
+	// V registers (32-63) are not shuffled.
+	rand.Shuffle(32, func(i, j int) {
 		t.regMap[i], t.regMap[j] = t.regMap[j], t.regMap[i]
 	})
 

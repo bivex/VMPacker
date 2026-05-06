@@ -327,11 +327,27 @@ if (bc_off <= (u64)bc_len - 8) {
       vm->oc_key = trail_oc_key;
       vm->addr_map = (addr_map_entry_t *)&bc_buf[bc_len - map_data_size + crc_size + 320];
       /* 2d. Initialize registers with shuffling */
+      u64 initial_sp = vm->R[31];
+      /* First, initialize X0-X7 */
       for (int i = 0; i < 8; i++) {
-        vm->R[reg_map[i] & 63] = args[i];
+        vm->R[reg_map[i] & 31] = args[i];
+      }
+      /* Initialize FP and LR */
+      vm->R[reg_map[29] & 31] = args[8];
+      vm->R[reg_map[30] & 31] = args[9];
+      /* Move SP to the mapped register */
+      vm->R[reg_map[31] & 31] = initial_sp;
+      /* Initialize V0-V7 (not shuffled) */
+      for (int i = 0; i < 8; i++) {
+        vm->V[i][0] = args[10 + i * 2];
+        vm->V[i][1] = args[10 + i * 2 + 1];
+      }
+      /* Initialize X19-X28 */
+      for (int i = 0; i < 10; i++) {
+        vm->R[reg_map[19 + i] & 31] = args[26 + i];
       }
       /* Save regMap[0] for return */
-      vm->ret_reg = reg_map[0] & 63;
+      vm->ret_reg = reg_map[0] & 31;
       
       vm->bc_len = bc_len - map_data_size; /* Actual bytecode does not include trailer */
 
@@ -1123,6 +1139,28 @@ L_SDIV:
 /* ---- MRS ---- */
 L_MRS:
   NEXT(h_mrs(vm));
+
+/* ---- SMULH/CLZ/CLS/RBIT/REV ---- */
+L_SMULH:
+  NEXT(h_smulh(vm));
+L_CLZ:
+  NEXT(h_clz(vm));
+L_CLS:
+  NEXT(h_cls(vm));
+L_RBIT:
+  NEXT(h_rbit(vm));
+L_REV:
+  NEXT(h_rev(vm));
+L_REV16:
+  NEXT(h_rev16(vm));
+L_REV32:
+  NEXT(h_rev32(vm));
+
+/* ---- ADC/SBC ---- */
+L_ADC:
+  NEXT(h_adc(vm));
+L_SBC:
+  NEXT(h_sbc(vm));
 
 /* ---- FP ALU ---- */
 L_SFADD:
