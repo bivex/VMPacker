@@ -1,50 +1,49 @@
 # VMPacker Project Layout
 
-This document describes the current architecture, directory structure, and high-level workflow of the VMPacker project.
+This document describes the current architecture, directory structure grouped by architectural layers, and the high-level workflow of the VMPacker project.
 
-## Directory Structure
+## Directory Structure by Layer
 
-### `cmd/` (CLI Application)
-* **`cmd/vmpacker/`**: The main entry point for the command-line interface.
-  * `main.go`: Handles CLI arguments, flags, and orchestrates the overall packing process.
+### 1. Presentation / Interface Layer
+This layer contains the front-facing entry points that users interact with to utilize the packer.
+* **`cmd/`** (CLI Application)
+  * **`cmd/vmpacker/`**: The main entry point for the command-line interface.
+    * `main.go`: Handles CLI arguments, flags, and orchestrates the overall packing process.
+* **`vmp-gui/`** (Graphical Interface)
+  * A cross-platform GUI for the packer, built using the [Wails](https://wails.io/) framework.
+  * Combines a Go backend (`app.go`) with a frontend web interface (`frontend/`).
 
-### `pkg/` (Core Go Libraries)
-The core business logic of the packer is located here.
+### 2. Core / Business Logic Layer (`pkg/`)
+The core Go libraries containing the primary logic for translation, obfuscation, and binary manipulation.
 * **`pkg/arch/`**: Architecture-specific translation modules.
   * Contains the logic (e.g., `arm64`, `arm32`) to lift native instructions into the Virtual Machine's intermediate representation (IR) or bytecode.
 * **`pkg/binary/`**: Binary parsing, manipulation, and injection.
   * **`pkg/binary/elf/`**: Code for parsing ELF files, locating target functions, modifying segments, injecting the VM blob, and patching original functions to redirect execution to the VM.
 * **`pkg/vm/`**: Virtual Machine definitions and logic.
   * Defines the dynamic ISA (Instruction Set Architecture), opcodes, and bytecode utilities.
-  * Includes bytecode obfuscation features (like opcode encryption and instruction reversal).
+  * Includes bytecode obfuscation features (like opcode encryption, Mixed Boolean Arithmetic, and instruction reversal).
 
-### `stub/` (VM Interpreter)
-The C/Assembly source code for the runtime Virtual Machine interpreter.
-* This code is compiled into a lightweight "blob" that is injected into the target executable. At runtime, it decrypts and interprets the protected bytecode.
-* **`stub/linux/`**: The primary C interpreter loop, handlers, and dispatch logic.
-* **`stub/arm32/`**: Specific stub implementations for 32-bit ARM.
+### 3. Runtime / Payload Layer (`stub/`)
+The code that actually gets injected into the protected binary and executes alongside it at runtime.
+* **`stub/`**: The C/Assembly source code for the runtime Virtual Machine interpreter.
+  * This code is compiled into a lightweight "blob" that is injected into the target executable. At runtime, it decrypts and interprets the protected bytecode.
+  * **`stub/linux/`**: The primary C interpreter loop, handlers, and dispatch logic.
+  * **`stub/arm32/`**: Specific stub implementations for 32-bit ARM architectures.
 
-### `demo/` (Test & Demo Programs)
-A collection of C programs used for testing the packer's correctness.
-* Each demo targets specific instructions (e.g., `demo_insn_add.c`), control flow structures, or edge cases.
-* Includes scripts (`Makefile-demo`) and harnesses (`demo_go_test`, `demo_rust_test`) for automated validation.
-
-### `vmp-gui/` (Graphical Interface)
-A cross-platform GUI for the packer.
-* Built using the [Wails](https://wails.io/) framework.
-* Combines a Go backend (`app.go`) with a frontend web interface (`frontend/`).
-
-### `scripts/` (Build & Utility Scripts)
-Helper scripts for the development lifecycle.
-* Contains shell scripts (`build_stub32_unix.sh`, `build_stub64_unix.sh`) used to compile the C VM stubs into the embeddable binary blobs used by the Go packer.
-
-### `test/` & `scratch/` (Testing & Experimentation)
-* **`test/`**: Integration testing framework (`libvmptest`) to verify that packed binaries execute correctly.
+### 4. Testing & Verification Layer
+Components used to ensure the packer operates correctly without breaking the protected programs.
+* **`demo/`**: A collection of C programs used for testing the packer's correctness.
+  * Each demo targets specific instructions (e.g., `demo_insn_add.c`), control flow structures, or edge cases.
+  * Includes scripts (`Makefile-demo`) and harnesses (`demo_go_test`, `demo_rust_test`) for automated validation.
+* **`test/`**: Integration testing framework (`libvmptest`) to verify that packed binaries execute correctly, especially in specific environments like Android.
 * **`scratch/`**: Sandbox directory for developers to test ideas, inspect disassembly, or write temporary validation scripts (e.g., `check_sizes.go`).
 
-### `docs/` (Documentation)
-Project documentation.
-* Includes ISA specifications (`ISA.md`), build instructions (`BUILD_ARM32.md`), security models (`RUNTIME_SECURITY.md`), and developer notes.
+### 5. Tooling & Documentation Layer
+Supporting materials for developers working on VMPacker.
+* **`scripts/`**: Helper scripts for the development lifecycle.
+  * Contains shell scripts (`build_stub32_unix.sh`, `build_stub64_unix.sh`) used to compile the C VM stubs into the embeddable binary blobs.
+* **`docs/`**: Project documentation.
+  * Includes ISA specifications (`ISA.md`), build instructions (`BUILD_ARM32.md`), security models (`RUNTIME_SECURITY.md`), and developer notes.
 
 ---
 
