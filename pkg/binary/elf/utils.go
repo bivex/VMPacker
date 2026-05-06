@@ -171,6 +171,14 @@ func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int, map
 		}
 	}
 
+	// Append a trailing NOP so that no remapped branch target equals bc_len.
+	// Without this, branches targeting the first original instruction would have
+	// offsetMap[0]+1 == len(output) == bc_len, which fails BRANCH_TARGET_VALID(t < bc_len)
+	// in the C VM, suppressing the branch and potentially creating infinite cycles
+	// in nested loops. The C VM executes this NOP harmlessly at startup.
+	output = append(output, vm.OpNop)
+	output = append(output, byte(1)) // size marker for the NOP
+
 	return output, offsetMap, byteMap
 }
 
