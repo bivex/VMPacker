@@ -6,10 +6,10 @@ _vmp_stub_base:
 .type vm_entry_token, %function
 
 vm_entry_token:
-    /* Stack frame 304B: FP/LR(16) + X0-X7(64) + callerFP/LR(16) + V0-V7(128) + X19-X28(80) */
+    /* Stack frame 320B: FP/LR(16) + X0-X7(64) + callerFP/LR(16) + V0-V7(128) + X19-X28(80) + X18(8) + Padding(8) */
     mov x9, x29               /* Save caller FP */
     mov x10, x30              /* Save caller LR */
-    stp x29, x30, [sp, #-304]! /* Save FP/LR + Allocate 304B frame */
+    stp x29, x30, [sp, #-320]! /* Save FP/LR + Allocate 320B frame */
     mov x29, sp               /* Establish frame */
     
     stp x0, x1, [sp, #16]     /* args[0..1] = X0, X1 */
@@ -28,6 +28,7 @@ vm_entry_token:
     stp x23, x24, [sp, #256]  /* args[30..31] = X23, X24 */
     stp x25, x26, [sp, #272]  /* args[32..33] = X25, X26 */
     stp x27, x28, [sp, #288]  /* args[34..35] = X27, X28 */
+    str x18, [sp, #304]        /* args[36] = X18 (Shadow Stack) */
     
     add x0, sp, #16           /* X0 = args pointer */
     mov w1, w16               /* X1 = token (from X16/IP0) */
@@ -38,5 +39,6 @@ vm_entry_token:
     ldp x23, x24, [sp, #256]  /* Restore X23, X24 */
     ldp x25, x26, [sp, #272]  /* Restore X25, X26 */
     ldp x27, x28, [sp, #288]  /* Restore X27, X28 */
-    ldp x29, x30, [sp], #304  /* Restore FP/LR + Free frame */
+    ldr x18, [sp, #304]        /* Restore X18 */
+    ldp x29, x30, [sp], #320  /* Restore FP/LR + Free frame */
     ret                       /* Return (result in X0) */

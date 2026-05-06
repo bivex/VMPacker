@@ -37,7 +37,11 @@ static inline void sys_write(int fd, const void *buf, unsigned long len) {
   __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2) : "memory");
 }
 
+#if defined(VM_DEBUG_ENABLED)
 #define VM_DEBUG(msg) sys_write(1, msg, sizeof(msg)-1)
+#else
+#define VM_DEBUG(msg)
+#endif
 
 /* ---- Native Function Pointer Type ---- */
 typedef u64 (*native_fn_t)(u64, u64, u64, u64, u64, u64, u64, u64);
@@ -76,7 +80,9 @@ typedef struct {
 
   u8 ret_reg;   /* Shuffled index of R0 (X0 return value) */
   u8 reverse;   /* Opcode reverse flag */
-  u16 padding;
+  u8 reg_map[32]; /* Logical Xn -> Physical vm->R[i] mapping */
+  u8 debug;     /* Debug trace enabled */
+  u8 padding;
   u32 oc_key;   /* OpcodeCryptor key */
 
   /* Memory stack (R[31] points to the end of this space) */
@@ -105,6 +111,15 @@ typedef struct {
   u32 bc_crc_len;      /* Length of bytecode to CRC check */
   u32 insn_count;      /* Executed instruction counter for periodic checks */
 } vm_ctx_t;
+
+/* ---- Safe Register Access Macros ---- */
+/* Logical index 63 is XZR (hardcoded 0). Physical indices are 0..31. */
+#define VMP_REG_GET(vm, r) (((r) == 63) ? 0 : (vm)->R[(r) & 31])
+#define VMP_REG_SET(vm, r, val)                                                \
+  do {                                                                         \
+    if ((r) != 63)                                                             \
+      (vm)->R[(r) & 31] = (u64)(val);                                          \
+  } while (0)
 
 /* ---- SP Stack Boundary Check ---- */
 /* Check if address is within vm_stk range (only for SP-related access) */

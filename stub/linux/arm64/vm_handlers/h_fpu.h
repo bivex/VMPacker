@@ -165,7 +165,7 @@ static inline u32 h_fcvt_if(vm_ctx_t *vm) {
   u8 fp_type = type & 1;
   u8 is_unsigned = (type >> 2) & 1;
   
-  u64 val = vm->R[n & 63];
+  u64 val = VMP_REG_GET(vm, n);
   if (fp_type == 0) { /* To float */
     float f;
     if (is_unsigned) {
@@ -209,7 +209,7 @@ static inline u32 h_fcvt_fi(vm_ctx_t *vm) {
       else res = (u64)(u32)(i32)f;
     }
     if (dest_is_v) __builtin_memcpy(&vm->V[d & 63][0], &res, sf ? 8 : 4);
-    else vm->R[d & 63] = res;
+    else VMP_REG_SET(vm, d, res);
   } else { /* From double */
     double db; __builtin_memcpy(&db, &vm->V[n & 63][0], 8);
     u64 res;
@@ -221,7 +221,7 @@ static inline u32 h_fcvt_fi(vm_ctx_t *vm) {
       else res = (u64)(u32)(i32)db;
     }
     if (dest_is_v) __builtin_memcpy(&vm->V[d & 63][0], &res, sf ? 8 : 4);
-    else vm->R[d & 63] = res;
+    else VMP_REG_SET(vm, d, res);
   }
   return 4;
 }
@@ -287,7 +287,7 @@ static inline u32 h_fcvt(vm_ctx_t *vm) {
 /* SFMOVRV d, n, type: R[n] -> V[d] [4B] */
 static inline u32 h_fmov_rv(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
-  u64 val = vm->R[n & 63];
+  u64 val = VMP_REG_GET(vm, n);
   if (type == 0) { /* 32-bit */
     u32 v32 = (u32)val;
     __builtin_memcpy(&vm->V[d & 63][0], &v32, 4);
@@ -307,7 +307,7 @@ static inline u32 h_fmov_vr(vm_ctx_t *vm) {
   } else { /* 64-bit */
     __builtin_memcpy(&val, &vm->V[n & 63][0], 8);
   }
-  vm->R[d & 63] = val;
+  VMP_REG_SET(vm, d, val);
   return 4;
 }
 

@@ -23,9 +23,19 @@ func (t *Translator) sVload(reg byte) {
 	t.emit(vm.OpSVload, reg)
 }
 
+// sVloadV push V[reg] onto eval stack
+func (t *Translator) sVloadV(reg byte) {
+	t.emit(vm.OpSVloadV, reg)
+}
+
 // sVstore pop eval stack → R[reg]
 func (t *Translator) sVstore(reg byte) {
 	t.emit(vm.OpSVstore, reg)
+}
+
+// sVstoreV pop eval stack → V[reg]
+func (t *Translator) sVstoreV(reg byte) {
+	t.emit(vm.OpSVstoreV, reg)
 }
 
 // sPushImm32 push a 32-bit immediate
@@ -328,6 +338,8 @@ func (t *Translator) mapReg3(inst vm.Instruction) (byte, byte, byte, error) {
 func (t *Translator) pushRegOrZero(arm64Reg int, vmReg byte) {
 	if arm64Reg == vm.REG_XZR {
 		t.sPushImm32(0)
+	} else if arm64Reg >= vm.REG_V_BASE {
+		t.sVloadV(vmReg)
 	} else {
 		t.sVload(vmReg)
 	}
