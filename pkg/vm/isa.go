@@ -125,6 +125,8 @@ const (
 	OpIdSSt64
 	OpIdSVLd
 	OpIdSVSt
+	OpIdSVLdV
+	OpIdSVStV
 	OpIdSFAdd
 	OpIdSFSub
 	OpIdSFMul
@@ -229,6 +231,8 @@ var opPtrs = [](*byte){
 		&OpSbc,
 		&OpSVload,
 		&OpSVstore,
+		&OpSVloadV,
+		&OpSVstoreV,
 		&OpSPushImm32,
 		&OpSPushImm64,
 		&OpSDup,

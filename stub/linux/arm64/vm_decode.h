@@ -234,6 +234,8 @@ static inline u8 vm_logical_insn_size(u8 id) {
   case OP_ID_BRREG:
   case OP_ID_SVLOAD:
   case OP_ID_SVSTORE:
+  case OP_ID_SVLOADV:
+  case OP_ID_SVSTOREV:
     return 2;
   case OP_ID_MOVREG:
   case OP_ID_NOT:

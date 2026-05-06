@@ -124,6 +124,8 @@ func buildOpTable() map[byte]opInfo {
 	// ---- Stack Machine Opcodes ----
 	OpSVload:     {"S_VLOAD", 2},  // op + r
 	OpSVstore:    {"S_VSTORE", 2}, // op + r
+	OpSVloadV:    {"S_VLOAD_V", 2}, // op + r
+	OpSVstoreV:   {"S_VSTORE_V", 2}, // op + r
 	OpSPushImm32: {"S_PUSH32", 5}, // op + imm32
 	OpSPushImm64: {"S_PUSH64", 9}, // op + imm64
 	OpSDup:       {"S_DUP", 1},

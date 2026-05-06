@@ -390,8 +390,13 @@ __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_vload(vm_ctx_t *vm) {
 __attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_vstore(vm_ctx_t *vm) {
   return h_s_vstore(vm);
 }
-__attribute__((noinline)) VM_SECTION_MEM static u32
-hw_s_push_imm32(vm_ctx_t *vm) {
+__attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_vload_v(vm_ctx_t *vm) {
+  return h_s_vload_v(vm);
+}
+__attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_vstore_v(vm_ctx_t *vm) {
+  return h_s_vstore_v(vm);
+}
+__attribute__((noinline)) VM_SECTION_MEM static u32 hw_s_push_imm32(vm_ctx_t *vm) {
   return h_s_push_imm32(vm);
 }
 __attribute__((noinline)) VM_SECTION_MEM static u32
@@ -655,6 +660,8 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   /* ---- Stack Machine Opcodes ---- */
   tbl[OP_ID_SVLOAD] = hw_s_vload;
   tbl[OP_ID_SVSTORE] = hw_s_vstore;
+  tbl[OP_ID_SVLOADV] = hw_s_vload_v;
+  tbl[OP_ID_SVSTOREV] = hw_s_vstore_v;
   tbl[OP_ID_SPUSHIMM32] = hw_s_push_imm32;
   tbl[OP_ID_SPUSHIMM64] = hw_s_push_imm64;
   tbl[OP_ID_SDUP] = hw_s_dup;

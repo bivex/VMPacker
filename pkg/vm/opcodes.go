@@ -136,6 +136,8 @@ var (
 	// Stack <-> register transfer
 	OpSVload     byte = 0x01 // push R[r]             2B: [op][r]
 	OpSVstore    byte = 0x02 // pop → R[r]            2B: [op][r]
+	OpSVloadV    byte = 0x79 // push V[r]             2B: [op][r]
+	OpSVstoreV   byte = 0x7A // pop → V[r]            2B: [op][r]
 	OpSPushImm32 byte = 0x03 // push imm32            5B: [op][imm32]
 	OpSPushImm64 byte = 0x04 // push imm64            9B: [op][imm64]
 
