@@ -13,7 +13,7 @@
 #include "../vm_types.h"
 
 /* PUSH Xn */
-static inline u32 h_push(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_push(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
   if (__builtin_expect(vm->sp >= VM_STACK_SIZE, 0)) {
     vm->FL |= FL_CARRY; /* 栈溢出标志 */
@@ -24,7 +24,7 @@ static inline u32 h_push(vm_ctx_t *vm) {
 }
 
 /* POP Xn */
-static inline u32 h_pop(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_pop(vm_ctx_t *vm) {
   u8 r = vm->bc[vm->pc + 1];
   if (__builtin_expect(vm->sp <= 0, 0)) {
     vm->FL |= FL_CARRY; /* 栈下溢标志 */

@@ -10,7 +10,7 @@
 /* 64-bit software div/rem — 避免 __aeabi_uldivmod/__aeabi_ldivmod (libgcc)
  * 32-bit ARM 必须用软件实现 (-nostdlib 无 libgcc) */
 #if (defined(__arm__) || defined(__thumb__)) || !defined(__SIZEOF_INT128__) || __SIZEOF_INT128__ != 16
-static inline u64 udiv64(u64 n, u64 d) {
+static u64 udiv64(u64 n, u64 d) {
   if (d == 0) return 0;
   u64 q = 0, r = 0;
   for (int i = 63; i >= 0; i--) {
@@ -19,7 +19,7 @@ static inline u64 udiv64(u64 n, u64 d) {
   }
   return q;
 }
-static inline u64 urem64(u64 n, u64 d) {
+static u64 urem64(u64 n, u64 d) {
   if (d == 0) return 0;
   u64 r = 0;
   for (int i = 63; i >= 0; i--) {
@@ -28,7 +28,7 @@ static inline u64 urem64(u64 n, u64 d) {
   }
   return r;
 }
-static inline u64 sdiv64(i64 a, i64 b) {
+static u64 sdiv64(i64 a, i64 b) {
   if (b == 0) return 0;
   int neg = (a < 0) != (b < 0);
   u64 ua = (u64)(a < 0 ? -a : a);
@@ -41,17 +41,17 @@ static inline u64 sdiv64(i64 a, i64 b) {
 
 #if defined(__SIZEOF_INT128__) && __SIZEOF_INT128__ == 16
 /* 64-bit targets with __int128 */
-static inline u64 umulh64(u64 a, u64 b) {
+static u64 umulh64(u64 a, u64 b) {
   __uint128_t r = (__uint128_t)a * (__uint128_t)b;
   return (u64)(r >> 64);
 }
-static inline u64 smulh64(u64 a, u64 b) {
+static u64 smulh64(u64 a, u64 b) {
   __int128 r = (__int128)(i64)a * (__int128)(i64)b;
   return (u64)((unsigned __int128)r >> 64);
 }
 #else
 /* 32-bit fallback: 64x64 -> 128 bit product, return high 64 */
-static inline u64 umulh64(u64 a, u64 b) {
+static u64 umulh64(u64 a, u64 b) {
   u32 a_lo = (u32)a, a_hi = (u32)(a >> 32);
   u32 b_lo = (u32)b, b_hi = (u32)(b >> 32);
   u64 p0 = (u64)a_lo * b_lo;
@@ -61,7 +61,7 @@ static inline u64 umulh64(u64 a, u64 b) {
   u64 t = (p1 & 0xFFFFFFFFULL) + (p2 & 0xFFFFFFFFULL) + (p0 >> 32);
   return p3 + (p1 >> 32) + (p2 >> 32) + (t >> 32);
 }
-static inline u64 smulh64(u64 a, u64 b) {
+static u64 smulh64(u64 a, u64 b) {
   i64 sa = (i64)a, sb = (i64)b;
   int neg = (sa < 0) != (sb < 0);
   u64 ua = sa < 0 ? (u64)-sa : (u64)sa;

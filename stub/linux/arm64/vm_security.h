@@ -23,7 +23,7 @@
 
 /* ---- Syscall Wrappers ---- */
 
-static inline int sys_openat(int dirfd, const char *pathname, int flags) {
+static int sys_openat(int dirfd, const char *pathname, int flags) {
   register long x8 __asm__("x8") = __NR_openat;
   register long x0 __asm__("x0") = (long)dirfd;
   register long x1 __asm__("x1") = (long)pathname;
@@ -33,7 +33,7 @@ static inline int sys_openat(int dirfd, const char *pathname, int flags) {
   return (int)x0;
 }
 
-static inline long sys_read(int fd, void *buf, unsigned long count) {
+static long sys_read(int fd, void *buf, unsigned long count) {
   register long x8 __asm__("x8") = __NR_read;
   register long x0 __asm__("x0") = (long)fd;
   register long x1 __asm__("x1") = (long)buf;
@@ -42,14 +42,14 @@ static inline long sys_read(int fd, void *buf, unsigned long count) {
   return x0;
 }
 
-static inline int sys_close(int fd) {
+static int sys_close(int fd) {
   register long x8 __asm__("x8") = __NR_close;
   register long x0 __asm__("x0") = (long)fd;
   __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8) : "memory");
   return (int)x0;
 }
 
-static inline int sys_madvise(void *addr, unsigned long len, int advice) {
+static int sys_madvise(void *addr, unsigned long len, int advice) {
   register long x8 __asm__("x8") = __NR_madvise;
   register long x0 __asm__("x0") = (long)addr;
   register long x1 __asm__("x1") = (long)len;
@@ -58,7 +58,7 @@ static inline int sys_madvise(void *addr, unsigned long len, int advice) {
   return (int)x0;
 }
 
-static inline long sys_ptrace(int request, long pid, void *addr, void *data) {
+static long sys_ptrace(int request, long pid, void *addr, void *data) {
   register long x8 __asm__("x8") = __NR_ptrace;
   register long x0 __asm__("x0") = (long)request;
   register long x1 __asm__("x1") = (long)pid;
@@ -70,14 +70,14 @@ static inline long sys_ptrace(int request, long pid, void *addr, void *data) {
 
 /* ---- Anti-Tampering: Memory Dump Protection ---- */
 
-static inline void sec_protect_memory(void *addr, unsigned long len) {
+static void sec_protect_memory(void *addr, unsigned long len) {
   /* Prevent the region from appearing in core dumps */
   /* sys_madvise(addr, len, MADV_DONTDUMP); */
 }
 
 /* ---- Anti-Tampering: Buffer Zeroing ---- */
 
-static inline void sec_zero_memory(void *addr, unsigned long len) {
+static void sec_zero_memory(void *addr, unsigned long len) {
   /* Explicitly zero out memory to prevent lingering sensitive data */
   volatile char *ptr = (volatile char *)addr;
   while (len--) {
@@ -87,7 +87,7 @@ static inline void sec_zero_memory(void *addr, unsigned long len) {
 
 /* ---- Anti-Debug: Ptrace Check ---- */
 
-static inline int sec_check_ptrace(void) {
+static int sec_check_ptrace(void) {
   /* Try to trace ourselves. If it fails, a debugger might already be attached. */
   long ret = sys_ptrace(PTRACE_TRACEME, 0, 0, 0);
   if (ret < 0) {
@@ -98,7 +98,7 @@ static inline int sec_check_ptrace(void) {
 
 /* ---- Anti-Debug: Procfs TracerPid Check ---- */
 
-static inline int sec_check_tracerpid(void) {
+static int sec_check_tracerpid(void) {
   char proc_path[18];
   proc_path[0] = '/'; proc_path[1] = 'p'; proc_path[2] = 'r'; proc_path[3] = 'o'; proc_path[4] = 'c';
   proc_path[5] = '/'; proc_path[6] = 's'; proc_path[7] = 'e'; proc_path[8] = 'l'; proc_path[9] = 'f';
@@ -148,7 +148,7 @@ static inline int sec_check_tracerpid(void) {
 /* ---- Anti-Debug: Timing Check ---- */
 
 /* Returns the current value of CNTVCT_EL0 (virtual timer count) */
-static inline unsigned long long sec_get_timer(void) {
+static unsigned long long sec_get_timer(void) {
   unsigned long long ticks;
   __asm__ volatile("mrs %0, cntvct_el0" : "=r"(ticks));
   return ticks;
@@ -156,7 +156,7 @@ static inline unsigned long long sec_get_timer(void) {
 
 /* ---- Anti-Debug: Breakpoint Scanning ---- */
 
-static inline int sec_scan_breakpoints(void *addr, unsigned long len) {
+static int sec_scan_breakpoints(void *addr, unsigned long len) {
   /* Scan for AArch64 BRK instructions (0xD4200000 mask 0xFFE0001F) */
   unsigned int *ptr = (unsigned int *)addr;
   unsigned long count = len / 4;
@@ -170,7 +170,7 @@ static inline int sec_scan_breakpoints(void *addr, unsigned long len) {
 
 /* ---- Anti-Hook: Inline Hook Detection ---- */
 
-static inline int sec_scan_inline_hook(void *func_addr) {
+static int sec_scan_inline_hook(void *func_addr) {
   /* Check first instruction for an unconditional branch (B) or LDR PC */
   if (!func_addr) return 0;
   unsigned int insn = *(volatile unsigned int *)func_addr;
@@ -195,7 +195,7 @@ static inline int sec_scan_inline_hook(void *func_addr) {
 
 #define VM_CHECK_INTERVAL 1024 /* Check every 1024 instructions */
 
-__attribute__((always_inline)) static inline void sec_panic(int code) {
+__attribute__((always_inline)) static void sec_panic(int code) {
   /* Instead of a clean exit, we can make it more annoying for the researcher. */
   /* 1. Corrupt some registers or stack? 
    * 2. Trigger an illegal instruction. */
@@ -204,7 +204,7 @@ __attribute__((always_inline)) static inline void sec_panic(int code) {
   while(1) { __asm__ volatile("yield"); }
 }
 
-static inline int sec_runtime_check(vm_ctx_t *vm) {
+static int sec_runtime_check(vm_ctx_t *vm) {
   /*
   vm->insn_count++;
   if (__builtin_expect((vm->insn_count & (VM_CHECK_INTERVAL - 1)) == 0, 0)) {

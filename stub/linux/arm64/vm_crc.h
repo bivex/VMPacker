@@ -24,7 +24,7 @@
 /* ---- CRC32 Bitwise Implementation (no table) ---- */
 /* Do not use lookup table: stub is an RX-only flat binary, cannot write to .bss/.data */
 
-static inline u32 crc32_calc(const u8 *data, u32 len) {
+static u32 crc32_calc(const u8 *data, u32 len) {
   u32 crc = 0xFFFFFFFFu, i, j;
   for (i = 0; i < len; i++) {
     crc ^= data[i];

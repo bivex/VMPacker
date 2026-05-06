@@ -21,92 +21,91 @@
 /* ---- 加载 (LDR) ---- */
 
 /* LDRB Wd, [Xn, #off16] */
-static inline u32 h_load8(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_load8(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[n & 63] + off;
-  if (0) /* DISABLE CHECK */
-    return 5;
-  vm->R[d & 63] = *(u8 *)addr;
+  u64 addr = VMP_REG_GET(vm, n) + off;
+  VMP_REG_SET(vm, d, *(u8 *)addr);
   return 5;
 }
 
 /* LDR Wd, [Xn, #off16] */
-static inline u32 h_load32(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_load32(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[n & 63] + off;
-  if ((n & 63) == 31 && !VM_STK_CHECK(vm, addr, 4))
+  u64 addr = VMP_REG_GET(vm, n) + off;
+  if (n == 31 && !VM_STK_CHECK(vm, addr, 4))
     return 5;
-  vm->R[d & 63] = *(u32 *)addr;
+  VMP_REG_SET(vm, d, rd32((const u8 *)addr));
   return 5;
 }
 
 /* LDR Xd, [Xn, #off16] */
-static inline u32 h_load64(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_load64(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[n & 63] + off;
-  if ((n & 63) == 31 && !VM_STK_CHECK(vm, addr, 8))
+  u64 addr = VMP_REG_GET(vm, n) + off;
+  if (n == 31 && !VM_STK_CHECK(vm, addr, 8))
     return 5;
-  vm->R[d & 63] = *(u64 *)addr;
+  VMP_REG_SET(vm, d, rd64((const u8 *)addr));
   return 5;
 }
 
 /* LDRH Wd, [Xn, #off16] */
-static inline u32 h_load16(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_load16(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[n & 63] + off;
-  if ((n & 63) == 31 && !VM_STK_CHECK(vm, addr, 2))
-    return 5; /* SP 越界, 静默跳过 */
-  vm->R[d & 63] = *(u16 *)addr;
+  u64 addr = VMP_REG_GET(vm, n) + off;
+  if (n == 31 && !VM_STK_CHECK(vm, addr, 2))
+    return 5;
+  VMP_REG_SET(vm, d, rd16((const u8 *)addr));
   return 5;
 }
 
 /* ---- 存储 (STR) ---- */
 
 /* STRB Wn, [Xb, #off16] */
-static inline u32 h_store8(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_store8(vm_ctx_t *vm) {
   u8 b = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[b & 63] + off;
-  if ((b & 63) == 31 && !VM_STK_CHECK(vm, addr, 1))
+  u64 addr = VMP_REG_GET(vm, b) + off;
+  if (b == 31 && !VM_STK_CHECK(vm, addr, 1))
     return 5;
-  *(u8 *)addr = (u8)vm->R[n & 63];
+  *(u8 *)addr = (u8)VMP_REG_GET(vm, n);
   return 5;
 }
 
 /* STRH Wn, [Xb, #off16] */
-static inline u32 h_store16(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_store16(vm_ctx_t *vm) {
   u8 b = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[b & 63] + off;
-  if ((b & 63) == 31 && !VM_STK_CHECK(vm, addr, 2))
+  u64 addr = VMP_REG_GET(vm, b) + off;
+  if (b == 31 && !VM_STK_CHECK(vm, addr, 2))
     return 5;
-  *(u16 *)addr = (u16)vm->R[n & 63];
+  u16 v16 = (u16)VMP_REG_GET(vm, n);
+  __builtin_memcpy((void *)addr, &v16, 2);
   return 5;
 }
 
 /* STR Wn, [Xb, #off16] */
-static inline u32 h_store32(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_store32(vm_ctx_t *vm) {
   u8 b = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[b & 63] + off;
-  if ((b & 63) == 31 && !VM_STK_CHECK(vm, addr, 4))
+  u64 addr = VMP_REG_GET(vm, b) + off;
+  if (b == 31 && !VM_STK_CHECK(vm, addr, 4))
     return 5;
-  *(u32 *)addr = (u32)vm->R[n & 63];
+  wr32((u8 *)addr, (u32)VMP_REG_GET(vm, n));
   return 5;
 }
 
 /* STR Xn, [Xb, #off16] */
-static inline u32 h_store64(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_store64(vm_ctx_t *vm) {
   u8 b = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
   i16 off = (i16)rd16(&vm->bc[vm->pc + 3]);
-  u64 addr = vm->R[b & 63] + off;
-  if ((b & 63) == 31 && !VM_STK_CHECK(vm, addr, 8))
+  u64 addr = VMP_REG_GET(vm, b) + off;
+  if (b == 31 && !VM_STK_CHECK(vm, addr, 8))
     return 5;
-  *(u64 *)addr = vm->R[n & 63];
+  wr64((u8 *)addr, VMP_REG_GET(vm, n));
   return 5;
 }
 

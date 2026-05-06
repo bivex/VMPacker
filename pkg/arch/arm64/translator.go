@@ -511,8 +511,9 @@ func (t *Translator) finishTranslate(result *TranslateResult) (*TranslateResult,
 		t.emitU32(uint32(entry.arm64))
 		t.emitU32(uint32(entry.vm))
 	}
-	t.emit(0)    // reverse placeholder
-	t.emitU32(0) // oc_key placeholder
+	t.emit(0, 0, 0) // Alignment padding (3B)
+	t.emit(0)       // reverse placeholder (1B)
+	t.emitU32(0)    // oc_key placeholder (4B)
 	t.emitU32(mapCount)
 	t.emitU64(t.funcAddr)
 	t.emitU32(uint32(t.funcSize))

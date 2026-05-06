@@ -17,10 +17,10 @@
 #define VM_SECTIONS_H
 
 #ifdef VM_FUNC_SPLIT
-  #define VM_SECTION_ALU     __attribute__((section(".text.vm_alu")))
-  #define VM_SECTION_MEM     __attribute__((section(".text.vm_mem")))
-  #define VM_SECTION_BRANCH  __attribute__((section(".text.vm_branch")))
-  #define VM_SECTION_SYSTEM  __attribute__((section(".text.vm_system")))
+  #define VM_SECTION_ALU     __attribute__((section(".text.entry")))
+  #define VM_SECTION_MEM     __attribute__((section(".text.entry")))
+  #define VM_SECTION_BRANCH  __attribute__((section(".text.entry")))
+  #define VM_SECTION_SYSTEM  __attribute__((section(".text.entry")))
 #else
   #define VM_SECTION_ALU
   #define VM_SECTION_MEM

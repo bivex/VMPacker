@@ -33,7 +33,7 @@ typedef u32 (*vm_handler_fn)(vm_ctx_t *vm);
 /* ================================================================
  * Handler Wrapper Functions
  *
- * Existing handlers are static inline, the compiler may inline them.
+ * Existing handlers are static, the compiler may inline them.
  * Wrapper functions use noinline to ensure independent function bodies are generated,
  * making the indirect call mechanism truly effective.
  * ================================================================ */
@@ -660,8 +660,8 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   /* ---- Stack Machine Opcodes ---- */
   tbl[OP_ID_SVLOAD] = hw_s_vload;
   tbl[OP_ID_SVSTORE] = hw_s_vstore;
-  tbl[OP_ID_SVLOADV] = hw_s_vload_v;
-  tbl[OP_ID_SVSTOREV] = hw_s_vstore_v;
+  tbl[OP_ID_SVLDV] = hw_s_vload_v;
+  tbl[OP_ID_SVSTV] = hw_s_vstore_v;
   tbl[OP_ID_SPUSHIMM32] = hw_s_push_imm32;
   tbl[OP_ID_SPUSHIMM64] = hw_s_push_imm64;
   tbl[OP_ID_SDUP] = hw_s_dup;
@@ -726,7 +726,7 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_ID_SFMOVVR] = hw_fmov_vr;
   tbl[OP_ID_SFCVT] = hw_fcvt;
   tbl[OP_ID_SDECRYPTSTR] = hw_s_decrypt_str;
-  tbl[OP_ID_SPRINTF] = hw_snprintf;
+  tbl[OP_ID_SNPRINTF] = hw_snprintf;
 }
 
 #endif /* VM_INDIRECT_DISPATCH */

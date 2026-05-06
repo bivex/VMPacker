@@ -12,7 +12,7 @@
 
 typedef int (*snprintf_func_t)(char *, unsigned long, const char *, ...);
 
-static inline u32 h_snprintf(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_snprintf(vm_ctx_t *vm) {
   u64 target = rd64(&vm->bc[vm->pc + 1]);
   snprintf_func_t fn = (snprintf_func_t)target;
 

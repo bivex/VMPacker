@@ -7,7 +7,7 @@
 #include "../vm_types.h"
 
 /* SFADD d, n, m, type: d = n + m [5B] */
-static inline u32 h_fadd(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fadd(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], m = vm->bc[vm->pc + 3];
   u8 type = vm->bc[vm->pc + 4];
   if (type == 0) { /* float */
@@ -27,7 +27,7 @@ static inline u32 h_fadd(vm_ctx_t *vm) {
 }
 
 /* SFSUB d, n, m, type [5B] */
-static inline u32 h_fsub(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fsub(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], m = vm->bc[vm->pc + 3];
   u8 type = vm->bc[vm->pc + 4];
   if (type == 0) {
@@ -47,7 +47,7 @@ static inline u32 h_fsub(vm_ctx_t *vm) {
 }
 
 /* SFMUL d, n, m, type [5B] */
-static inline u32 h_fmul(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fmul(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], m = vm->bc[vm->pc + 3];
   u8 type = vm->bc[vm->pc + 4];
   if (type == 0) {
@@ -67,7 +67,7 @@ static inline u32 h_fmul(vm_ctx_t *vm) {
 }
 
 /* SFDIV d, n, m, type [5B] */
-static inline u32 h_fdiv(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fdiv(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], m = vm->bc[vm->pc + 3];
   u8 type = vm->bc[vm->pc + 4];
   if (type == 0) {
@@ -87,7 +87,7 @@ static inline u32 h_fdiv(vm_ctx_t *vm) {
 }
 
 /* SFMOV d, n, type: d = n [4B] */
-static inline u32 h_fmov(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fmov(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   u32 width = (type == 0) ? 4 : 8;
   __builtin_memcpy(&vm->V[d & 63][0], &vm->V[n & 63][0], width);
@@ -95,7 +95,7 @@ static inline u32 h_fmov(vm_ctx_t *vm) {
 }
 
 /* SFCMP n, m, type: update flags [4B] */
-static inline u32 h_fcmp(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fcmp(vm_ctx_t *vm) {
   u8 n = vm->bc[vm->pc + 1], m = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   vm->FL = 0;
   if (type == 0) {
@@ -119,7 +119,7 @@ static inline u32 h_fcmp(vm_ctx_t *vm) {
 }
 
 /* SFMAX d, n, m, type [5B] */
-static inline u32 h_fmax(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fmax(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], m = vm->bc[vm->pc + 3];
   u8 type = vm->bc[vm->pc + 4];
   if (type == 0) {
@@ -139,7 +139,7 @@ static inline u32 h_fmax(vm_ctx_t *vm) {
 }
 
 /* SFMIN d, n, m, type [5B] */
-static inline u32 h_fmin(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fmin(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], m = vm->bc[vm->pc + 3];
   u8 type = vm->bc[vm->pc + 4];
   if (type == 0) {
@@ -159,7 +159,7 @@ static inline u32 h_fmin(vm_ctx_t *vm) {
 }
 
 /* SFCVTIF d, n, type: Int -> FP [4B] */
-static inline u32 h_fcvt_if(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fcvt_if(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   u8 sf = (type >> 1) & 1;
   u8 fp_type = type & 1;
@@ -191,7 +191,7 @@ static inline u32 h_fcvt_if(vm_ctx_t *vm) {
 }
 
 /* SFCVTFI d, n, type: FP -> Int [4B] */
-static inline u32 h_fcvt_fi(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fcvt_fi(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   u8 sf = (type >> 1) & 1;
   u8 fp_type = type & 1;
@@ -227,7 +227,7 @@ static inline u32 h_fcvt_fi(vm_ctx_t *vm) {
 }
 
 /* SFNEG d, n, type [4B] */
-static inline u32 h_fneg(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fneg(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   if (type == 0) {
     float v; __builtin_memcpy(&v, &vm->V[n & 63][0], 4);
@@ -240,7 +240,7 @@ static inline u32 h_fneg(vm_ctx_t *vm) {
 }
 
 /* SFABS d, n, type [4B] */
-static inline u32 h_fabs(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fabs(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   if (type == 0) {
     float v; __builtin_memcpy(&v, &vm->V[n & 63][0], 4);
@@ -255,7 +255,7 @@ static inline u32 h_fabs(vm_ctx_t *vm) {
 }
 
 /* SFSQRT d, n, type [4B] */
-static inline u32 h_fsqrt(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fsqrt(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   if (type == 0) {
     float v; __builtin_memcpy(&v, &vm->V[n & 63][0], 4);
@@ -270,7 +270,7 @@ static inline u32 h_fsqrt(vm_ctx_t *vm) {
 }
 
 /* SFCVT d, n, type: conversion [4B] */
-static inline u32 h_fcvt(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fcvt(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   if (type & 1) { /* From double (bit 0 = 1) */
     double v; __builtin_memcpy(&v, &vm->V[n & 63][0], 8);
@@ -285,7 +285,7 @@ static inline u32 h_fcvt(vm_ctx_t *vm) {
 }
 
 /* SFMOVRV d, n, type: R[n] -> V[d] [4B] */
-static inline u32 h_fmov_rv(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fmov_rv(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   u64 val = VMP_REG_GET(vm, n);
   if (type == 0) { /* 32-bit */
@@ -298,7 +298,7 @@ static inline u32 h_fmov_rv(vm_ctx_t *vm) {
 }
 
 /* SFMOVVR d, n, type: V[n] -> R[d] [4B] */
-static inline u32 h_fmov_vr(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_fmov_vr(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2], type = vm->bc[vm->pc + 3];
   u64 val = 0;
   if (type == 0) { /* 32-bit */

@@ -16,7 +16,7 @@
  *   4. Copy to circular string_pool and XOR decrypt
  *   5. Push string_pool + offset back to eval_stk
  */
-static inline u32 h_s_decrypt_str(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_s_decrypt_str(vm_ctx_t *vm) {
   VM_DEBUG("[VM] h_s_decrypt_str fired!\n");
   u64 key = vm->eval_stk[--vm->eval_sp];
   u32 len = (u32)vm->eval_stk[--vm->eval_sp];

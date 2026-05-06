@@ -31,7 +31,7 @@
 #define BRANCH_TARGET_VALID(vm, t) ((t) < (vm)->bc_len)
 
 /* B target (无条件跳转) */
-static inline u32 h_jmp(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_jmp(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if (BRANCH_TARGET_VALID(vm, t))
     vm->pc = t;
@@ -41,7 +41,7 @@ static inline u32 h_jmp(vm_ctx_t *vm) {
 }
 
 /* B.EQ target (ZF=1) */
-static inline u32 h_je(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_je(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if ((vm->FL & FL_ZERO) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -49,7 +49,7 @@ static inline u32 h_je(vm_ctx_t *vm) {
 }
 
 /* B.NE target (ZF=0) */
-static inline u32 h_jne(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_jne(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if (!(vm->FL & FL_ZERO) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -57,7 +57,7 @@ static inline u32 h_jne(vm_ctx_t *vm) {
 }
 
 /* B.LT target (SF=1, 有符号小于) */
-static inline u32 h_jl(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_jl(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if ((vm->FL & FL_SIGN) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -65,7 +65,7 @@ static inline u32 h_jl(vm_ctx_t *vm) {
 }
 
 /* B.GE target (SF=0, 有符号大于等于) */
-static inline u32 h_jge(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_jge(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if (!(vm->FL & FL_SIGN) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -73,7 +73,7 @@ static inline u32 h_jge(vm_ctx_t *vm) {
 }
 
 /* B.GT target (!ZF && !SF) */
-static inline u32 h_jgt(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_jgt(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if (!(vm->FL & (FL_ZERO | FL_SIGN)) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -81,7 +81,7 @@ static inline u32 h_jgt(vm_ctx_t *vm) {
 }
 
 /* B.LE target (ZF || SF) */
-static inline u32 h_jle(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_jle(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if ((vm->FL & (FL_ZERO | FL_SIGN)) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -89,7 +89,7 @@ static inline u32 h_jle(vm_ctx_t *vm) {
 }
 
 /* B.CC/B.LO target (!CF, 无符号小于) */
-static inline u32 h_jb(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_jb(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if (!(vm->FL & FL_CARRY) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -97,7 +97,7 @@ static inline u32 h_jb(vm_ctx_t *vm) {
 }
 
 /* B.CS/B.HS target (CF, 无符号大于等于) */
-static inline u32 h_jae(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_jae(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if ((vm->FL & FL_CARRY) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -105,7 +105,7 @@ static inline u32 h_jae(vm_ctx_t *vm) {
 }
 
 /* B.LS target (!CF || ZF, 无符号小于等于) */
-static inline u32 h_jbe(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_jbe(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if ((!(vm->FL & FL_CARRY) || (vm->FL & FL_ZERO)) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -113,7 +113,7 @@ static inline u32 h_jbe(vm_ctx_t *vm) {
 }
 
 /* B.HI target (CF && !ZF, 无符号大于) */
-static inline u32 h_ja(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_ja(vm_ctx_t *vm) {
   u32 t = rd32(&vm->bc[vm->pc + 1]);
   if ((vm->FL & FL_CARRY) && !(vm->FL & FL_ZERO) && BRANCH_TARGET_VALID(vm, t)) { vm->pc = t; }
   else { BRANCH_FALLTHROUGH(vm); }
@@ -122,7 +122,7 @@ static inline u32 h_ja(vm_ctx_t *vm) {
 
 /* TBZ Xt, #bit, target  [7B: op | reg | bit | target32]
  * 测试寄存器指定位是否为零，为零则跳转 */
-static inline u32 h_tbz(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_tbz(vm_ctx_t *vm) {
   u8 reg = vm->bc[vm->pc + 1];
   u8 bit = vm->bc[vm->pc + 2];
   u32 t = rd32(&vm->bc[vm->pc + 3]);
@@ -136,7 +136,7 @@ static inline u32 h_tbz(vm_ctx_t *vm) {
 
 /* TBNZ Xt, #bit, target  [7B: op | reg | bit | target32]
  * 测试寄存器指定位是否非零，非零则跳转 */
-static inline u32 h_tbnz(vm_ctx_t *vm) {
+static __attribute__((always_inline)) u32 h_tbnz(vm_ctx_t *vm) {
   u8 reg = vm->bc[vm->pc + 1];
   u8 bit = vm->bc[vm->pc + 2];
   u32 t = rd32(&vm->bc[vm->pc + 3]);

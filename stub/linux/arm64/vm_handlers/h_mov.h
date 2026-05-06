@@ -1,33 +1,29 @@
-/*
- * h_mov.h — 数据移动指令 handler
- *
- * MOV Xd, #imm64    | MOV Wd, #imm32    | MOV Xd, Xn
- */
 #ifndef H_MOV_H
 #define H_MOV_H
 
 #include "../vm_decode.h"
 #include "../vm_types.h"
 
-
-/* MOV Xd, #imm64   [10B: op | d | imm64] */
-static inline u32 h_mov_imm(vm_ctx_t *vm) {
+/* MOV_IMM Xd, #imm16, LSL #shift */
+static __attribute__((always_inline)) u32 h_mov_imm(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1];
-  vm->R[d & 63] = rd64(&vm->bc[vm->pc + 2]);
+  u64 imm = rd64(&vm->bc[vm->pc + 2]);
+  VMP_REG_SET(vm, d, imm);
   return 10;
 }
 
-/* MOV Wd, #imm32   [6B: op | d | imm32]  (零扩展到 64 位) */
-static inline u32 h_mov_imm32(vm_ctx_t *vm) {
+/* MOV_IMM32 Wd, #imm32 */
+static __attribute__((always_inline)) u32 h_mov_imm32(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1];
-  vm->R[d & 63] = (u64)rd32(&vm->bc[vm->pc + 2]);
+  u32 imm = rd32(&vm->bc[vm->pc + 2]);
+  VMP_REG_SET(vm, d, (u64)imm);
   return 6;
 }
 
-/* MOV Xd, Xn       [3B: op | d | n] */
-static inline u32 h_mov_reg(vm_ctx_t *vm) {
+/* MOV Xd, Xn */
+static __attribute__((always_inline)) u32 h_mov_reg(vm_ctx_t *vm) {
   u8 d = vm->bc[vm->pc + 1], n = vm->bc[vm->pc + 2];
-  vm->R[d & 63] = vm->R[n & 63];
+  VMP_REG_SET(vm, d, VMP_REG_GET(vm, n));
   return 3;
 }
 

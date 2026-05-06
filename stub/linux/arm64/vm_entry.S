@@ -6,39 +6,61 @@ _vmp_stub_base:
 .type vm_entry_token, %function
 
 vm_entry_token:
-    /* Stack frame 320B: FP/LR(16) + X0-X7(64) + callerFP/LR(16) + V0-V7(128) + X19-X28(80) + X18(8) + Padding(8) */
-    mov x9, x29               /* Save caller FP */
-    mov x10, x30              /* Save caller LR */
-    stp x29, x30, [sp, #-320]! /* Save FP/LR + Allocate 320B frame */
-    mov x29, sp               /* Establish frame */
+    /* Force 16-byte alignment of SP */
+    mov x9, sp
+    and x9, x9, #~15
+    mov x10, sp               /* Save original SP */
+    mov sp, x9
     
-    stp x0, x1, [sp, #16]     /* args[0..1] = X0, X1 */
-    stp x2, x3, [sp, #32]     /* args[2..3] = X2, X3 */
-    stp x4, x5, [sp, #48]     /* args[4..5] = X4, X5 */
-    stp x6, x7, [sp, #64]     /* args[6..7] = X6, X7 */
-    stp x9, x10, [sp, #80]    /* args[8..9] = callerFP, callerLR */
+    /* Stack frame 320B: FP/LR(16) + args[0..36](296) + Padding(8) */
+    stp x29, x30, [sp, #-320]!
+    mov x29, sp
     
-    stp q0, q1, [sp, #96]     /* args[10..13] = V0, V1 (128-bit each) */
-    stp q2, q3, [sp, #128]    /* args[14..17] = V2, V3 */
-    stp q4, q5, [sp, #160]    /* args[18..21] = V4, V5 */
-    stp q6, q7, [sp, #192]    /* args[22..25] = V6, V7 */
+    /* Save original SP as args[37] (slot 37*8 = 296) */
+    str x10, [sp, #312]
+
+    /* Save X0-X7 (parameters) -> args[0-7] */
+    stp x0, x1, [sp, #16]
+    stp x2, x3, [sp, #32]
+    stp x4, x5, [sp, #48]
+    stp x6, x7, [sp, #64]
+
+    /* Store caller's FP/LR (16B) -> args[8-9] */
+    mov x11, x29
+    mov x12, x30
+    stp x11, x12, [sp, #80]
+
+    /* Store V0-V7 (16B each) -> args[10-25] (128B) */
+    stp q0, q1, [sp, #96]
+    stp q2, q3, [sp, #128]
+    stp q4, q5, [sp, #160]
+    stp q6, q7, [sp, #192]
+
+    /* Store X19-X28 (80B) -> args[26-35] */
+    stp x19, x20, [sp, #224]
+    stp x21, x22, [sp, #240]
+    stp x23, x24, [sp, #256]
+    stp x25, x26, [sp, #272]
+    stp x27, x28, [sp, #288]
     
-    stp x19, x20, [sp, #224]  /* args[26..27] = X19, X20 */
-    stp x21, x22, [sp, #240]  /* args[28..29] = X21, X22 */
-    stp x23, x24, [sp, #256]  /* args[30..31] = X23, X24 */
-    stp x25, x26, [sp, #272]  /* args[32..33] = X25, X26 */
-    stp x27, x28, [sp, #288]  /* args[34..35] = X27, X28 */
-    str x18, [sp, #304]        /* args[36] = X18 (Shadow Stack) */
-    
-    add x0, sp, #16           /* X0 = args pointer */
-    mov w1, w16               /* X1 = token (from X16/IP0) */
-    bl vm_entry_token_inner   /* Call C internal function, result in X0 */
-    
-    ldp x19, x20, [sp, #224]  /* Restore callee-saved X19, X20 */
-    ldp x21, x22, [sp, #240]  /* Restore X21, X22 */
-    ldp x23, x24, [sp, #256]  /* Restore X23, X24 */
-    ldp x25, x26, [sp, #272]  /* Restore X25, X26 */
-    ldp x27, x28, [sp, #288]  /* Restore X27, X28 */
-    ldr x18, [sp, #304]        /* Restore X18 */
-    ldp x29, x30, [sp], #320  /* Restore FP/LR + Free frame */
-    ret                       /* Return (result in X0) */
+    /* Store X18 (8B) -> args[36] */
+    str x18, [sp, #304]
+
+    /* Pass args array (SP+16) and token (X16) to C function */
+    add x0, sp, #16
+    mov w1, w16
+    bl vm_entry_token_inner
+
+    /* Restore X19-X28 */
+    ldp x19, x20, [sp, #224]
+    ldp x21, x22, [sp, #240]
+    ldp x23, x24, [sp, #256]
+    ldp x25, x26, [sp, #272]
+    ldp x27, x28, [sp, #288]
+    ldr x18, [sp, #304]
+
+    /* Restore original SP */
+    ldr x10, [sp, #312]
+    ldp x29, x30, [sp], #320
+    mov sp, x10
+    ret
