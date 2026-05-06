@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"math/rand"
+	"sort"
 
 	"github.com/vmpacker/pkg/vm"
 )
@@ -494,10 +495,21 @@ func (t *Translator) finishTranslate(result *TranslateResult) (*TranslateResult,
 	// ---- append trailer ----
 	t.emit(t.regMap[:]...)
 	t.emit(vm.GlobalOpMap[:]...)
-	mapCount := uint32(len(t.labels))
-	for arm64Off, vmOff := range t.labels {
-		t.emitU32(uint32(arm64Off))
-		t.emitU32(uint32(vmOff))
+
+	// Sort labels by ARM64 offset for binary search in the C stub
+	type labelEntry struct{ arm64, vm int }
+	var sortedLabels []labelEntry
+	for k, v := range t.labels {
+		sortedLabels = append(sortedLabels, labelEntry{k, v})
+	}
+	sort.Slice(sortedLabels, func(i, j int) bool {
+		return sortedLabels[i].arm64 < sortedLabels[j].arm64
+	})
+
+	mapCount := uint32(len(sortedLabels))
+	for _, entry := range sortedLabels {
+		t.emitU32(uint32(entry.arm64))
+		t.emitU32(uint32(entry.vm))
 	}
 	t.emit(0)    // reverse placeholder
 	t.emitU32(0) // oc_key placeholder
@@ -779,7 +791,7 @@ func (t *Translator) translateOne(instructions []vm.Instruction, idx int) (int, 
 	case UMSUBL:
 		return 0, t.trStackUMADDL(inst, true)
 	case UMULH:
-		return 0, t.trStackUnary(inst, vm.OpSUmulh) // UMULH is binary but doesn't set flags
+		return 0, t.trStackAluReg(inst, vm.OpSUmulh) // UMULH is binary but doesn't set flags
 
 	// ========== Extended register add/subtract (T4) -- stack mode ==========
 	case ADD_EXT:

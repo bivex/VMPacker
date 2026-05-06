@@ -435,6 +435,9 @@ func postShiftedXZR3(f map[string]int64, inst *vm.Instruction) {
 	if shtype, ok := f["shtype"]; ok {
 		inst.ShiftType = int(shtype) // 0=LSL, 1=LSR, 2=ASR, 3=ROR
 	}
+	if shift, ok := f["shift"]; ok {
+		inst.Shift = int(shift) // imm6
+	}
 }
 
 // postExtReg extended register: option→ShiftType, imm3→Shift, Rn=31→SP(preserved), Rd=31→SP(preserved), Rm→XZR
