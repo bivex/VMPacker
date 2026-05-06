@@ -68,3 +68,44 @@ When VMPacker protects a binary, it follows these phases:
 
 6. **Execution (Runtime)**:
    When the protected application is launched and the hooked function is called, execution shifts to the VM. The VM initializes its context, decrypts the bytecode, and executes the equivalent logic natively, returning the result seamlessly to the original caller.
+
+---
+
+## Protected Binary Memory Layout (Runtime)
+
+Once the packer has completed injection and the application is loaded into memory, the binary's runtime layout looks like this:
+
+```mermaid
+flowchart TD
+    subgraph Memory["Protected ELF Memory Layout"]
+        direction TB
+        Headers["ELF / Program Headers"]
+        
+        subgraph OrigSeg["Original Segments"]
+            direction TB
+            Text["Original .text Segment\n(Hooked Functions -> Jump to VM)"]
+            Data["Original .data / .rodata"]
+        end
+        
+        subgraph InjectedSeg["Injected PT_LOAD Segment (RX)"]
+            direction TB
+            Stub["VM Interpreter Blob\n(Compiled C Stub)"]
+            Desc["Function Descriptor Table\n(Tokens & Offsets)"]
+            Relocs["RTLR Relocation Table"]
+            Bytecode["Encrypted Bytecode\n(Reversed & Obfuscated IR)"]
+        end
+    end
+    
+    Headers --> OrigSeg
+    OrigSeg --> InjectedSeg
+    
+    Text -. "1. Trampoline Hook" .-> Stub
+    Stub -. "2. Reads & Decrypts" .-> Desc
+    Desc -. "3. Points to" .-> Bytecode
+```
+
+**Key Execution Flow in Memory:**
+1. The CPU hits the modified original function in the `.text` segment.
+2. The trampoline hook jumps directly into the **VM Interpreter Blob** residing in the newly injected segment.
+3. The VM uses the passed token to look up the correct metadata in the **Function Descriptor Table**.
+4. The VM dynamically decrypts the **Encrypted Bytecode** and processes the instructions.
