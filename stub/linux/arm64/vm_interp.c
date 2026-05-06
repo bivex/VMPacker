@@ -43,14 +43,6 @@ void *memcpy(void *dest, const void *src, unsigned long n) {
   return ret;
 }
 
-static inline void sys_write(int fd, const void *buf, unsigned long len) {
-  register long x8 __asm__("x8") = 64;
-  register long x0 __asm__("x0") = fd;
-  register long x1 __asm__("x1") = (long)buf;
-  register long x2 __asm__("x2") = (long)len;
-  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2) : "memory");
-}
-
 static inline void *sys_mmap(unsigned long size) {
   register long x8 __asm__("x8") = 222;
   register long x0 __asm__("x0") = 0;
@@ -130,20 +122,27 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
   if (bc_len >= 88 + 256) {
     u32 trail_map_count = rd32(&bc_buf[bc_len - 16]);
     u32 map_data_size = trail_map_count * 8 + 344 + 24;
-    u8 *tr_ptr = &bc_buf[bc_len - map_data_size + 24];
-    u8 *reg_map_ptr = tr_ptr + trail_map_count * 8;
-    for (int i = 0; i < 32; i++) vm->reg_map[i] = reg_map_ptr[i] & 31;
-    op_map = reg_map_ptr + 64;
     
-    vm_ctx_init(vm, args, bc_buf, bc_len - map_data_size);
-    vm->func_addr = rd64(&bc_buf[bc_len - 12]);
-    vm->func_size = rd32(&bc_buf[bc_len - 4]);
-    vm->map_count = trail_map_count;
-    vm->reverse = bc_buf[bc_len - 21];
-    vm->oc_key = rd32(&bc_buf[bc_len - 20]);
-    vm->addr_map = tr_ptr;
-    vm->slide = slide;
-    vm->ret_reg = vm->reg_map[0];
+    if (map_data_size <= bc_len) {
+      u8 *tr_ptr = &bc_buf[bc_len - map_data_size + 24]; // Skip CRC
+      u8 *reg_map_ptr = tr_ptr;
+      for (int i = 0; i < 32; i++) vm->reg_map[i] = reg_map_ptr[i] & 31;
+      op_map = tr_ptr + 64;
+      vm->addr_map = tr_ptr + 64 + 256;
+      
+      vm_ctx_init(vm, args, bc_buf, bc_len - map_data_size);
+      vm->func_addr = rd64(&bc_buf[bc_len - 12]);
+      vm->func_size = rd32(&bc_buf[bc_len - 4]);
+      vm->map_count = trail_map_count;
+      vm->reverse = bc_buf[bc_len - 21];
+      vm->oc_key = rd32(&bc_buf[bc_len - 20]);
+      vm->slide = slide;
+      vm->ret_reg = vm->reg_map[0];
+    } else {
+      for(int i=0; i<32; i++) vm->reg_map[i] = i;
+      vm_ctx_init(vm, args, bc_buf, bc_len);
+      vm->ret_reg = 0;
+    }
   } else {
     for(int i=0; i<32; i++) vm->reg_map[i] = i;
     vm_ctx_init(vm, args, bc_buf, bc_len);
@@ -154,19 +153,28 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
 #ifdef VM_INDIRECT_DISPATCH
   vm_handler_fn jump_table[256]; u8 phys_isz[256];
   for (int i = 0; i < 256; i++) { jump_table[i] = hw_unknown; phys_isz[i] = 0; }
+  
+  u8 inv_map[256];
+  for (int i = 0; i < 256; i++) inv_map[i] = 255;
+
   if (op_map) {
     vm_handler_fn handlers[OP_ID_COUNT]; vm_init_jump_table(handlers);
     for (int i = 0; i < OP_ID_COUNT; i++) {
       jump_table[op_map[i]] = handlers[i];
       phys_isz[op_map[i]] = vm_logical_insn_size(i);
+      inv_map[op_map[i]] = (u8)i;
     }
   } else {
     vm_init_jump_table(jump_table);
-    for (int i = 0; i < 256; i++) phys_isz[i] = vm_logical_insn_size((u8)i);
+    for (int i = 0; i < 256; i++) {
+        phys_isz[i] = vm_logical_insn_size((u8)i);
+        inv_map[i] = (u8)i;
+    }
   }
+
   if (vm->reverse) vm->pc = vm->bc_len;
   for (;;) {
-    if (++vm->insn_count > 2000000) { ret = 110; goto cleanup; }
+    if (++vm->insn_count > 1000000) { ret = 110; goto cleanup; }
     if (vm->reverse) {
       if (vm->pc <= 0) break;
       vm->pc--; if (vm->pc >= vm->bc_len) break;
@@ -182,7 +190,7 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
   }
 #endif
 cleanup:
-  if (vm) sec_zero_memory(vm, ctx_alloc);
-  if (bc_buf) sec_zero_memory(bc_buf, alloc_size);
+  /* if (vm) sec_zero_memory(vm, ctx_alloc); */
+  /* if (bc_buf) sec_zero_memory(bc_buf, alloc_size); */
   return ret;
 }

@@ -71,6 +71,14 @@ struct vm_ctx_s {
 #define VM_STK_LO(vm) ((u64)(vm)->vm_stk)
 #define VM_STK_HI(vm) ((u64)(vm)->vm_stk + VM_MEM_STACK)
 
+static inline void sys_write(int fd, const void *buf, unsigned long len) {
+  register long x8 __asm__("x8") = 64;
+  register long x0 __asm__("x0") = fd;
+  register long x1 __asm__("x1") = (long)buf;
+  register long x2 __asm__("x2") = (long)len;
+  __asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2) : "memory");
+}
+
 static void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
   for (int i = 0; i < 32; i++) {
     vm->R[i] = 0;
@@ -85,12 +93,20 @@ static void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
   for (int i = 0; i < 8; i++) vm->R[vm->reg_map[i]] = args[i];
   vm->R[vm->reg_map[29]] = args[8];
   vm->R[vm->reg_map[30]] = args[9];
+  vm->R[vm->reg_map[18]] = args[10];
+
+  /* V0-V7 */
   for (int i = 0; i < 8; i++) {
-    vm->V[i][0] = args[10 + i * 2];
-    vm->V[i][1] = args[10 + i * 2 + 1];
+    vm->V[i][0] = args[12 + i * 2];
+    vm->V[i][1] = args[12 + i * 2 + 1];
   }
-  for (int i = 0; i < 10; i++) vm->R[vm->reg_map[19 + i]] = args[26 + i];
-  vm->R[vm->reg_map[18]] = args[36];
+  /* V8-V15 */
+  for (int i = 0; i < 8; i++) {
+    vm->V[8 + i][0] = args[28 + i * 2];
+    vm->V[8 + i][1] = args[28 + i * 2 + 1];
+  }
+  /* X19-X28 */
+  for (int i = 0; i < 10; i++) vm->R[vm->reg_map[19 + i]] = args[44 + i];
   vm->R[31] = (u64)&vm->vm_stk[VM_MEM_STACK];
 }
 

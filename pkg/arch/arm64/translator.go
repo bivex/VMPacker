@@ -105,9 +105,8 @@ func NewTranslator(funcAddr uint64, funcSize int) *Translator {
 	for i := 0; i < 64; i++ {
 		t.regMap[i] = byte(i)
 	}
-	// Only shuffle the first 32 registers (X0-X31) because the C VM's R array is size 32.
-	// V registers (32-63) are not shuffled.
-	rand.Shuffle(32, func(i, j int) {
+	// Only shuffle the first 31 registers (X0-X30). X31 (SP) is always physical 31.
+	rand.Shuffle(31, func(i, j int) {
 		t.regMap[i], t.regMap[j] = t.regMap[j], t.regMap[i]
 	})
 
