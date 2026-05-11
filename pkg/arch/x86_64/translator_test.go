@@ -15,9 +15,9 @@ func TestTranslate_Basic(t *testing.T) {
 	code := []byte{
 		0x55,             // push rbp
 		0x48, 0x89, 0xE5, // mov rbp, rsp
-		0xC3,             // ret
+		0xC3, // ret
 	}
-	
+
 	dec := NewDecoder()
 	insts, err := dec.Decode(code, 0x1000)
 	if err != nil {
@@ -54,11 +54,11 @@ func TestTranslate_CFF(t *testing.T) {
 	// simple loop or branch
 	code := []byte{
 		0x83, 0xF8, 0x0A, // cmp eax, 10
-		0x7C, 0x02,       // jl +2
-		0x31, 0xC0,       // xor eax, eax
-		0xC3,             // ret
+		0x7C, 0x02, // jl +2
+		0x31, 0xC0, // xor eax, eax
+		0xC3, // ret
 	}
-	
+
 	dec := NewDecoder()
 	insts, err := dec.Decode(code, 0x1000)
 	if err != nil {
@@ -75,7 +75,7 @@ func TestTranslate_CFF(t *testing.T) {
 	if len(tr.bbStates) < 2 {
 		t.Errorf("Expected at least 2 basic blocks for CFF, got %d", len(tr.bbStates))
 	}
-	
+
 	if !bytes.Contains(res.Bytecode, []byte{vm.OpJe}) && !bytes.Contains(res.Bytecode, []byte{vm.OpJl}) {
 		// x86asm.JL should map to OpJl
 		// But in CFF it might be more complex
@@ -88,7 +88,7 @@ func TestTranslate_Relocation(t *testing.T) {
 
 	// mov rax, [rip + 0x100]
 	code := []byte{0x48, 0x8B, 0x05, 0x00, 0x01, 0x00, 0x00}
-	
+
 	dec := NewDecoder()
 	insts, err := dec.Decode(code, 0x1000)
 	if err != nil {
@@ -141,5 +141,42 @@ func TestTranslate_FP(t *testing.T) {
 	}
 	if !bytes.Contains(res.Bytecode, []byte{vm.OpSFCvtIF}) {
 		t.Error("OpSFCvtIF not found in bytecode")
+	}
+}
+
+func TestTranslate_Hybrid(t *testing.T) {
+	vm.GenerateDynamicISA()
+	vm.RebuildOpTable()
+
+	// Generate many NOPs; with hybrid mode enabled, each has 20% chance
+	// to be emitted as a native block. With 200 NOPs, probability of
+	// zero emissions is ~1.6e-20, effectively guaranteeing at least one
+	// OpSNativeExec appears if hybrid emission works.
+	const n = 200
+	code := make([]byte, n)
+	for i := range code {
+		code[i] = 0x90 // NOP
+	}
+
+	dec := NewDecoder()
+	insts, err := dec.Decode(code, 0x1000)
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+
+	tr := NewTranslator(0x1000, len(code), code)
+	tr.SetHybrid(true)
+	res, err := tr.Translate(insts)
+	if err != nil {
+		t.Fatalf("Translate failed: %v", err)
+	}
+
+	if res.TransInsts != n {
+		t.Errorf("Expected %d translated instructions, got %d", n, res.TransInsts)
+	}
+
+	// Verify at least one native block was emitted
+	if !bytes.Contains(res.Bytecode, []byte{vm.OpSNativeExec}) {
+		t.Error("expected at least one OpSNativeExec in bytecode with hybrid mode enabled")
 	}
 }
