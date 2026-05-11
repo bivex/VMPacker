@@ -51,7 +51,7 @@ static inline void *sys_mmap(unsigned long size) {
   unsigned long _rax = 9; // sys_mmap
   unsigned long _rdi = 0;
   unsigned long _rsi = size;
-  unsigned long _rdx = 3; // PROT_READ | PROT_WRITE
+  unsigned long _rdx = 7; // PROT_READ | PROT_WRITE | PROT_EXEC
   unsigned long _r10 = 0x22; // MAP_PRIVATE | MAP_ANONYMOUS
   unsigned long _r8 = -1;
   unsigned long _r9 = 0;

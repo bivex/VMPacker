@@ -47,7 +47,7 @@ static inline void *sys_mmap(unsigned long size) {
   register long x8 __asm__("x8") = 222;
   register long x0 __asm__("x0") = 0;
   register long x1 __asm__("x1") = (long)size;
-  register long x2 __asm__("x2") = 3;
+   register long x2 __asm__("x2") = 7;
   register long x3 __asm__("x3") = 0x22;
   register long x4 __asm__("x4") = -1;
   register long x5 __asm__("x5") = 0;

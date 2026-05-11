@@ -13,6 +13,6 @@ docker run --rm -t \
     -v "$REPO_ROOT:/work" \
     -w /work \
     vmpacker-test \
-    go test ./pkg/vm ./pkg/arch/x86_64 -v -run TestTranslate_Hybrid
+    bash -c "go test ./pkg/vm ./pkg/arch/x86_64 -v && cd test/hybrid && make && ./hybrid_test_x86_64"
 
 echo "[+] Test completed"
