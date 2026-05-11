@@ -71,6 +71,10 @@ type Translator struct {
 	debug       bool
 	regMap      [32]byte
 	ocKey       uint32
+	cff         bool
+	mba         bool
+	bbStates    map[int]uint32
+	dispPos     int
 }
 
 // NewTranslator creates a new x86_64 translator
@@ -82,6 +86,7 @@ func NewTranslator(funcAddr uint64, funcSize int, code []byte) *Translator {
 		funcAddr:    funcAddr,
 		funcSize:    funcSize,
 		ocKey:       rand.Uint32(),
+		bbStates:    make(map[int]uint32),
 	}
 
 	// Initialize register map (shuffled for obfuscation)
@@ -100,6 +105,16 @@ func (t *Translator) SetDebug(debug bool) {
 	t.debug = debug
 }
 
+// SetCFF enables Control Flow Flattening
+func (t *Translator) SetCFF(enabled bool) {
+	t.cff = enabled
+}
+
+// SetMBA enables Mixed Boolean-Arithmetic obfuscation
+func (t *Translator) SetMBA(enabled bool) {
+	// MBA not yet fully implemented for x86_64
+}
+
 // emit appends bytes to output
 func (t *Translator) emit(b ...byte) {
 	t.code = append(t.code, b...)
@@ -115,6 +130,16 @@ func (t *Translator) emitU64(v uint64) {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, v)
 	t.emit(b...)
+}
+
+func (t *Translator) sPushImm32(v uint32) {
+	t.emit(vm.OpSPushImm32)
+	t.emitU32(v)
+}
+
+func (t *Translator) sPushImm64(v uint64) {
+	t.emit(vm.OpSPushImm64)
+	t.emitU64(v)
 }
 
 func (t *Translator) reg(r x86asm.Reg) byte {
@@ -227,8 +252,12 @@ func (t *Translator) translateInst(inst x86asm.Inst, offset int) error {
 		return t.trMov(inst, offset)
 	case x86asm.LEA:
 		return t.trLea(inst, offset)
-	case x86asm.ADD, x86asm.SUB, x86asm.XOR, x86asm.AND, x86asm.OR:
+	case x86asm.ADD, x86asm.SUB, x86asm.XOR, x86asm.AND, x86asm.OR, x86asm.TEST:
 		return t.trAlu(inst)
+	case x86asm.IMUL, x86asm.IDIV, x86asm.MUL, x86asm.DIV:
+		return t.trMulDiv(inst)
+	case x86asm.MOVSX, x86asm.MOVSXD, x86asm.MOVZX:
+		return t.trMovExt(inst, offset)
 	case x86asm.CMP:
 		return t.trCmp(inst)
 	case x86asm.RET:
@@ -329,25 +358,131 @@ func (t *Translator) trAlu(inst x86asm.Inst) error {
 	case x86asm.ADD: op = vm.OpSAdd
 	case x86asm.SUB: op = vm.OpSSub
 	case x86asm.XOR: op = vm.OpSXor
-	case x86asm.AND: op = vm.OpSAnd
+	case x86asm.AND, x86asm.TEST: op = vm.OpSAnd
 	case x86asm.OR:  op = vm.OpSOr
 	}
+
 	if sReg, ok := src.(x86asm.Reg); ok {
-		t.emit(vm.OpSVload, t.reg(sReg))
-		t.emit(vm.OpSVload, t.reg(dst))
-		t.emit(op)
-		t.emit(vm.OpSVstore, t.reg(dst))
+		pushX := func() { t.emit(vm.OpSVload, t.reg(sReg)) }
+		pushY := func() { t.emit(vm.OpSVload, t.reg(dst)) }
+		if !t.emitStackMBA(op, pushX, pushY) {
+			pushX()
+			pushY()
+			t.emit(op)
+		}
+		if inst.Op == x86asm.TEST {
+			t.sPushImm64(0)
+			t.emit(vm.OpSCmp) // CMP (A&B), 0
+		} else {
+			t.emit(vm.OpSVstore, t.reg(dst))
+		}
 		return nil
 	}
 	if imm, ok := src.(x86asm.Imm); ok {
-		t.emit(vm.OpSPushImm64)
-		t.emitU64(uint64(imm))
-		t.emit(vm.OpSVload, t.reg(dst))
-		t.emit(op)
-		t.emit(vm.OpSVstore, t.reg(dst))
+		pushX := func() { t.sPushImm64(uint64(imm)) }
+		pushY := func() { t.emit(vm.OpSVload, t.reg(dst)) }
+		if !t.emitStackMBA(op, pushX, pushY) {
+			pushX()
+			pushY()
+			t.emit(op)
+		}
+		if inst.Op == x86asm.TEST {
+			t.sPushImm64(0)
+			t.emit(vm.OpSCmp)
+		} else {
+			t.emit(vm.OpSVstore, t.reg(dst))
+		}
 		return nil
 	}
 	return fmt.Errorf("unsupported ALU src")
+}
+
+func (t *Translator) trMulDiv(inst x86asm.Inst) error {
+	// For IMUL/MUL 1-operand: RDX:RAX = RAX * src
+	// For IMUL 2-operand: dst = dst * src
+	// For IDIV/DIV 1-operand: RAX = RDX:RAX / src
+	
+	if inst.Args[1] == nil {
+		// 1-operand (uses RAX and RDX)
+		src, ok := inst.Args[0].(x86asm.Reg)
+		if !ok { return fmt.Errorf("unsupported 1-op mul/div") }
+		
+		t.emit(vm.OpSVload, t.reg(src))
+		t.emit(vm.OpSVload, t.regMap[X86_RAX])
+		
+		if inst.Op == x86asm.IMUL || inst.Op == x86asm.MUL {
+			t.emit(vm.OpSDup)
+			t.emit(vm.OpSVload, t.reg(src))
+			if inst.Op == x86asm.IMUL {
+				t.emit(vm.OpSSmulh)
+			} else {
+				t.emit(vm.OpSUmulh)
+			}
+			t.emit(vm.OpSVstore, t.regMap[X86_RDX]) // Store high 64 bits to RDX
+			
+			t.emit(vm.OpSMul)
+			t.emit(vm.OpSVstore, t.regMap[X86_RAX]) // Store low 64 bits to RAX
+		} else {
+			if inst.Op == x86asm.IDIV {
+				t.emit(vm.OpSSdiv)
+			} else {
+				t.emit(vm.OpSUdiv)
+			}
+			t.emit(vm.OpSVstore, t.regMap[X86_RAX]) // Quotient to RAX
+			// Remainder to RDX (simplified: not currently emitting remainder)
+		}
+		return nil
+	}
+	
+	// 2-operand IMUL
+	dst, ok1 := inst.Args[0].(x86asm.Reg)
+	if !ok1 { return fmt.Errorf("unsupported 2-op mul dest") }
+	
+	if sReg, ok := inst.Args[1].(x86asm.Reg); ok {
+		t.emit(vm.OpSVload, t.reg(sReg))
+		t.emit(vm.OpSVload, t.reg(dst))
+		t.emit(vm.OpSMul)
+		t.emit(vm.OpSVstore, t.reg(dst))
+		return nil
+	}
+	if imm, ok := inst.Args[1].(x86asm.Imm); ok {
+		t.emit(vm.OpSPushImm64)
+		t.emitU64(uint64(imm))
+		t.emit(vm.OpSVload, t.reg(dst))
+		t.emit(vm.OpSMul)
+		t.emit(vm.OpSVstore, t.reg(dst))
+		return nil
+	}
+	return fmt.Errorf("unsupported mul/div args")
+}
+
+func (t *Translator) trMovExt(inst x86asm.Inst, offset int) error {
+	dst, ok := inst.Args[0].(x86asm.Reg)
+	if !ok { return fmt.Errorf("unsupported MOVSX/ZX dest") }
+	
+	src := inst.Args[1]
+	
+	// Load src onto stack
+	if sReg, ok := src.(x86asm.Reg); ok {
+		t.emit(vm.OpSVload, t.reg(sReg))
+	} else if mem, ok := src.(x86asm.Mem); ok {
+		t.emitMemAddr(mem, inst, offset)
+		// Need to know size of load based on opcode/instruction string
+		// For simplicity, we assume 32-bit load followed by extension
+		t.emit(vm.OpSLd32)
+	} else {
+		return fmt.Errorf("unsupported MOVSX/ZX src")
+	}
+	
+	// Apply extension
+	if inst.Op == x86asm.MOVSX || inst.Op == x86asm.MOVSXD {
+		t.emit(vm.OpSSext32)
+	} else if inst.Op == x86asm.MOVZX {
+		t.emit(vm.OpSTrunc32) // Zero extension from 32 bits
+	}
+	
+	t.emit(vm.OpSVstore, t.reg(dst))
+	return nil
 }
 
 func (t *Translator) trCmp(inst x86asm.Inst) error {
@@ -418,14 +553,113 @@ func (t *Translator) trJcc(inst x86asm.Inst, offset int) error {
 	return nil
 }
 
+func (t *Translator) addReloc(bcOffset int, targetAddr uint64, isInternal bool) {
+	t.relocations = append(t.relocations, vm.Relocation{
+		BcOffset:   bcOffset,
+		TargetAddr: targetAddr,
+		IsInternal: isInternal,
+	})
+}
+
+func (t *Translator) emitStackMBA(sOp byte, pushX func(), pushY func()) bool {
+	return t.emitStackMBAInternal(sOp, pushX, pushY, 0)
+}
+
+func (t *Translator) emitStackMBAInternal(sOp byte, pushX func(), pushY func(), depth int) bool {
+	if !t.mba {
+		return false
+	}
+	chance := 1
+	if depth == 1 {
+		chance = 2
+	} else if depth >= 2 {
+		chance = 4
+	}
+	
+	if rand.Intn(chance) != 0 {
+		return false
+	}
+
+	emitSub := func(op byte, px func(), py func()) {
+		if depth < 1 && t.emitStackMBAInternal(op, px, py, depth+1) {
+			return
+		}
+		px(); py(); t.emit(op)
+	}
+
+	switch sOp {
+	case vm.OpSAdd:
+		if rand.Intn(2) == 0 {
+			emitSub(vm.OpSXor, pushX, pushY)
+			px := func() { pushX(); pushY(); t.emit(vm.OpSAnd) }
+			py := func() { t.sPushImm32(1) }
+			emitSub(vm.OpSShl, px, py)
+			t.emit(vm.OpSAdd)
+		} else {
+			px := func() { pushX(); pushY(); t.emit(vm.OpSOr) }
+			py := func() { t.sPushImm32(1) }
+			emitSub(vm.OpSShl, px, py)
+			emitSub(vm.OpSXor, pushX, pushY)
+			t.emit(vm.OpSSub)
+		}
+		return true
+
+	case vm.OpSSub:
+		if rand.Intn(2) == 0 {
+			emitSub(vm.OpSXor, pushX, pushY)
+			px := func() { pushX(); t.emit(vm.OpSNot); pushY(); t.emit(vm.OpSAnd) }
+			py := func() { t.sPushImm32(1) }
+			emitSub(vm.OpSShl, px, py)
+			t.emit(vm.OpSSub)
+		} else {
+			emitSub(vm.OpSAnd, pushX, func() { pushY(); t.emit(vm.OpSNot) })
+			emitSub(vm.OpSAnd, func() { pushX(); t.emit(vm.OpSNot) }, pushY)
+			t.emit(vm.OpSSub)
+		}
+		return true
+
+	case vm.OpSXor:
+		emitSub(vm.OpSOr, pushX, pushY)
+		emitSub(vm.OpSAnd, pushX, pushY)
+		t.emit(vm.OpSSub)
+		return true
+
+	case vm.OpSAnd:
+		emitSub(vm.OpSOr, pushX, pushY)
+		emitSub(vm.OpSXor, pushX, pushY)
+		t.emit(vm.OpSSub)
+		return true
+
+	case vm.OpSOr:
+		emitSub(vm.OpSAnd, pushX, pushY)
+		emitSub(vm.OpSXor, pushX, pushY)
+		t.emit(vm.OpSAdd)
+		return true
+	}
+	return false
+}
+
 func (t *Translator) emitMemAddr(mem x86asm.Mem, inst x86asm.Inst, instOffset int) {
 	t.emit(vm.OpSPushImm64)
 	disp := mem.Disp
+	
+	// Record position of the immediate value we are about to write
+	immOffset := t.pos()
+	
 	if mem.Base == x86asm.RIP {
 		nextRIP := t.funcAddr + uint64(instOffset) + uint64(inst.Len)
 		disp += int64(nextRIP)
+		// RIP-relative memory access usually points to global data
+		t.emitU64(uint64(disp))
+		t.addReloc(immOffset, uint64(disp), false)
+	} else {
+		t.emitU64(uint64(disp))
+		// If displacement is a large absolute address (likely global)
+		if disp > 0x10000 && mem.Base == 0 && mem.Index == 0 {
+			t.addReloc(immOffset, uint64(disp), false)
+		}
 	}
-	t.emitU64(uint64(disp))
+	
 	if mem.Index != 0 {
 		t.emit(vm.OpSVload, t.reg(mem.Index))
 		if mem.Scale > 1 {
@@ -440,3 +674,4 @@ func (t *Translator) emitMemAddr(mem x86asm.Mem, inst x86asm.Inst, instOffset in
 		t.emit(vm.OpSAdd)
 	}
 }
+

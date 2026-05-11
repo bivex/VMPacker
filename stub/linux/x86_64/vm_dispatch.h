@@ -66,52 +66,52 @@ __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_mrs(vm_ctx_t *vm) {
 
 /* ---- FP ALU ---- */
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fadd(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fadd(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fsub(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fsub(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmul(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fmul(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fdiv(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fdiv(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmov(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fmov(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fcmp(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fcmp(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fneg(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fneg(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fabs(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fabs(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fsqrt(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fsqrt(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fcvt_if(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fcvt_if(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fcvt_fi(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fcvt_fi(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmax(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fmax(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmin(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fmin(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fcvt(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fcvt(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmov_rv(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fmov_rv(vm);
 }
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fmov_vr(vm_ctx_t *vm) {
-  return 0; // TODO
+  return h_fmov_vr(vm);
 }
 
 /* ---- Stack Machine ---- */
