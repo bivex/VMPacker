@@ -767,11 +767,9 @@ func (t *Translator) emitRecursiveMBA(sOp byte, pushX func(), pushY func(), dept
 		switch r {
 		case 0: // (x ^ y) + 2 * (x & y)
 			emitSub(vm.OpSXor, pushX, pushY)
-			px := func() {
-				px2 := func() { pushX(); pushY(); t.emit(vm.OpSAnd) }
-				py2 := func() { t.sPushImm32(1) }
-				emitSub(vm.OpSShl, px2, py2)
-			}
+			px2 := func() { pushX(); pushY(); t.emit(vm.OpSAnd) }
+			py2 := func() { t.sPushImm32(1) }
+			emitSub(vm.OpSShl, px2, py2)
 			t.emit(vm.OpSAdd) // Note: top-level add
 		case 1: // (x | y) + (x & y)
 			px := func() { pushX(); pushY(); t.emit(vm.OpSOr) }
@@ -786,23 +784,19 @@ func (t *Translator) emitRecursiveMBA(sOp byte, pushX func(), pushY func(), dept
 			py := func() { pushX(); pushY(); t.emit(vm.OpSXor) }
 			emitSub(vm.OpSSub, px, py)
 		}
-		return true
-
-	case vm.OpSSub:
-		r := rand.Intn(2)
-		switch r {
-		case 0: // (x ^ y) - 2 * (~x & y)
-			emitSub(vm.OpSXor, pushX, pushY)
-			px := func() {
+		case vm.OpSSub:
+			r := rand.Intn(2)
+			switch r {
+			case 0: // (x ^ y) - 2 * (~x & y)
+				emitSub(vm.OpSXor, pushX, pushY)
 				px2 := func() {
 					px3 := func() { pushX(); t.emit(vm.OpSNot) }
 					emitSub(vm.OpSAnd, px3, pushY)
 				}
 				py2 := func() { t.sPushImm32(1) }
 				emitSub(vm.OpSShl, px2, py2)
-			}
-			t.emit(vm.OpSSub)
-		case 1: // (x & ~y) - (~x & y)
+				t.emit(vm.OpSSub)
+			case 1: // (x & ~y) - (~x & y)
 			px := func() {
 				px2 := func() { pushY(); t.emit(vm.OpSNot) }
 				emitSub(vm.OpSAnd, pushX, px2)
