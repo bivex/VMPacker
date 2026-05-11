@@ -31,6 +31,7 @@ const (
 	X86_R14 = 14
 	X86_R15 = 15
 	X86_RIP = 16
+	X86_XMM0 = 32
 )
 
 var x86RegMap = map[x86asm.Reg]int{
@@ -51,6 +52,13 @@ var x86RegMap = map[x86asm.Reg]int{
 	x86asm.R14: X86_R14,
 	x86asm.R15: X86_R15,
 	x86asm.RIP: X86_RIP,
+}
+
+func init() {
+	// Add XMM0-XMM15 mapping (x86asm indices 88-103)
+	for i := 0; i < 16; i++ {
+		x86RegMap[x86asm.Reg(88+i)] = X86_XMM0 + i
+	}
 }
 
 type branchFixup struct {
@@ -144,6 +152,9 @@ func (t *Translator) reg(r x86asm.Reg) byte {
 	if !ok {
 		return 0xFF
 	}
+	if id >= 32 && id < 64 {
+		return byte(id - 32) // Map XMM0-15 to V0-V15
+	}
 	return t.regMap[id]
 }
 
@@ -235,6 +246,16 @@ func (t *Translator) translateInst(inst x86asm.Inst, offset int) error {
 		return t.trAlu(inst)
 	case x86asm.IMUL, x86asm.IDIV, x86asm.MUL, x86asm.DIV:
 		return t.trMulDiv(inst)
+	case x86asm.ADDSS, x86asm.ADDSD, x86asm.SUBSS, x86asm.SUBSD, x86asm.MULSS, x86asm.MULSD, x86asm.DIVSS, x86asm.DIVSD:
+		return t.trFpAlu(inst)
+	case x86asm.MOVSS, x86asm.MOVSD, x86asm.MOVAPS, x86asm.MOVAPD, x86asm.MOVUPS, x86asm.MOVUPD, x86asm.MOVDQU, x86asm.MOVDQA:
+		return t.trFpMov(inst, offset)
+	case x86asm.UCOMISS, x86asm.UCOMISD:
+		return t.trFpCmp(inst)
+	case x86asm.CVTSI2SS, x86asm.CVTSI2SD, x86asm.CVTTSS2SI, x86asm.CVTTSD2SI:
+		return t.trFpCvt(inst)
+	case x86asm.XORPS, x86asm.XORPD, x86asm.ANDPS, x86asm.ANDPD, x86asm.ORPS, x86asm.ORPD:
+		return t.trFpBitwise(inst)
 	case x86asm.MOVSX, x86asm.MOVSXD, x86asm.MOVZX:
 		return t.trMovExt(inst, offset)
 	case x86asm.BT:
@@ -384,6 +405,130 @@ func (t *Translator) trSetcc(inst x86asm.Inst) error {
 	binary.LittleEndian.PutUint32(t.code[jumpPatch:], uint32(t.pos()))
 	t.emit(vm.OpSVstore, t.reg(dst))
 	return nil
+}
+
+func (t *Translator) trFpAlu(inst x86asm.Inst) error {
+	dst, ok := inst.Args[0].(x86asm.Reg)
+	if !ok { return fmt.Errorf("unsupported FP ALU dest") }
+	src := inst.Args[1]
+
+	var op byte
+	isDouble := false
+	switch inst.Op {
+	case x86asm.ADDSS: op = vm.OpSFAdd
+	case x86asm.ADDSD: op = vm.OpSFAdd; isDouble = true
+	case x86asm.SUBSS: op = vm.OpSFSub
+	case x86asm.SUBSD: op = vm.OpSFSub; isDouble = true
+	case x86asm.MULSS: op = vm.OpSFMul
+	case x86asm.MULSD: op = vm.OpSFMul; isDouble = true
+	case x86asm.DIVSS: op = vm.OpSFDiv
+	case x86asm.DIVSD: op = vm.OpSFDiv; isDouble = true
+	}
+
+	fpType := byte(0) // single
+	if isDouble { fpType = 1 }
+
+	if sReg, ok := src.(x86asm.Reg); ok {
+		t.emit(op, t.reg(dst), t.reg(dst), t.reg(sReg), fpType)
+		return nil
+	}
+	if mem, ok := src.(x86asm.Mem); ok {
+		t.emitMemAddr(mem, inst, 0) // address on stack
+		t.emit(vm.OpSVLd, 31, byte(2)) // Load 32-bit to V31 (temp)
+		if isDouble { t.code[len(t.code)-1] = 3 } // Change to 64-bit if needed
+		t.emit(op, t.reg(dst), t.reg(dst), 31, fpType)
+		return nil
+	}
+	return fmt.Errorf("unsupported FP ALU src")
+}
+
+func (t *Translator) trFpMov(inst x86asm.Inst, offset int) error {
+	dst, src := inst.Args[0], inst.Args[1]
+	isDouble := (inst.Op == x86asm.MOVSD || inst.Op == x86asm.MOVAPD || inst.Op == x86asm.MOVUPD)
+	is128 := (inst.Op == x86asm.MOVAPS || inst.Op == x86asm.MOVAPD || inst.Op == x86asm.MOVUPS || inst.Op == x86asm.MOVUPD || inst.Op == x86asm.MOVDQU || inst.Op == x86asm.MOVDQA)
+	fpType := byte(0); if isDouble { fpType = 1 }
+
+	if dReg, ok1 := dst.(x86asm.Reg); ok1 {
+		if sReg, ok2 := src.(x86asm.Reg); ok2 {
+			t.emit(vm.OpSFMov, t.reg(dReg), t.reg(sReg), fpType)
+			return nil
+		}
+		if mem, ok2 := src.(x86asm.Mem); ok2 {
+			t.emitMemAddr(mem, inst, offset)
+			sizeType := byte(2); if isDouble { sizeType = 3 }; if is128 { sizeType = 4 }
+			t.emit(vm.OpSVLd, t.reg(dReg), sizeType); return nil
+		}
+	}
+	if dMem, ok1 := dst.(x86asm.Mem); ok1 {
+		if sReg, ok2 := src.(x86asm.Reg); ok2 {
+			t.emitMemAddr(dMem, inst, offset)
+			sizeType := byte(2); if isDouble { sizeType = 3 }; if is128 { sizeType = 4 }
+			t.emit(vm.OpSVSt, t.reg(sReg), sizeType); return nil
+		}
+	}
+	return fmt.Errorf("unsupported FP MOV")
+}
+
+func (t *Translator) trFpCmp(inst x86asm.Inst) error {
+	n, m := inst.Args[0].(x86asm.Reg), inst.Args[1]
+	isDouble := (inst.Op == x86asm.UCOMISD)
+	fpType := byte(0); if isDouble { fpType = 1 }
+
+	if mReg, ok := m.(x86asm.Reg); ok {
+		t.emit(vm.OpSFCmp, t.reg(n), t.reg(mReg), fpType); return nil
+	}
+	return fmt.Errorf("unsupported FP CMP")
+}
+
+func (t *Translator) trFpCvt(inst x86asm.Inst) error {
+	dst, src := inst.Args[0], inst.Args[1]
+	
+	// CVTSI2SS/SD xmm, reg/mem
+	if inst.Op == x86asm.CVTSI2SS || inst.Op == x86asm.CVTSI2SD {
+		dReg := dst.(x86asm.Reg)
+		isDouble := (inst.Op == x86asm.CVTSI2SD)
+		fpType := byte(0); if isDouble { fpType = 1 }
+		
+		if sReg, ok := src.(x86asm.Reg); ok {
+			// type: bit0=fp_type, bit1=sf, bit2=unsigned
+			t.emit(vm.OpSFCvtIF, t.reg(dReg), t.reg(sReg), fpType | (1 << 1))
+			return nil
+		}
+	}
+	
+	// CVTTSS2SI/CVTTSD2SI reg, xmm/mem
+	if inst.Op == x86asm.CVTTSS2SI || inst.Op == x86asm.CVTTSD2SI {
+		dReg := dst.(x86asm.Reg)
+		isDouble := (inst.Op == x86asm.CVTTSD2SI)
+		fpType := byte(0); if isDouble { fpType = 1 }
+		
+		if sReg, ok := src.(x86asm.Reg); ok {
+			t.emit(vm.OpSFCvtFI, t.reg(dReg), t.reg(sReg), fpType | (1 << 1))
+			return nil
+		}
+	}
+	
+	return fmt.Errorf("unsupported FP CVT")
+}
+
+func (t *Translator) trFpBitwise(inst x86asm.Inst) error {
+	dst, src := inst.Args[0].(x86asm.Reg), inst.Args[1]
+	if sReg, ok := src.(x86asm.Reg); ok {
+		// Map bitwise XMM to VM stack ALU but for V regs
+		// A simple way is: S_VLOAD_V(src), S_VLOAD_V(dst), S_OP, S_VSTORE_V(dst)
+		var op byte
+		switch inst.Op {
+		case x86asm.XORPS, x86asm.XORPD: op = vm.OpSXor
+		case x86asm.ANDPS, x86asm.ANDPD: op = vm.OpSAnd
+		case x86asm.ORPS, x86asm.ORPD:   op = vm.OpSOr
+		}
+		t.emit(vm.OpSVloadV, t.reg(sReg))
+		t.emit(vm.OpSVloadV, t.reg(dst))
+		t.emit(op)
+		t.emit(vm.OpSVstoreV, t.reg(dst))
+		return nil
+	}
+	return fmt.Errorf("unsupported FP bitwise")
 }
 
 func (t *Translator) trCmp(inst x86asm.Inst) error {

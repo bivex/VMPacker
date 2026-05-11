@@ -105,3 +105,41 @@ func TestTranslate_Relocation(t *testing.T) {
 		t.Error("Expected at least one relocation for RIP-relative access")
 	}
 }
+
+func TestTranslate_FP(t *testing.T) {
+	vm.GenerateDynamicISA()
+	vm.RebuildOpTable()
+
+	// addsd xmm0, xmm1; movss xmm2, [rax]; cvtsi2sd xmm3, rbx
+	code := []byte{
+		0xF2, 0x0F, 0x58, 0xC1, // addsd xmm0, xmm1
+		0xF3, 0x0F, 0x10, 0x10, // movss xmm2, [rax]
+		0xF2, 0x48, 0x0F, 0x2A, 0xDB, // cvtsi2sd xmm3, rbx
+	}
+
+	dec := NewDecoder()
+	insts, err := dec.Decode(code, 0x1000)
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+
+	tr := NewTranslator(0x1000, len(code), code)
+	res, err := tr.Translate(insts)
+	if err != nil {
+		t.Fatalf("Translate failed: %v", err)
+	}
+
+	if res.TransInsts != 3 {
+		t.Errorf("Expected 3 translated instructions, got %d", res.TransInsts)
+	}
+
+	if !bytes.Contains(res.Bytecode, []byte{vm.OpSFAdd}) {
+		t.Error("OpSFAdd not found in bytecode")
+	}
+	if !bytes.Contains(res.Bytecode, []byte{vm.OpSVLd}) {
+		t.Error("OpSVLd not found in bytecode")
+	}
+	if !bytes.Contains(res.Bytecode, []byte{vm.OpSFCvtIF}) {
+		t.Error("OpSFCvtIF not found in bytecode")
+	}
+}
