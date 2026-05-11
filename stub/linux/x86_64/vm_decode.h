@@ -1,10 +1,15 @@
 #ifndef VM_DECODE_H
 #define VM_DECODE_H
 
-#include "vm_types.h"
-#include "vm_opcodes_dynamic.h"
-
-/* Instruction size lookup based on logical opcode ID */
+ #include "vm_types.h"
+ #include "vm_opcodes_dynamic.h"
+ 
+ /* Forward declarations for helpers used in vm_logical_insn_size */
+ static u16 rd16(const u8 *p);
+ static u32 rd32(const u8 *p);
+ static u64 rd64(const u8 *p);
+ 
+ /* Instruction size lookup based on logical opcode ID */
 static u32 vm_logical_insn_size(u8 op_id) {
   switch (op_id) {
   case OP_ID_NOP:
@@ -158,8 +163,11 @@ static u32 vm_logical_insn_size(u8 op_id) {
   case OP_ID_MOVIMM:
     return 10;
 
+   case OP_ID_SNATIVEEXEC:
+     return 4; // minimum: op(1)+len(2)+RET(1); full size = 4 + native_len (handled by interpreter)
+
   default:
-    return 0;
+    return 1;
   }
 }
 

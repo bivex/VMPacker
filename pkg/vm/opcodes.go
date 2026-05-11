@@ -212,6 +212,7 @@ var (
 	OpSFMovVR byte = 0x45 // V[n] -> R[d]: [op][d][n][type]
 	OpSFCvt   byte = 0x46 // FP FCVT: [op][d][n][type]
 	OpSDecryptStr byte = 0x48 // S_DECRYPT_STR: pop key, len, addr -> decrypt string
+	OpSNativeExec byte = 0x49 // S_NATIVE_EXEC: [op][len16][native_bytes]
 )
 
 // Flags

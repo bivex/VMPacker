@@ -140,8 +140,9 @@
 #define OP_ID_SFCVTFI 135
 #define OP_ID_SFMOVRV 136
 #define OP_ID_SFMOVVR 137
-#define OP_ID_SFCVT 138
-#define OP_ID_SDECRYPTSTR 139
-#define OP_ID_SNPRINTF 140
-#define OP_ID_COUNT 141
-#endif
+ #define OP_ID_SFCVT 138
+ #define OP_ID_SDECRYPTSTR 139
+ #define OP_ID_SNPRINTF 140
+ #define OP_ID_SNATIVEEXEC 141
+ #define OP_ID_COUNT 142
+ #endif

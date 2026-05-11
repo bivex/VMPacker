@@ -155,11 +155,14 @@ static u32 vm_logical_insn_size(u8 op_id) {
   case OP_ID_SNPRINTF:
     return 9;
 
-  case OP_ID_MOVIMM:
-    return 10;
-
-  default:
-    return 0;
+   case OP_ID_MOVIMM:
+     return 10;
+ 
+    case OP_ID_SNATIVEEXEC:
+      return 4; // minimum: op(1)+len(2)+RET(1); full size = 4 + native_len (handled by interpreter)
+ 
+   default:
+     return 0;
   }
 }
 

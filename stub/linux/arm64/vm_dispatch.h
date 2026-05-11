@@ -59,12 +59,17 @@ hw_unknown(vm_ctx_t *vm) {
   return VM_STEP_HALT;
 }
 
-/* ---- MRS ---- */
-__attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_mrs(vm_ctx_t *vm) {
-  return h_mrs(vm);
-}
-
-/* ---- FP ALU ---- */
+ /* ---- MRS ---- */
+ __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_mrs(vm_ctx_t *vm) {
+   return h_mrs(vm);
+ }
+ 
+ /* ---- NATIVE_EXEC ---- */
+ __attribute__((noinline)) VM_SECTION_SYSTEM static u32 hw_native_exec(vm_ctx_t *vm) {
+   return h_native_exec(vm);
+ }
+ 
+ /* ---- FP ALU ---- */
 __attribute__((noinline)) VM_SECTION_ALU static u32 hw_fadd(vm_ctx_t *vm) {
   return h_fadd(vm);
 }
@@ -641,10 +646,13 @@ __attribute__((noinline)) static void vm_init_jump_table(vm_handler_fn *tbl) {
   tbl[OP_ID_UDIV] = hw_udiv;
   tbl[OP_ID_SDIV] = hw_sdiv;
 
-  /* MRS */
-  tbl[OP_ID_MRS] = hw_mrs;
-
-  /* SMULH/CLZ/CLS/RBIT/REV */
+ /* MRS */
+ tbl[OP_ID_MRS] = hw_mrs;
+ 
+ /* NATIVE_EXEC */
+ tbl[OP_ID_SNATIVEEXEC] = hw_native_exec;
+ 
+ /* SMULH/CLZ/CLS/RBIT/REV */
   tbl[OP_ID_SMULH] = hw_smulh;
   tbl[OP_ID_CLZ] = hw_clz;
   tbl[OP_ID_CLS] = hw_cls;

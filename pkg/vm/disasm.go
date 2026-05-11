@@ -32,164 +32,165 @@ func buildOpTable() map[byte]opInfo {
 		OpMovImm:   {"MOV_IMM64", 10}, // op + r + imm64
 		OpMovImm32: {"MOV_IMM32", 6},  // op + r + imm32
 		OpMovReg:   {"MOV_REG", 3},    // op + dst + src
-	OpLoad8:   {"LOAD8", 5}, // op + dst + base + imm16
-	OpLoad32:  {"LOAD32", 5},
-	OpLoad64:  {"LOAD64", 5},
-	OpStore8:  {"STORE8", 5},
-	OpStore32: {"STORE32", 5},
-	OpStore64: {"STORE64", 5},
-	OpLoad16:  {"LOAD16", 5},
-	OpStore16: {"STORE16", 5},
+		OpLoad8:    {"LOAD8", 5},      // op + dst + base + imm16
+		OpLoad32:   {"LOAD32", 5},
+		OpLoad64:   {"LOAD64", 5},
+		OpStore8:   {"STORE8", 5},
+		OpStore32:  {"STORE32", 5},
+		OpStore64:  {"STORE64", 5},
+		OpLoad16:   {"LOAD16", 5},
+		OpStore16:  {"STORE16", 5},
 
-	OpAdd:   {"ADD", 4}, // op + d + a + b
-	OpSub:   {"SUB", 4},
-	OpMul:   {"MUL", 4},
-	OpXor:   {"XOR", 4},
-	OpAnd:   {"AND", 4},
-	OpOr:    {"OR", 4},
-	OpShl:   {"SHL", 4},
-	OpShr:   {"SHR", 4},
-	OpAsr:   {"ASR", 4},
-	OpNot:   {"NOT", 3}, // op + dst + src
-	OpRor:   {"ROR", 4},
-	OpUmulh: {"UMULH", 4},
+		OpAdd:   {"ADD", 4}, // op + d + a + b
+		OpSub:   {"SUB", 4},
+		OpMul:   {"MUL", 4},
+		OpXor:   {"XOR", 4},
+		OpAnd:   {"AND", 4},
+		OpOr:    {"OR", 4},
+		OpShl:   {"SHL", 4},
+		OpShr:   {"SHR", 4},
+		OpAsr:   {"ASR", 4},
+		OpNot:   {"NOT", 3}, // op + dst + src
+		OpRor:   {"ROR", 4},
+		OpUmulh: {"UMULH", 4},
 
-	OpAddImm: {"ADD_IMM", 7}, // op + d + s + imm32
-	OpSubImm: {"SUB_IMM", 7},
-	OpXorImm: {"XOR_IMM", 7},
-	OpAndImm: {"AND_IMM", 7},
-	OpOrImm:  {"OR_IMM", 7},
-	OpMulImm: {"MUL_IMM", 7},
-	OpShlImm: {"SHL_IMM", 7},
-	OpShrImm: {"SHR_IMM", 7},
-	OpAsrImm: {"ASR_IMM", 7},
+		OpAddImm: {"ADD_IMM", 7}, // op + d + s + imm32
+		OpSubImm: {"SUB_IMM", 7},
+		OpXorImm: {"XOR_IMM", 7},
+		OpAndImm: {"AND_IMM", 7},
+		OpOrImm:  {"OR_IMM", 7},
+		OpMulImm: {"MUL_IMM", 7},
+		OpShlImm: {"SHL_IMM", 7},
+		OpShrImm: {"SHR_IMM", 7},
+		OpAsrImm: {"ASR_IMM", 7},
 
-	OpCmp:    {"CMP", 3},     // op + rx + ry
-	OpCmpImm: {"CMP_IMM", 6}, // op + rx + imm32
+		OpCmp:    {"CMP", 3},     // op + rx + ry
+		OpCmpImm: {"CMP_IMM", 6}, // op + rx + imm32
 
-	OpJmp: {"JMP", 5}, // op + imm32
-	OpJe:  {"JE", 5},
-	OpJne: {"JNE", 5},
-	OpJl:  {"JL", 5},
-	OpJge: {"JGE", 5},
-	OpJgt: {"JGT", 5},
-	OpJle: {"JLE", 5},
-	OpJb:  {"JB", 5},
-	OpJae: {"JAE", 5},
-	OpJbe: {"JBE", 5},
-	OpJa:  {"JA", 5},
-	OpJvs: {"JVS", 5},
-	OpJvc: {"JVC", 5},
+		OpJmp: {"JMP", 5}, // op + imm32
+		OpJe:  {"JE", 5},
+		OpJne: {"JNE", 5},
+		OpJl:  {"JL", 5},
+		OpJge: {"JGE", 5},
+		OpJgt: {"JGT", 5},
+		OpJle: {"JLE", 5},
+		OpJb:  {"JB", 5},
+		OpJae: {"JAE", 5},
+		OpJbe: {"JBE", 5},
+		OpJa:  {"JA", 5},
+		OpJvs: {"JVS", 5},
+		OpJvc: {"JVC", 5},
 
-	OpPush: {"PUSH", 2}, // op + rx
-	OpPop:  {"POP", 2},
+		OpPush: {"PUSH", 2}, // op + rx
+		OpPop:  {"POP", 2},
 
-	OpCallNative: {"CALL_NATIVE", 9}, // op + imm64
-	OpCallReg:    {"CALL_REG", 2},    // op + rn (BLR)
-	OpBrReg:      {"BR_REG", 2},      // op + rn (BR)
-	OpRet:        {"RET", 2},         // op + rx
-	OpHalt:       {"HALT", 1},
+		OpCallNative: {"CALL_NATIVE", 9}, // op + imm64
+		OpCallReg:    {"CALL_REG", 2},    // op + rn (BLR)
+		OpBrReg:      {"BR_REG", 2},      // op + rn (BR)
+		OpRet:        {"RET", 2},         // op + rx
+		OpHalt:       {"HALT", 1},
 
-	OpVld16: {"VLD16", 3}, // op + rn + len
-	OpVst16: {"VST16", 3},
+		OpVld16: {"VLD16", 3}, // op + rn + len
+		OpVst16: {"VST16", 3},
 
-	OpSLoadSlide: {"S_LOAD_SLIDE", 1},
-	OpSnprintf:   {"S_PRINTF", 9},
+		OpSLoadSlide:   {"S_LOAD_SLIDE", 1},
+		OpSnprintf:     {"S_PRINTF", 9},
+		+OpSNativeExec: {"NATIVE_EXEC", 4}, // base size: op(1)+len(2)+RET(1), actual size varies
 
-	OpTbz:  {"TBZ", 7}, // op + reg + bit + target32
-	OpTbnz: {"TBNZ", 7},
+		OpTbz:  {"TBZ", 7}, // op + reg + bit + target32
+		OpTbnz: {"TBNZ", 7},
 
-	OpCcmpReg: {"CCMP_REG", 6}, // op + cond + nzcv + rn + rm + sf
-	OpCcmpImm: {"CCMP_IMM", 6},
-	OpCcmnReg: {"CCMN_REG", 6},
-	OpCcmnImm: {"CCMN_IMM", 6},
+		OpCcmpReg: {"CCMP_REG", 6}, // op + cond + nzcv + rn + rm + sf
+		OpCcmpImm: {"CCMP_IMM", 6},
+		OpCcmnReg: {"CCMN_REG", 6},
+		OpCcmnImm: {"CCMN_IMM", 6},
 
-	OpSvc: {"SVC", 3}, // op + imm16
+		OpSvc: {"SVC", 3}, // op + imm16
 
-	OpUdiv: {"UDIV", 4}, // op + d + n + m
-	OpSdiv: {"SDIV", 4}, // op + d + n + m
-	OpMrs:  {"MRS", 4},  // op + d + sysreg_lo + sysreg_hi
+		OpUdiv: {"UDIV", 4}, // op + d + n + m
+		OpSdiv: {"SDIV", 4}, // op + d + n + m
+		OpMrs:  {"MRS", 4},  // op + d + sysreg_lo + sysreg_hi
 
-	OpSmulh: {"SMULH", 4}, // op + d + n + m
-	OpClz:   {"CLZ", 3},   // op + d + n
-	OpCls:   {"CLS", 3},
-	OpRbit:  {"RBIT", 3},
-	OpRev:   {"REV", 3},
-	OpRev16: {"REV16", 3},
-	OpRev32: {"REV32", 3},
+		OpSmulh: {"SMULH", 4}, // op + d + n + m
+		OpClz:   {"CLZ", 3},   // op + d + n
+		OpCls:   {"CLS", 3},
+		OpRbit:  {"RBIT", 3},
+		OpRev:   {"REV", 3},
+		OpRev16: {"REV16", 3},
+		OpRev32: {"REV32", 3},
 
-	OpAdc: {"ADC", 4}, // op + d + n + m
-	OpSbc: {"SBC", 4},
+		OpAdc: {"ADC", 4}, // op + d + n + m
+		OpSbc: {"SBC", 4},
 
-	// ---- Stack Machine Opcodes ----
-	OpSVload:     {"S_VLOAD", 2},  // op + r
-	OpSVstore:    {"S_VSTORE", 2}, // op + r
-	OpSVloadV:    {"S_VLOAD_V", 2}, // op + r
-	OpSVstoreV:   {"S_VSTORE_V", 2}, // op + r
-	OpSPushImm32: {"S_PUSH32", 5}, // op + imm32
-	OpSPushImm64: {"S_PUSH64", 9}, // op + imm64
-	OpSDup:       {"S_DUP", 1},
-	OpSSwap:      {"S_SWAP", 1},
-	OpSDrop:      {"S_DROP", 1},
-	OpSAdd:       {"S_ADD", 1},
-	OpSSub:       {"S_SUB", 1},
-	OpSMul:       {"S_MUL", 1},
-	OpSXor:       {"S_XOR", 1},
-	OpSAnd:       {"S_AND", 1},
-	OpSOr:        {"S_OR", 1},
-	OpSShl:       {"S_SHL", 1},
-	OpSShr:       {"S_SHR", 1},
-	OpSAsr:       {"S_ASR", 1},
-	OpSRor:       {"S_ROR", 1},
-	OpSUmulh:     {"S_UMULH", 1},
-	OpSSmulh:     {"S_SMULH", 1},
-	OpSUdiv:      {"S_UDIV", 1},
-	OpSSdiv:      {"S_SDIV", 1},
-	OpSAdc:       {"S_ADC", 1},
-	OpSSbc:       {"S_SBC", 1},
-	OpSNot:       {"S_NOT", 1},
-	OpSNeg:       {"S_NEG", 1},
-	OpSClz:       {"S_CLZ", 1},
-	OpSCls:       {"S_CLS", 1},
-	OpSRbit:      {"S_RBIT", 1},
-	OpSRev:       {"S_REV", 1},
-	OpSRev16:     {"S_REV16", 1},
-	OpSRev32:     {"S_REV32", 1},
-	OpSTrunc32:   {"S_TRUNC32", 1},
-	OpSSext32:    {"S_SEXT32", 1},
-	OpSCmp:       {"S_CMP", 1},
-	OpSLd8:       {"S_LD8", 1},
-	OpSLd16:      {"S_LD16", 1},
-	OpSLd32:      {"S_LD32", 1},
-	OpSLd64:      {"S_LD64", 1},
-	OpSSt8:       {"S_ST8", 1},
-	OpSSt16:      {"S_ST16", 1},
-	OpSSt32:      {"S_ST32", 1},
-	OpSSt64:      {"S_ST64", 1},
+		// ---- Stack Machine Opcodes ----
+		OpSVload:     {"S_VLOAD", 2},    // op + r
+		OpSVstore:    {"S_VSTORE", 2},   // op + r
+		OpSVloadV:    {"S_VLOAD_V", 2},  // op + r
+		OpSVstoreV:   {"S_VSTORE_V", 2}, // op + r
+		OpSPushImm32: {"S_PUSH32", 5},   // op + imm32
+		OpSPushImm64: {"S_PUSH64", 9},   // op + imm64
+		OpSDup:       {"S_DUP", 1},
+		OpSSwap:      {"S_SWAP", 1},
+		OpSDrop:      {"S_DROP", 1},
+		OpSAdd:       {"S_ADD", 1},
+		OpSSub:       {"S_SUB", 1},
+		OpSMul:       {"S_MUL", 1},
+		OpSXor:       {"S_XOR", 1},
+		OpSAnd:       {"S_AND", 1},
+		OpSOr:        {"S_OR", 1},
+		OpSShl:       {"S_SHL", 1},
+		OpSShr:       {"S_SHR", 1},
+		OpSAsr:       {"S_ASR", 1},
+		OpSRor:       {"S_ROR", 1},
+		OpSUmulh:     {"S_UMULH", 1},
+		OpSSmulh:     {"S_SMULH", 1},
+		OpSUdiv:      {"S_UDIV", 1},
+		OpSSdiv:      {"S_SDIV", 1},
+		OpSAdc:       {"S_ADC", 1},
+		OpSSbc:       {"S_SBC", 1},
+		OpSNot:       {"S_NOT", 1},
+		OpSNeg:       {"S_NEG", 1},
+		OpSClz:       {"S_CLZ", 1},
+		OpSCls:       {"S_CLS", 1},
+		OpSRbit:      {"S_RBIT", 1},
+		OpSRev:       {"S_REV", 1},
+		OpSRev16:     {"S_REV16", 1},
+		OpSRev32:     {"S_REV32", 1},
+		OpSTrunc32:   {"S_TRUNC32", 1},
+		OpSSext32:    {"S_SEXT32", 1},
+		OpSCmp:       {"S_CMP", 1},
+		OpSLd8:       {"S_LD8", 1},
+		OpSLd16:      {"S_LD16", 1},
+		OpSLd32:      {"S_LD32", 1},
+		OpSLd64:      {"S_LD64", 1},
+		OpSSt8:       {"S_ST8", 1},
+		OpSSt16:      {"S_ST16", 1},
+		OpSSt32:      {"S_ST32", 1},
+		OpSSt64:      {"S_ST64", 1},
 
-	// SIMD memory access
-	OpSVLd: {"VLOAD_SIMD", 3}, // op + reg + type
-	OpSVSt: {"VSTORE_SIMD", 3},
+		// SIMD memory access
+		OpSVLd: {"VLOAD_SIMD", 3}, // op + reg + type
+		OpSVSt: {"VSTORE_SIMD", 3},
 
-	// FP ALU
-	OpSFAdd:   {"FADD", 5}, // op + d + n + m + type
-	OpSFSub:   {"FSUB", 5},
-	OpSFMul:   {"FMUL", 5},
-	OpSFDiv:   {"FDIV", 5},
-	OpSFMax:   {"FMAX", 5},
-	OpSFMin:   {"FMIN", 5},
-	OpSFMov:   {"FMOV", 4}, // op + d + n + type
-	OpSFCmp:   {"FCMP", 4}, // op + n + m + type
-	OpSFNeg:   {"FNEG", 4},
-	OpSFAbs:   {"FABS", 4},
-	OpSFSqrt:  {"FSQRT", 4},
-	OpSFCvtIF: {"FCVTIF", 4},
-	OpSFCvtFI: {"FCVTFI", 4},
-	OpSFMovRV: {"FMOV_RV", 4},
-	OpSFMovVR: {"FMOV_VR", 4},
-	OpSFCvt:   {"FCVT", 4},
-	OpSDecryptStr: {"S_DECRYPT_STR", 1},
-}
+		// FP ALU
+		OpSFAdd:       {"FADD", 5}, // op + d + n + m + type
+		OpSFSub:       {"FSUB", 5},
+		OpSFMul:       {"FMUL", 5},
+		OpSFDiv:       {"FDIV", 5},
+		OpSFMax:       {"FMAX", 5},
+		OpSFMin:       {"FMIN", 5},
+		OpSFMov:       {"FMOV", 4}, // op + d + n + type
+		OpSFCmp:       {"FCMP", 4}, // op + n + m + type
+		OpSFNeg:       {"FNEG", 4},
+		OpSFAbs:       {"FABS", 4},
+		OpSFSqrt:      {"FSQRT", 4},
+		OpSFCvtIF:     {"FCVTIF", 4},
+		OpSFCvtFI:     {"FCVTFI", 4},
+		OpSFMovRV:     {"FMOV_RV", 4},
+		OpSFMovVR:     {"FMOV_VR", 4},
+		OpSFCvt:       {"FCVT", 4},
+		OpSDecryptStr: {"S_DECRYPT_STR", 1},
+	}
 }
 
 func init() {

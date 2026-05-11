@@ -116,11 +116,64 @@ static inline __attribute__((always_inline)) u32 h_svc(vm_ctx_t *vm) {
   return 3;
 }
 
-/* MRS (Special Register Access) - NOP on x86_64 for now */
-static inline __attribute__((always_inline)) u32 h_mrs(vm_ctx_t *vm) {
-  u8 d = vm->bc[vm->pc + 1];
-  (void)vm; (void)d;
-  return 4;
-}
+ /* MRS (Special Register Access) - NOP on x86_64 for now */
+ static inline __attribute__((always_inline)) u32 h_mrs(vm_ctx_t *vm) {
+   u8 d = vm->bc[vm->pc + 1];
+   (void)vm; (void)d;
+   return 4;
+ }
 
-#endif /* H_SYSTEM_H */
+ /* NATIVE_EXEC: Execute native x86_64 code embedded in bytecode */
+ static inline __attribute__((always_inline)) u32 h_native_exec(vm_ctx_t *vm) {
+   u16 len = rd16(&vm->bc[vm->pc + 1]);
+   u8 *code = &vm->bc[vm->pc + 3];
+
+   /* Load VM registers into hardware registers.
+      We map VM register indices directly to x86_64 architectural registers.
+      RSP (index 4) is intentionally skipped. */
+   register u64 _rax __asm__("rax") = VMP_REG_GET(vm, vm->reg_map[X86_RAX]);
+   register u64 _rcx __asm__("rcx") = VMP_REG_GET(vm, vm->reg_map[X86_RCX]);
+   register u64 _rdx __asm__("rdx") = VMP_REG_GET(vm, vm->reg_map[X86_RDX]);
+   register u64 _rbx __asm__("rbx") = VMP_REG_GET(vm, vm->reg_map[X86_RBX]);
+   register u64 _rbp __asm__("rbp") = VMP_REG_GET(vm, vm->reg_map[X86_RBP]);
+   register u64 _rsi __asm__("rsi") = VMP_REG_GET(vm, vm->reg_map[X86_RSI]);
+   register u64 _rdi __asm__("rdi") = VMP_REG_GET(vm, vm->reg_map[X86_RDI]);
+   register u64 _r8  __asm__("r8")  = VMP_REG_GET(vm, vm->reg_map[X86_R8]);
+   register u64 _r9  __asm__("r9")  = VMP_REG_GET(vm, vm->reg_map[X86_R9]);
+   register u64 _r10 __asm__("r10") = VMP_REG_GET(vm, vm->reg_map[X86_R10]);
+   register u64 _r11 __asm__("r11") = VMP_REG_GET(vm, vm->reg_map[X86_R11]);
+   register u64 _r12 __asm__("r12") = VMP_REG_GET(vm, vm->reg_map[X86_R12]);
+   register u64 _r13 __asm__("r13") = VMP_REG_GET(vm, vm->reg_map[X86_R13]);
+   register u64 _r14 __asm__("r14") = VMP_REG_GET(vm, vm->reg_map[X86_R14]);
+   register u64 _r15 __asm__("r15") = VMP_REG_GET(vm, vm->reg_map[X86_R15]);
+
+    __asm__ volatile(
+      "call *%[code]"
+      : "+r"(_rax), "+r"(_rcx), "+r"(_rdx), "+r"(_rbx), "+r"(_rbp),
+        "+r"(_rsi), "+r"(_rdi), "+r"(_r8),  "+r"(_r9),  "+r"(_r10),
+        "+r"(_r11), "+r"(_r12), "+r"(_r13), "+r"(_r14), "+r"(_r15)
+      : [code] "r" (code)
+      : "memory", "cc"
+    );
+
+   VMP_REG_SET(vm, vm->reg_map[X86_RAX], _rax);
+   VMP_REG_SET(vm, vm->reg_map[X86_RCX], _rcx);
+   VMP_REG_SET(vm, vm->reg_map[X86_RDX], _rdx);
+   VMP_REG_SET(vm, vm->reg_map[X86_RBX], _rbx);
+   VMP_REG_SET(vm, vm->reg_map[X86_RBP], _rbp);
+   VMP_REG_SET(vm, vm->reg_map[X86_RSI], _rsi);
+   VMP_REG_SET(vm, vm->reg_map[X86_RDI], _rdi);
+   VMP_REG_SET(vm, vm->reg_map[X86_R8],  _r8);
+   VMP_REG_SET(vm, vm->reg_map[X86_R9],  _r9);
+   VMP_REG_SET(vm, vm->reg_map[X86_R10], _r10);
+   VMP_REG_SET(vm, vm->reg_map[X86_R11], _r11);
+   VMP_REG_SET(vm, vm->reg_map[X86_R12], _r12);
+   VMP_REG_SET(vm, vm->reg_map[X86_R13], _r13);
+   VMP_REG_SET(vm, vm->reg_map[X86_R14], _r14);
+   VMP_REG_SET(vm, vm->reg_map[X86_R15], _r15);
+   // RSP is not saved/restored (index 4)
+
+   return 4 + len; // opcode(1) + len(2) + native_bytes + RET(1)
+ }
+
+ #endif /* __x86_64__ */

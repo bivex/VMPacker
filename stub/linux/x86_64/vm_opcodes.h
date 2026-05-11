@@ -220,5 +220,6 @@
 #define OP_SFMOVVR 0x45 /* V[n] -> R[d]: [op][d][n][type] */
 #define OP_SFCVT   0x46 /* FP FCVT: [op][d][n][type] */
 #define OP_S_DECRYPT_STR 0x48 /* pop key, len, addr -> decrypt string 1B */
+#define OP_S_NATIVE_EXEC 0x49 /* native exec: [op][len16][native_bytes] */
 
 #endif /* VM_OPCODES_H */

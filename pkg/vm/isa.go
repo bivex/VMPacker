@@ -145,6 +145,7 @@ const (
 	OpIdSFCvt
 	OpIdSDecryptStr
 	OpIdSnprintf
+	OpIdSNativeExec
 	OpIdCount
 )
 
@@ -293,14 +294,15 @@ var opPtrs = [](*byte){
 	&OpSFCvt,
 	&OpSDecryptStr,
 	&OpSnprintf,
+	&OpSNativeExec,
 }
 
 func GenerateDynamicISA() {
 	rand.Seed(time.Now().UnixNano())
-	
+
 	// Create a random permutation of 0..255
 	perm := rand.Perm(256)
-	
+
 	for i, ptr := range opPtrs {
 		randomByte := byte(perm[i])
 		*ptr = randomByte
