@@ -18,6 +18,8 @@ func buildBytecode(insts [][]byte) []byte {
 }
 
 func TestReverseInstructions_TrailingNOP(t *testing.T) {
+	vm.GenerateDynamicISA()
+	vm.RebuildOpTable()
 	// Ensure the reversed bytecode ends with a trailing NOP so that
 	// branch targets to the first instruction don't equal bc_len.
 	bc := buildBytecode([][]byte{
