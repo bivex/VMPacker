@@ -194,8 +194,8 @@ qemu-aarch64 ./build/demo_simple_pie
 ## Roadmap
 
 - [x] Dynamic opcode mapping — unique ISA per protection run
+- [x] x86_64 architecture support
 - [ ] Hybrid mode — partial native + partial VM execution
-- [ ] x86_64 architecture support
 
 ## License
 

@@ -322,9 +322,31 @@ func (t *Translator) trAlu(inst x86asm.Inst) error {
 	if sReg, ok := src.(x86asm.Reg); ok { pushX = func() { t.emit(vm.OpSVload, t.reg(sReg)) }
 	} else if imm, ok := src.(x86asm.Imm); ok { pushX = func() { t.sPushImm64(uint64(imm)) }
 	} else { return fmt.Errorf("unsupported ALU src") }
-	if !t.emitStackMBA(op, pushX, pushY) { pushX(); pushY(); t.emit(op) }
-	if inst.Op == x86asm.TEST { t.sPushImm64(0); t.emit(vm.OpSCmp)
-	} else { t.emit(vm.OpSVstore, t.reg(dst)) }
+
+	if inst.Op == x86asm.TEST {
+		pushX(); pushY(); t.emit(vm.OpSAnd)
+		t.sPushImm64(0); t.emit(vm.OpSCmp)
+		return nil
+	}
+
+	if inst.Op == x86asm.SUB && !t.mba {
+		// Special case for SUB to get correct flags (including CF)
+		pushX(); pushY(); t.emit(vm.OpSCmp)
+		pushX(); pushY(); t.emit(vm.OpSSub)
+		t.emit(vm.OpSVstore, t.reg(dst))
+		return nil
+	}
+
+	if !t.emitStackMBA(op, pushX, pushY) {
+		pushX(); pushY(); t.emit(op)
+	}
+
+	// Update ZF and SF flags based on result
+	t.emit(vm.OpSDup)
+	t.sPushImm64(0)
+	t.emit(vm.OpSCmp)
+
+	t.emit(vm.OpSVstore, t.reg(dst))
 	return nil
 }
 
