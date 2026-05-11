@@ -30,6 +30,9 @@ var interpBlob []byte
 //go:embed vm_interp_arm32.bin
 var interpBlobARM32 []byte
 
+//go:embed vm_interp_x86_64.bin
+var interpBlobX86_64 []byte
+
 func main() {
 	funcList := flag.String("func", "", "comma-separated function names to protect")
 	addrList := flag.String("addr", "", "protect by address (format: 0xADDR:SIZE[:name], comma-separated)")
@@ -145,6 +148,7 @@ Examples:
 
 	packer := elfpacker.NewPacker(inputPath, outPath, funcs, addrSpecs, *verbose, *strip, *debug, *tokenEntry, interpBlob)
 	packer.SetInterpBlobARM32(interpBlobARM32)
+	packer.SetInterpBlobX86_64(interpBlobX86_64)
 	packer.SetCFF(*cff)
 	packer.SetMBA(*mba)
 	packer.SetMangle(*mangle)

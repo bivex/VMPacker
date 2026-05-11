@@ -11,6 +11,7 @@ import (
 
 	"github.com/vmpacker/pkg/arch/arm32"
 	"github.com/vmpacker/pkg/arch/arm64"
+	"github.com/vmpacker/pkg/arch/x86_64"
 	"github.com/vmpacker/pkg/vm"
 )
 
@@ -126,7 +127,7 @@ func (p *Packer) Process() error {
 
 	// Phase 2: batch injection (single PT_NOTE hijack)
 	fmt.Printf("\n[*] Injecting %d functions...\n", len(funcs))
-	err = p.injectVMPBatch(funcs)
+	err = p.injectVMPBatch(funcs, activeBlob)
 	if err != nil {
 		return fmt.Errorf("injection failed: %v", err)
 	}
@@ -277,6 +278,12 @@ func (p *Packer) dumpDisasm(insts []vm.Instruction) {
 		for _, inst := range insts {
 			fmt.Printf("    0x%04X: %-12s raw=0x%08X\n",
 				inst.Offset, dec32.InstName(inst.Op), inst.Raw)
+		}
+	} else if p.isX86_64 {
+		dec64 := x86_64.NewDecoder()
+		for _, inst := range insts {
+			fmt.Printf("    0x%04X: %-12s bytes=%x\n",
+				inst.Offset, dec64.InstName(inst.Op), inst.RawBytes)
 		}
 	} else {
 		dec64 := arm64.NewDecoder()

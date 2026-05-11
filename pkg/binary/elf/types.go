@@ -32,7 +32,9 @@ type Packer struct {
 	data            []byte
 	interpBlob      []byte          // ARM64 blob
 	interpBlobARM32 []byte          // ARM32 blob (optional)
+	interpBlobX86_64 []byte         // x86_64 blob (optional)
 	isARM32         bool            // detected at Process() time
+	isX86_64        bool            // detected at Process() time
 	thumbFuncs      map[uint64]bool // Thumb-mode function addresses (bit0 stripped)
 	relocations     []vm.Relocation // relocations to be fixed at runtime (mainly for .so ASLR)
 	cff             bool            // Control Flow Flattening

@@ -48,6 +48,16 @@ STUB_O_ASM = $(BUILD_DIR)/stub/vm_entry.o
 STUB_ELF   = $(BUILD_DIR)/stub/vm_interp.elf
 STUB_BIN   = $(CMD_DIR)/vm_interp.bin
 
+# ------ VM Interpreter x86_64 blob ------
+STUB64_DIR   = stub/linux/x86_64
+STUB64_SRC   = $(STUB64_DIR)/vm_interp.c
+STUB64_ASM   = $(STUB64_DIR)/vm_entry.S
+STUB64_LDS   = $(STUB64_DIR)/vm_interp.lds
+STUB64_O     = $(BUILD_DIR)/stub64/vm_interp.o
+STUB64_O_ASM = $(BUILD_DIR)/stub64/vm_entry.o
+STUB64_ELF   = $(BUILD_DIR)/stub64/vm_interp.elf
+STUB64_BIN   = $(CMD_DIR)/vm_interp_x86_64.bin
+
 # ------ Go packer ------
 ifdef IS_WINDOWS
     PACKER = $(BUILD_DIR)/vmpacker.exe
@@ -56,23 +66,28 @@ else
 endif
 
 # Compilation options
-# Compilation options
 STUB_CFLAGS = -g -c -O1 -mcmodel=tiny -fno-stack-protector \
               -fno-builtin -fno-builtin-memcpy -nostdlib -march=armv8-a \
+              -DVM_FUNC_SPLIT -DVM_TOKEN_ENTRY -DVM_INDIRECT_DISPATCH
+
+STUB64_CFLAGS = -g -c -O1 -fno-stack-protector \
+              -fno-builtin -fno-builtin-memcpy -nostdlib -fPIC \
               -DVM_FUNC_SPLIT -DVM_TOKEN_ENTRY -DVM_INDIRECT_DISPATCH
 
 DEMO_CFLAGS = -static -O0 -march=armv8-a
 
 # ============================================================
-.PHONY: all stub packer demo test clean help
+.PHONY: all stub stub64 packer demo test clean help
 
-all: stub packer
+all: stub stub64 packer
 	@echo "[+] Build complete: $(BUILD_DIR)/"
 
 # ------ VM Interpreter blob ------
 stub: $(STUB_BIN)
 
-$(BUILD_DIR) $(BUILD_DIR)/stub:
+stub64: $(STUB64_BIN)
+
+$(BUILD_DIR) $(BUILD_DIR)/stub $(BUILD_DIR)/stub64:
 ifdef IS_WINDOWS
 	@powershell -Command "New-Item -ItemType Directory -Force -Path '$@' | Out-Null"
 else
@@ -121,8 +136,35 @@ else
 	@echo "[+] vm_interp.bin created"
 endif
 
+# x86_64 stub build
+CC64 = gcc
+LD64 = ld
+NM64 = nm
+OBJCOPY64 = objcopy
+
+$(STUB64_O): $(STUB64_SRC) | $(BUILD_DIR)/stub64
+	$(CC64) $(STUB64_CFLAGS) $< -o $@
+
+$(STUB64_O_ASM): $(STUB64_ASM) | $(BUILD_DIR)/stub64
+	$(CC64) $(STUB64_CFLAGS) $< -o $@
+
+$(STUB64_ELF): $(STUB64_O) $(STUB64_O_ASM) $(STUB64_LDS)
+	$(LD64) -T $(STUB64_LDS) -o $@ $(STUB64_O) $(STUB64_O_ASM)
+
+$(STUB64_BIN): $(STUB64_ELF) | $(BUILD_DIR)
+	$(OBJCOPY64) -O binary $< $(BUILD_DIR)/vm_interp_x86_64_raw.bin
+	@OFF1=$$($(NM64) $< | grep "\bvm_entry$$" | cut -d' ' -f1); \
+	OFF2=$$($(NM64) $< | grep "\bvm_entry_token$$" | cut -d' ' -f1); \
+	OFF3=$$($(NM64) $< | grep "\b_token_table_va$$" | cut -d' ' -f1); \
+	if [ -z "$$OFF1" ] || [ -z "$$OFF2" ] || [ -z "$$OFF3" ]; then \
+		echo "Error: Symbols not found for x86_64 stub"; exit 1; \
+	fi; \
+	python3 -c "import struct; h = struct.pack('<QQQ', int('$$OFF1', 16), int('$$OFF2', 16), int('$$OFF3', 16)); r = open('$(BUILD_DIR)/vm_interp_x86_64_raw.bin', 'rb').read(); open('$(STUB64_BIN)', 'wb').write(h + r)"
+	@cp $(STUB64_BIN) $(BUILD_DIR)/vm_interp_x86_64.bin
+	@echo "[+] vm_interp_x86_64.bin created"
+
 # ------ Go packer ------
-packer: $(STUB_BIN) | $(BUILD_DIR)
+packer: $(STUB_BIN) $(STUB64_BIN) | $(BUILD_DIR)
 	$(GO) build -buildvcs=false -o $(PACKER) ./$(CMD_DIR)/
 	@echo "[+] packer: $(PACKER)"
 

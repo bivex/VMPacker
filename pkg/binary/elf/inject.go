@@ -16,11 +16,11 @@ type bcRecord struct {
 }
 
 // injectVMPBatch dispatches to arch-specific injection
-func (p *Packer) injectVMPBatch(funcs []FuncBytecode) error {
+func (p *Packer) injectVMPBatch(funcs []FuncBytecode, activeBlob []byte) error {
 	if p.isARM32 {
-		return p.injectVMPBatch32(funcs)
+		return p.injectVMPBatch32(funcs, activeBlob)
 	}
-	return p.injectVMPBatch64(funcs)
+	return p.injectVMPBatch64(funcs, activeBlob)
 }
 
 // ---- Shared payload construction ----
@@ -93,17 +93,17 @@ func writeTrampolines(data []byte, funcs []FuncBytecode, vmEntryTokenVA uint64, 
 
 // ---- ARM64 (ELF64) injection ----
 
-// injectVMPBatch64 — ARM64 ELF64 injection
-func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
+// injectVMPBatch64 — ARM64 and x86_64 ELF64 injection
+func (p *Packer) injectVMPBatch64(funcs []FuncBytecode, activeBlob []byte) error {
 	ehdr := readEhdr64(p.data)
 
-	if len(p.interpBlob) < 24 {
-		return fmt.Errorf("token mode requires extended blob header (24 bytes), got %d", len(p.interpBlob))
+	if len(activeBlob) < 24 {
+		return fmt.Errorf("token mode requires extended blob header (24 bytes), got %d", len(activeBlob))
 	}
-	_ = binary.LittleEndian.Uint64(p.interpBlob[:8])
-	tokenEntryOff := binary.LittleEndian.Uint64(p.interpBlob[8:16])
-	tokenTableVAOff := binary.LittleEndian.Uint64(p.interpBlob[16:24])
-	interpCode := p.interpBlob[24:]
+	_ = binary.LittleEndian.Uint64(activeBlob[:8])
+	tokenEntryOff := binary.LittleEndian.Uint64(activeBlob[8:16])
+	tokenTableVAOff := binary.LittleEndian.Uint64(activeBlob[16:24])
+	interpCode := activeBlob[24:]
 
 	// 1. Build payload with 8-byte RTLr gap
 	payload, records := buildPayload(interpCode, funcs, 8)
@@ -184,6 +184,9 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 
 	return writeTrampolines(p.data, funcs, vmEntryTokenVA, 0, func(i int, fb FuncBytecode) []byte {
 		token := (uint32(fb.XorKey) << 24) | (uint32(i) & 0xFFF)
+		if p.isX86_64 {
+			return BuildTokenTrampolineX86_64(fb.FI.Addr, vmEntryTokenVA, token)
+		}
 		return BuildTokenTrampoline(fb.FI.Addr, vmEntryTokenVA, token)
 	})
 }
@@ -191,9 +194,9 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode) error {
 // ---- ARM32 (ELF32) injection ----
 
 // injectVMPBatch32 — ARM32 ELF32 injection
-func (p *Packer) injectVMPBatch32(funcs []FuncBytecode) error {
+func (p *Packer) injectVMPBatch32(funcs []FuncBytecode, activeBlob []byte) error {
 	ehdr := readEhdr32(p.data)
-	blob := p.interpBlobARM32
+	blob := activeBlob
 
 	if len(blob) < 12 {
 		return fmt.Errorf("ARM32 interp blob too small: %d bytes", len(blob))

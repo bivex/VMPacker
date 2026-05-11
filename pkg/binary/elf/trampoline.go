@@ -249,3 +249,29 @@ func writeU32(w io.Writer, v uint32) {
 	binary.LittleEndian.PutUint32(b, v)
 	w.Write(b)
 }
+
+// ============================================================
+// x86_64 Token Trampoline
+// ============================================================
+
+func BuildTokenTrampolineX86_64(funcAddr, vmEntryTokenVA uint64, token uint32) []byte {
+	var buf bytes.Buffer
+
+	// mov r11d, token  (41 BB <token 32-bit>)
+	buf.Write([]byte{0x41, 0xBB})
+	writeU32(&buf, token)
+
+	// jmp vm_entry_token (E9 <offset 32-bit>)
+	// offset is calculated from the end of the jmp instruction itself.
+	// Current instruction is 6 bytes in (mov) + 5 bytes (jmp) = 11 bytes total.
+	// PC after jmp will be funcAddr + 11.
+	bPC := funcAddr + 11
+	bOffset := int32(vmEntryTokenVA - bPC)
+	buf.WriteByte(0xE9)
+	writeU32(&buf, uint32(bOffset))
+
+	// Pad with 1 byte (NOP) to ensure we hit at least 12 bytes (optional, but clean)
+	buf.WriteByte(0x90)
+
+	return buf.Bytes()
+}

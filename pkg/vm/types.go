@@ -19,18 +19,21 @@ const REG_V_BASE = 64
 
 // Instruction - architecture-agnostic instruction representation
 type Instruction struct {
-	Raw    uint32
-	Op     int
-	Rd     int // destination register
-	Rn     int // first source register
-	Rm     int // second source register
-	Imm    int64
+	Raw       uint32
+	RawBytes  []byte // original instruction bytes (variable length support)
+	Size      uint32 // instruction size in bytes
+	Str       string // string representation for debugging
+	Op        int
+	Rd        int // destination register
+	Rn        int // first source register
+	Rm        int // second source register
+	Imm       int64
 	Shift     int
 	ShiftType int // 0=LSL, 1=LSR, 2=ASR, 3=ROR
 	Cond      int
-	SF     bool // 64-bit (true) vs 32-bit (false)
-	Offset int  // offset within function
-	WB     int  // Writeback mode (0=none, 1=post, 3=pre)
+	SF        bool // 64-bit (true) vs 32-bit (false)
+	Offset    int  // offset within function
+	WB        int  // Writeback mode (0=none, 1=post, 3=pre)
 }
 
 // Decoder - architecture decoder interface

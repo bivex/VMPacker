@@ -19,6 +19,12 @@ import (
 //go:embed vm_interp.bin
 var interpBlob []byte
 
+//go:embed vm_interp_arm32.bin
+var interpBlobARM32 []byte
+
+//go:embed vm_interp_x86_64.bin
+var interpBlobX86_64 []byte
+
 // VMPEngine API Interface for Frontend
 type VMPEngine struct {
 	ctx     context.Context
@@ -210,6 +216,8 @@ func (e *VMPEngine) Protect(options map[string]interface{}) error {
 	runtime.EventsEmit(e.ctx, "vmp-log", fmt.Sprintf("[+] Extracting and compiling %d target function nodes (Symbols: %d, Addresses: %d)...", totalCount, len(funcs), len(addrSpecs)))
 
 	packer := elfpacker.NewPacker(targetFile, outPath, funcs, addrSpecs, verbose, stripSymbols, enableDebug, tokenEntry, interpBlob)
+	packer.SetInterpBlobARM32(interpBlobARM32)
+	packer.SetInterpBlobX86_64(interpBlobX86_64)
 
 	// Temporarily override os.Stdout/os.Stderr or just let it process.
 	// Since NewPacker prints to os.Stdout directly, the user wants logs in the GUI.

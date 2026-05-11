@@ -30,6 +30,11 @@ func (p *Packer) SetInterpBlobARM32(blob []byte) {
 	p.interpBlobARM32 = blob
 }
 
+// SetInterpBlobX86_64 sets the x86_64 VM interpreter blob
+func (p *Packer) SetInterpBlobX86_64(blob []byte) {
+	p.interpBlobX86_64 = blob
+}
+
 func (p *Packer) SetCFF(enabled bool) {
 	p.cff = enabled
 }

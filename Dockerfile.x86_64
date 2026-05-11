@@ -1,0 +1,17 @@
+# VMPacker Build Environment (x86_64 Support)
+FROM --platform=linux/amd64 debian:trixie-slim
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    gcc-aarch64-linux-gnu \
+    binutils-aarch64-linux-gnu \
+    gcc-x86-64-linux-gnu \
+    binutils-x86-64-linux-gnu \
+    binutils \
+    gdb \
+    make \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
