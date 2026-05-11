@@ -69,7 +69,7 @@ type Translator struct {
 	funcAddr    uint64
 	unsupported []string
 	debug       bool
-	regMap      [32]byte
+	regMap      [64]byte
 	ocKey       uint32
 	cff         bool
 	mba         bool
@@ -90,7 +90,7 @@ func NewTranslator(funcAddr uint64, funcSize int, code []byte) *Translator {
 	}
 
 	// Initialize register map
-	for i := 0; i < 32; i++ {
+	for i := 0; i < 64; i++ {
 		t.regMap[i] = byte(i)
 	}
 	// Shuffle R0-R15
@@ -396,19 +396,26 @@ func (t *Translator) trCmp(inst x86asm.Inst) error {
 }
 
 func (t *Translator) trCall(inst x86asm.Inst, offset int) error {
+	if rel, ok := inst.Args[0].(x86asm.Rel); ok {
+		target := int(int64(offset) + int64(inst.Len) + int64(rel))
+		t.emit(vm.OpCallNative); t.emitU64(uint64(t.funcAddr + uint64(target))); return nil
+	}
 	if imm, ok := inst.Args[0].(x86asm.Imm); ok {
 		target := int(int64(offset) + int64(inst.Len) + int64(imm))
-		t.emit(vm.OpCallNative); t.emitU64(uint64(target)); return nil
+		t.emit(vm.OpCallNative); t.emitU64(uint64(t.funcAddr + uint64(target))); return nil
 	}
 	return fmt.Errorf("unsupported CALL")
 }
 
 func (t *Translator) trJmp(inst x86asm.Inst, offset int) error {
-	if imm, ok := inst.Args[0].(x86asm.Imm); ok {
-		target := int(int64(offset) + int64(inst.Len) + int64(imm))
-		t.emit(vm.OpJmp); t.fixups = append(t.fixups, branchFixup{vmOffset: t.pos(), x86Target: target}); t.emitU32(0); return nil
-	}
-	return fmt.Errorf("unsupported JMP")
+	var target int
+	if rel, ok := inst.Args[0].(x86asm.Rel); ok {
+		target = int(int64(offset) + int64(inst.Len) + int64(rel))
+	} else if imm, ok := inst.Args[0].(x86asm.Imm); ok {
+		target = int(int64(offset) + int64(inst.Len) + int64(imm))
+	} else { return fmt.Errorf("unsupported JMP") }
+	
+	t.emit(vm.OpJmp); t.fixups = append(t.fixups, branchFixup{vmOffset: t.pos(), x86Target: target}); t.emitU32(0); return nil
 }
 
 func (t *Translator) trJcc(inst x86asm.Inst, offset int) error {
@@ -426,9 +433,14 @@ func (t *Translator) trJcc(inst x86asm.Inst, offset int) error {
 	case x86asm.JA: op = vm.OpJa
 	default: return fmt.Errorf("unsupported Jcc")
 	}
-	imm, ok := inst.Args[0].(x86asm.Imm)
-	if !ok { return fmt.Errorf("unsupported Jcc arg") }
-	target := int(int64(offset) + int64(inst.Len) + int64(imm))
+	
+	var target int
+	if rel, ok := inst.Args[0].(x86asm.Rel); ok {
+		target = int(int64(offset) + int64(inst.Len) + int64(rel))
+	} else if imm, ok := inst.Args[0].(x86asm.Imm); ok {
+		target = int(int64(offset) + int64(inst.Len) + int64(imm))
+	} else { return fmt.Errorf("unsupported Jcc arg") }
+	
 	t.emit(op); t.fixups = append(t.fixups, branchFixup{vmOffset: t.pos(), x86Target: target}); t.emitU32(0); return nil
 }
 

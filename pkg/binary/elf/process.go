@@ -162,13 +162,18 @@ func (p *Packer) validateArch(f *elf.File) ([]byte, error) {
 	switch {
 	case f.Machine == elf.EM_AARCH64 && f.Class == elf.ELFCLASS64:
 		p.isARM32 = false
+		p.isX86_64 = false
 	case f.Machine == elf.EM_ARM && f.Class == elf.ELFCLASS32:
 		p.isARM32 = true
+		p.isX86_64 = false
 		if p.thumbFuncs == nil {
 			p.thumbFuncs = make(map[uint64]bool)
 		}
+	case f.Machine == elf.EM_X86_64 && f.Class == elf.ELFCLASS64:
+		p.isARM32 = false
+		p.isX86_64 = true
 	default:
-		return nil, fmt.Errorf("unsupported arch: machine=%s class=%s (need ARM64/ELF64 or ARM/ELF32)", f.Machine, f.Class)
+		return nil, fmt.Errorf("unsupported arch: machine=%s class=%s (need ARM64/ELF64, ARM/ELF32, or x86_64/ELF64)", f.Machine, f.Class)
 	}
 
 	activeBlob := p.interpBlob
@@ -176,6 +181,11 @@ func (p *Packer) validateArch(f *elf.File) ([]byte, error) {
 		activeBlob = p.interpBlobARM32
 		if len(activeBlob) == 0 {
 			return nil, fmt.Errorf("ARM32 ELF detected but no ARM32 interp blob provided")
+		}
+	} else if p.isX86_64 {
+		activeBlob = p.interpBlobX86_64
+		if len(activeBlob) == 0 {
+			return nil, fmt.Errorf("x86_64 ELF detected but no x86_64 interp blob provided")
 		}
 	}
 	return activeBlob, nil
@@ -208,11 +218,23 @@ func (p *Packer) collectEntries(f *elf.File) []funcEntry {
 func (p *Packer) decodeInstructions(code []byte, isThumbFunc bool) []vm.Instruction {
 	if p.isARM32 {
 		return p.DecodeFunctionARM32(code, isThumbFunc)
+	} else if p.isX86_64 {
+		return p.DecodeFunctionX86_64(code)
 	}
 	return p.DecodeFunction(code)
 }
 
-// translateFunction dispatches to ARM32 or ARM64 translator
+// DecodeFunctionX86_64 uses the x86_64 decoder
+func (p *Packer) DecodeFunctionX86_64(code []byte) []vm.Instruction {
+	decoder := x86_64.NewDecoder()
+	insts, err := decoder.Decode(code, 0)
+	if err != nil {
+		fmt.Printf("Warning: x86_64 decode error: %v\n", err)
+	}
+	return insts
+}
+
+// translateFunction dispatches to ARM32, ARM64 or x86_64 translator
 func (p *Packer) translateFunction(f *elf.File, fi *vm.FuncInfo, code []byte, insts []vm.Instruction, isThumbFunc bool) (*translationResult, error) {
 	if p.verbose {
 		fmt.Printf("    Instructions: %d (Thumb=%v)\n", len(insts), isThumbFunc && p.isARM32)
@@ -236,6 +258,23 @@ func (p *Packer) translateFunction(f *elf.File, fi *vm.FuncInfo, code []byte, in
 		r, terr := tr.Translate(insts)
 		if terr != nil {
 			return nil, fmt.Errorf("translation failed: %v", terr)
+		}
+		result = translationResult{
+			Bytecode: r.Bytecode, CodeLen: r.CodeLen,
+			Unsupported: r.Unsupported, TotalInsts: r.TotalInsts, TransInsts: r.TransInsts,
+			Relocations: r.Relocations,
+		}
+	} else if p.isX86_64 {
+		trans := x86_64.NewTranslator(fi.Addr, int(fi.Size), code)
+		if p.debug {
+			trans.SetDebug(true)
+		}
+		trans.SetCFF(p.cff)
+		trans.SetMBA(p.mba)
+		
+		r, terr := trans.Translate(insts)
+		if terr != nil {
+			return nil, fmt.Errorf("x86_64 translation failed: %v", terr)
 		}
 		result = translationResult{
 			Bytecode: r.Bytecode, CodeLen: r.CodeLen,

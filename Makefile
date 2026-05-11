@@ -169,7 +169,11 @@ packer: $(STUB_BIN) $(STUB64_BIN) | $(BUILD_DIR)
 	@echo "[+] packer: $(PACKER)"
 
 # ------ Demo ------
-demo: $(BUILD_DIR)/demo_simple
+demo: $(BUILD_DIR)/demo_simple $(BUILD_DIR)/demo_x86_64
+
+$(BUILD_DIR)/demo_x86_64: $(DEMO_DIR)/demo_x86_64.c | $(BUILD_DIR)
+	$(CC64) -O1 $< -o $@
+	@echo "[+] x86_64 demo: $@"
 
 $(BUILD_DIR)/demo_simple: $(DEMO_DIR)/demo_simple.c | $(BUILD_DIR)
 	$(CC) -static -O1 -nostdlib -march=armv8-a $< -o $@
