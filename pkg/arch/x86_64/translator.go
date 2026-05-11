@@ -729,44 +729,146 @@ func (t *Translator) translateBranchCFF(inst x86asm.Inst, offset int) {
 	t.sPushImm32(t.bbStates[target]); t.emit(vm.OpJmp); t.emitU32(uint32(t.dispPos))
 }
 
-func (t *Translator) emitStackMBA(sOp byte, pushX func(), pushY func()) bool { return t.emitStackMBAInternal(sOp, pushX, pushY, 0) }
-
-func (t *Translator) emitStackMBAInternal(sOp byte, pushX func(), pushY func(), depth int) bool {
-	if !t.mba { return false }
-	chance := 1
-	if depth == 1 { chance = 2 } else if depth >= 2 { chance = 4 }
-	if rand.Intn(chance) != 0 { return false }
-	emitSub := func(op byte, px func(), py func()) {
-		if depth < 1 && t.emitStackMBAInternal(op, px, py, depth+1) { return }
-		px(); py(); t.emit(op)
+func (t *Translator) emitStackMBA(sOp byte, pushX func(), pushY func()) bool {
+	if !t.mba {
+		return false
 	}
+	return t.emitRecursiveMBA(sOp, pushX, pushY, 0)
+}
+
+func (t *Translator) emitRecursiveMBA(sOp byte, pushX func(), pushY func(), depth int) bool {
+	// Limit recursion depth to avoid bytecode explosion
+	maxDepth := 2
+	if depth >= maxDepth {
+		return false
+	}
+
+	// Probability of applying MBA at this level
+	chance := 70 // 70% chance to expand
+	if depth > 0 {
+		chance = 40 // lower chance for nested expansions
+	}
+	if rand.Intn(100) > chance {
+		return false
+	}
+
+	// Helper to emit sub-operations recursively
+	emitSub := func(op byte, px func(), py func()) {
+		if !t.emitRecursiveMBA(op, px, py, depth+1) {
+			px()
+			py()
+			t.emit(op)
+		}
+	}
+
 	switch sOp {
 	case vm.OpSAdd:
-		if rand.Intn(2) == 0 {
+		r := rand.Intn(3)
+		switch r {
+		case 0: // (x ^ y) + 2 * (x & y)
 			emitSub(vm.OpSXor, pushX, pushY)
-			px := func() { pushX(); pushY(); t.emit(vm.OpSAnd) }
-			py := func() { t.sPushImm32(1) }
-			emitSub(vm.OpSShl, px, py); t.emit(vm.OpSAdd)
-		} else {
+			px := func() {
+				px2 := func() { pushX(); pushY(); t.emit(vm.OpSAnd) }
+				py2 := func() { t.sPushImm32(1) }
+				emitSub(vm.OpSShl, px2, py2)
+			}
+			t.emit(vm.OpSAdd) // Note: top-level add
+		case 1: // (x | y) + (x & y)
 			px := func() { pushX(); pushY(); t.emit(vm.OpSOr) }
-			py := func() { t.sPushImm32(1) }
-			emitSub(vm.OpSShl, px, py); emitSub(vm.OpSXor, pushX, pushY); t.emit(vm.OpSSub)
+			py := func() { pushX(); pushY(); t.emit(vm.OpSAnd) }
+			emitSub(vm.OpSAdd, px, py)
+		case 2: // 2 * (x | y) - (x ^ y)
+			px := func() {
+				px2 := func() { pushX(); pushY(); t.emit(vm.OpSOr) }
+				py2 := func() { t.sPushImm32(1) }
+				emitSub(vm.OpSShl, px2, py2)
+			}
+			py := func() { pushX(); pushY(); t.emit(vm.OpSXor) }
+			emitSub(vm.OpSSub, px, py)
 		}
 		return true
+
 	case vm.OpSSub:
-		if rand.Intn(2) == 0 {
+		r := rand.Intn(2)
+		switch r {
+		case 0: // (x ^ y) - 2 * (~x & y)
 			emitSub(vm.OpSXor, pushX, pushY)
-			px := func() { pushX(); t.emit(vm.OpSNot); pushY(); t.emit(vm.OpSAnd) }
-			py := func() { t.sPushImm32(1) }
-			emitSub(vm.OpSShl, px, py); t.emit(vm.OpSSub)
-		} else {
-			emitSub(vm.OpSAnd, pushX, func() { pushY(); t.emit(vm.OpSNot) })
-			emitSub(vm.OpSAnd, func() { pushX(); t.emit(vm.OpSNot) }, pushY); t.emit(vm.OpSSub)
+			px := func() {
+				px2 := func() {
+					px3 := func() { pushX(); t.emit(vm.OpSNot) }
+					emitSub(vm.OpSAnd, px3, pushY)
+				}
+				py2 := func() { t.sPushImm32(1) }
+				emitSub(vm.OpSShl, px2, py2)
+			}
+			t.emit(vm.OpSSub)
+		case 1: // (x & ~y) - (~x & y)
+			px := func() {
+				px2 := func() { pushY(); t.emit(vm.OpSNot) }
+				emitSub(vm.OpSAnd, pushX, px2)
+			}
+			py := func() {
+				px2 := func() { pushX(); t.emit(vm.OpSNot) }
+				emitSub(vm.OpSAnd, px2, pushY)
+			}
+			emitSub(vm.OpSSub, px, py)
 		}
 		return true
-	case vm.OpSXor: emitSub(vm.OpSOr, pushX, pushY); emitSub(vm.OpSAnd, pushX, pushY); t.emit(vm.OpSSub); return true
-	case vm.OpSAnd: emitSub(vm.OpSOr, pushX, pushY); emitSub(vm.OpSXor, pushX, pushY); t.emit(vm.OpSSub); return true
-	case vm.OpSOr: emitSub(vm.OpSAnd, pushX, pushY); emitSub(vm.OpSXor, pushX, pushY); t.emit(vm.OpSAdd); return true
+
+	case vm.OpSXor:
+		r := rand.Intn(2)
+		switch r {
+		case 0: // (x | y) - (x & y)
+			px := func() { pushX(); pushY(); t.emit(vm.OpSOr) }
+			py := func() { pushX(); pushY(); t.emit(vm.OpSAnd) }
+			emitSub(vm.OpSSub, px, py)
+		case 1: // (x & ~y) | (~x & y)
+			px := func() {
+				px2 := func() { pushY(); t.emit(vm.OpSNot) }
+				emitSub(vm.OpSAnd, pushX, px2)
+			}
+			py := func() {
+				px2 := func() { pushX(); t.emit(vm.OpSNot) }
+				emitSub(vm.OpSAnd, px2, pushY)
+			}
+			emitSub(vm.OpSOr, px, py)
+		}
+		return true
+
+	case vm.OpSAnd:
+		r := rand.Intn(2)
+		switch r {
+		case 0: // (x | y) - (x ^ y)
+			px := func() { pushX(); pushY(); t.emit(vm.OpSOr) }
+			py := func() { pushX(); pushY(); t.emit(vm.OpSXor) }
+			emitSub(vm.OpSSub, px, py)
+		case 1: // ~(~x | ~y)
+			px := func() {
+				px2 := func() { pushX(); t.emit(vm.OpSNot) }
+				py2 := func() { pushY(); t.emit(vm.OpSNot) }
+				emitSub(vm.OpSOr, px2, py2)
+			}
+			px()
+			t.emit(vm.OpSNot)
+		}
+		return true
+
+	case vm.OpSOr:
+		r := rand.Intn(2)
+		switch r {
+		case 0: // (x ^ y) + (x & y)
+			px := func() { pushX(); pushY(); t.emit(vm.OpSXor) }
+			py := func() { pushX(); pushY(); t.emit(vm.OpSAnd) }
+			emitSub(vm.OpSAdd, px, py)
+		case 1: // (x & ~y) + y
+			px := func() {
+				px2 := func() { pushY(); t.emit(vm.OpSNot) }
+				emitSub(vm.OpSAnd, pushX, px2)
+			}
+			emitSub(vm.OpSAdd, px, pushY)
+		}
+		return true
 	}
+
 	return false
 }
