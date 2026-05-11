@@ -49,6 +49,7 @@ cd demo && make -f Makefile-demo all protect run-docker
 | OpcodeCryptor | Per-instruction XOR encryption with position-dependent key |
 | Bytecode Reversal | Instructions stored in reverse execution order |
 | Token Entry | Original function replaced with 3-instruction trampoline |
+| Hybrid Mode | Mixed native/VM execution for performance-critical blocks |
 | RTLR | Runtime relocation table for PIE/ASLR address fixup |
 | Symbol Strip | Optional removal of .symtab/.strtab sections |
 
@@ -195,7 +196,7 @@ qemu-aarch64 ./build/demo_simple_pie
 
 - [x] Dynamic opcode mapping — unique ISA per protection run
 - [x] x86_64 architecture support
-- [ ] Hybrid mode — partial native + partial VM execution
+- [x] Hybrid mode — partial native + partial VM execution
 
 ## License
 
