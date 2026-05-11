@@ -237,6 +237,10 @@ func (t *Translator) translateInst(inst x86asm.Inst, offset int) error {
 		return t.trMulDiv(inst)
 	case x86asm.MOVSX, x86asm.MOVSXD, x86asm.MOVZX:
 		return t.trMovExt(inst, offset)
+	case x86asm.BT:
+		return t.trBT(inst)
+	case x86asm.SETL, x86asm.SETLE, x86asm.SETG, x86asm.SETGE, x86asm.SETE, x86asm.SETNE, x86asm.SETB, x86asm.SETBE, x86asm.SETA, x86asm.SETAE:
+		return t.trSetcc(inst)
 	case x86asm.CMP: return t.trCmp(inst)
 	case x86asm.RET: t.emit(vm.OpRet, t.regMap[X86_RAX]); return nil
 	case x86asm.NOP: t.emit(vm.OpNop); return nil
@@ -338,6 +342,48 @@ func (t *Translator) trMovExt(inst x86asm.Inst, offset int) error {
 	} else { return fmt.Errorf("unsupported MOVSX/ZX src") }
 	if inst.Op == x86asm.MOVSX || inst.Op == x86asm.MOVSXD { t.emit(vm.OpSSext32) } else if inst.Op == x86asm.MOVZX { t.emit(vm.OpSTrunc32) }
 	t.emit(vm.OpSVstore, t.reg(dst)); return nil
+}
+
+func (t *Translator) trBT(inst x86asm.Inst) error {
+	base, bit := inst.Args[0], inst.Args[1]
+	if bReg, ok1 := base.(x86asm.Reg); ok1 {
+		if bitImm, ok2 := bit.(x86asm.Imm); ok2 {
+			t.emit(vm.OpSVload, t.reg(bReg))
+			t.sPushImm32(uint32(bitImm))
+			t.emit(vm.OpSAnd) // Simplification: we just need CF but VM flags are slightly different
+			return nil
+		}
+	}
+	return fmt.Errorf("unsupported BT")
+}
+
+func (t *Translator) trSetcc(inst x86asm.Inst) error {
+	dst, ok := inst.Args[0].(x86asm.Reg)
+	if !ok { return fmt.Errorf("unsupported SETcc dest") }
+	
+	var op byte
+	switch inst.Op {
+	case x86asm.SETE: op = vm.OpJe
+	case x86asm.SETNE: op = vm.OpJne
+	case x86asm.SETL: op = vm.OpJl
+	case x86asm.SETGE: op = vm.OpJge
+	case x86asm.SETLE: op = vm.OpJle
+	case x86asm.SETG: op = vm.OpJgt
+	case x86asm.SETB: op = vm.OpJb
+	case x86asm.SETAE: op = vm.OpJae
+	case x86asm.SETBE: op = vm.OpJbe
+	case x86asm.SETA: op = vm.OpJa
+	}
+	
+	// Implementation: if COND then PUSH 1 else PUSH 0
+	t.emit(op)
+	patch := t.pos(); t.emitU32(0)
+	t.sPushImm32(0); t.emit(vm.OpJmp); jumpPatch := t.pos(); t.emitU32(0)
+	binary.LittleEndian.PutUint32(t.code[patch:], uint32(t.pos()))
+	t.sPushImm32(1)
+	binary.LittleEndian.PutUint32(t.code[jumpPatch:], uint32(t.pos()))
+	t.emit(vm.OpSVstore, t.reg(dst))
+	return nil
 }
 
 func (t *Translator) trCmp(inst x86asm.Inst) error {
