@@ -81,6 +81,7 @@ type Translator struct {
 	ocKey       uint32
 	cff         bool
 	mba         bool
+	maxMBADepth int
 	bbStates    map[int]uint32
 	dispPos     int
 }
@@ -94,6 +95,7 @@ func NewTranslator(funcAddr uint64, funcSize int, code []byte) *Translator {
 		funcAddr:    funcAddr,
 		funcSize:    funcSize,
 		ocKey:       rand.Uint32(),
+		maxMBADepth: 2,
 		bbStates:    make(map[int]uint32),
 	}
 
@@ -119,6 +121,10 @@ func (t *Translator) SetCFF(enabled bool) {
 
 func (t *Translator) SetMBA(enabled bool) {
 	t.mba = enabled
+}
+
+func (t *Translator) SetMaxMBADepth(depth int) {
+	t.maxMBADepth = depth
 }
 
 func (t *Translator) emit(b ...byte) {
@@ -738,7 +744,7 @@ func (t *Translator) emitStackMBA(sOp byte, pushX func(), pushY func()) bool {
 
 func (t *Translator) emitRecursiveMBA(sOp byte, pushX func(), pushY func(), depth int) bool {
 	// Limit recursion depth to avoid bytecode explosion
-	maxDepth := 2
+	maxDepth := t.maxMBADepth
 	if depth >= maxDepth {
 		return false
 	}
