@@ -156,7 +156,16 @@ static inline __attribute__((always_inline)) u32 h_svc(vm_ctx_t *vm) {
       : "memory", "cc"
     );
 
-   VMP_REG_SET(vm, vm->reg_map[X86_RAX], _rax);
+    /* Capture RFLAGS from native execution and update VM condition flags */
+    u64 rflags;
+    __asm__ volatile("pushfq\n\tpop %0" : "=r"(rflags));
+    vm->FL = 0;
+    if (rflags & (1ULL<<6))  vm->FL |= FL_ZERO;   // ZF
+    if (rflags & (1ULL<<0))  vm->FL |= FL_CARRY;  // CF
+    if (rflags & (1ULL<<7))  vm->FL |= FL_NEG;    // SF
+    if (rflags & (1ULL<<11)) vm->FL |= FL_OVER;   // OF
+
+    VMP_REG_SET(vm, vm->reg_map[X86_RAX], _rax);
    VMP_REG_SET(vm, vm->reg_map[X86_RCX], _rcx);
    VMP_REG_SET(vm, vm->reg_map[X86_RDX], _rdx);
    VMP_REG_SET(vm, vm->reg_map[X86_RBX], _rbx);
