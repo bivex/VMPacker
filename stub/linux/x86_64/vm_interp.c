@@ -48,17 +48,17 @@ void *memcpy(void *dest, const void *src, unsigned long n) {
 }
 
 static inline void *sys_mmap(unsigned long size) {
-  unsigned long _rax = 9; // sys_mmap
-  unsigned long _rdi = 0;
-  unsigned long _rsi = size;
-  unsigned long _rdx = 7; // PROT_READ | PROT_WRITE | PROT_EXEC
-  unsigned long _r10 = 0x22; // MAP_PRIVATE | MAP_ANONYMOUS
-  unsigned long _r8 = -1;
-  unsigned long _r9 = 0;
+  register unsigned long _rax __asm__("rax") = 9; // sys_mmap
+  register unsigned long _rdi __asm__("rdi") = 0;
+  register unsigned long _rsi __asm__("rsi") = size;
+  register unsigned long _rdx __asm__("rdx") = 7; // PROT_READ | PROT_WRITE | PROT_EXEC
+  register unsigned long _r10 __asm__("r10") = 0x22; // MAP_PRIVATE | MAP_ANONYMOUS
+  register unsigned long _r8 __asm__("r8") = -1;
+  register unsigned long _r9 __asm__("r9") = 0;
   __asm__ volatile(
     "syscall"
-    : "+a"(_rax)
-    : "D"(_rdi), "S"(_rsi), "d"(_rdx), "r"(_r10), "r"(_r8), "r"(_r9)
+    : "+r"(_rax)
+    : "r"(_rdi), "r"(_rsi), "r"(_rdx), "r"(_r10), "r"(_r8), "r"(_r9)
     : "rcx", "r11", "memory"
   );
   return (void *)_rax;

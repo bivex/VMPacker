@@ -32,29 +32,29 @@ extern uint64_t vm_entry(uint64_t *args, uint8_t *enc_bc, uint32_t bc_len,
 
 /* Bytecode (identity mapping, small, no trailing map) */
 static uint8_t bytecode[] = {
-    /* OpNativeExec: [0x8D][len=3][sub rax,rbx][RET] */
+    /* OpNativeExec: [0x8D][len=4][sub rax,rbx][RET] */
     0x8D,                   // OP_S_NATIVEEXEC (141)
-    0x03, 0x00,            // length = 3
+    0x04, 0x00,            // length = 4 (little-endian; includes sub + RET)
     0x48, 0x29, 0xD8,      // sub rax, rbx (3 bytes)
     0xC3,                  // RET
 
-    /* JE success (ZF=1 -> jump) */
-    0x24,                  // OP_JE (36)
-    0x17, 0x00, 0x00, 0x00, // target = 23 (success MOV)
+    /* JE success (ZF=1 -> jump) — uses rd32() for target */
+    0x24,                   // OP_JE (36)
+    0x17, 0x00, 0x00, 0x00, // target = 23 (little-endian 32-bit)
 
     /* MOV_IMM32 R0, 0  (fail path) */
     0x02,                  // OP_MOV_IMM32 (2)
     0x00,                  // reg = 0 (RAX)
     0x00, 0x00, 0x00, 0x00, // imm32 = 0
 
-    /* JMP end */
+    /* JMP end — uses rd32() for target */
     0x23,                  // OP_JMP (35)
-    0x1D, 0x00, 0x00, 0x00, // target = 29 (HALT)
+    0x1D, 0x00, 0x00, 0x00, // target = 29 (little-endian)
 
-    /* success: MOV_IMM32 R0, 42 */
+    /* success: MOV_IMM32 R0, 42 — uses rd32() for imm */
     0x02,                  // OP_MOV_IMM32
     0x00,                  // reg = 0
-    0x2A, 0x00, 0x00, 0x00, // imm32 = 42
+    0x2A, 0x00, 0x00, 0x00, // imm32 = 42 (little-endian)
 
     /* HALT */
     0x36                   // OP_HALT (54)
@@ -62,19 +62,19 @@ static uint8_t bytecode[] = {
 
 /* Syscall helpers (x86_64 Linux) */
 static void sys_write(const char *buf, uint64_t len) {
-    register long x0 __asm__("x0") = 1;          /* fd = stdout */
-    register long x1 __asm__("x1") = (long)buf;
-    register long x2 __asm__("x2") = (long)len;
-    register long x8 __asm__("x8") = 1;          /* SYS_write */
+    register long rax __asm__("rax") = 1;          /* SYS_write */
+    register long rdi __asm__("rdi") = 1;          /* fd = stdout */
+    register long rsi __asm__("rsi") = (long)buf;
+    register long rdx __asm__("rdx") = (long)len;
     __asm__ volatile("syscall"
-                     : : "r"(x0), "r"(x1), "r"(x2), "r"(x8)
-                     : "memory");
+                     : : "a"(rax), "D"(rdi), "S"(rsi), "d"(rdx)
+                     : "rcx", "r11", "memory");
 }
 
 static void sys_exit(long code) {
-    register long x0 __asm__("x0") = code;
-    register long x8 __asm__("x8") = 60;         /* SYS_exit */
-    __asm__ volatile("syscall" : : "r"(x0), "r"(x8) : "memory");
+    register long rax __asm__("rax") = 60;         /* SYS_exit */
+    register long rdi __asm__("rdi") = code;
+    __asm__ volatile("syscall" : : "a"(rax), "D"(rdi) : "rcx", "r11", "memory");
 }
 
 /* Entry point (no libc) */
@@ -82,9 +82,9 @@ void _start(void) {
     /* Initialize all 14 argument registers to zero */
     uint64_t args[14] = {0};
 
-    /* Set initial register values: RAX=5, RBX=5 */
-    args[6] = 5;  /* RAX (X86_RAX = 0 -> reg_map will map, but under identity it's index 0) */
-    args[7] = 5;  /* RBX */
+    /* Set initial register values: RAX=5, RBX=5 (identity reg_map) */
+    args[6] = 5;  /* RAX is always supplied by args[6] in vm_ctx_init */
+    args[7] = 5;  /* RBX is always supplied by args[7] */
 
     /* Execute bytecode */
     uint64_t ret = vm_entry(args, bytecode, sizeof(bytecode),
