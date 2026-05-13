@@ -110,7 +110,8 @@ static inline __attribute__((always_inline)) u32 h_svc(vm_ctx_t *vm) {
   long r10 = (long)VMP_REG_GET(vm, vm->reg_map[X86_R10]);
   long r8 = (long)VMP_REG_GET(vm, vm->reg_map[X86_R8]);
   long r9 = (long)VMP_REG_GET(vm, vm->reg_map[X86_R9]);
-  __asm__ volatile("syscall" : "+a"(rax) : "D"(rdi), "S"(rsi), "d"(rdx), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
+  __asm__ volatile("syscall" : "+a"(rax) : "D"(rdi), "S"(rsi), "d"(rdx), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory"
+  );
   VMP_REG_SET(vm, vm->reg_map[X86_RAX], (u64)rax);
 #endif
   return 3;
@@ -124,40 +125,50 @@ static inline __attribute__((always_inline)) u32 h_svc(vm_ctx_t *vm) {
  }
 
   /* NATIVE_EXEC: Execute native x86_64 code embedded in bytecode.
-       Minimal for e2e test: captures RAX, RBX, RFLAGS only.
-       Strategy: use callee-saved r12 as base pointer to a struct,
-       avoiding any operand count/constraint issues.
+       Simplified version: preserves most common registers to avoid GCC constraint issues.
      */
-   /* NATIVE_EXEC: Execute native x86_64 code embedded in bytecode.
-        Minimal version for e2e test: preserves RAX, RBX, and captures RFLAGS.
-        Strategy: Place RAX,RBX in a small stack buffer, point a register to it,
-        load into hardware regs, call native code, capture RFLAGS via pushfq/pop,
-        store results back to buffer, then write to VM state.
-      */
    static inline __attribute__((always_inline)) u32 h_native_exec(vm_ctx_t *vm) {
      u16 len = rd16(&vm->bc[vm->pc + 1]);
      u8 *code = &vm->bc[vm->pc + 3];
 
-     u64 buf[3]; 
+     u64 buf[10]; 
      buf[0] = VMP_REG_GET(vm, vm->reg_map[X86_RAX]);
      buf[1] = VMP_REG_GET(vm, vm->reg_map[X86_RBX]);
-     buf[2] = 0; // RFLAGS
+     buf[2] = VMP_REG_GET(vm, vm->reg_map[X86_RCX]);
+     buf[3] = VMP_REG_GET(vm, vm->reg_map[X86_RDX]);
+     buf[4] = VMP_REG_GET(vm, vm->reg_map[X86_RSI]);
+     buf[5] = VMP_REG_GET(vm, vm->reg_map[X86_RDI]);
+     buf[6] = VMP_REG_GET(vm, vm->reg_map[X86_R8]);
+     buf[7] = VMP_REG_GET(vm, vm->reg_map[X86_R9]);
+     buf[8] = 0; // RFLAGS
 
      const u8 *code_ptr = code;
 
      __asm__ volatile(
-       "push %[b]\n\t"                // Save buf pointer to stack
-       "push %%rax\n\t"               // Dummy push for 16-byte alignment
-       "mov 0(%[b]),  %%rax\n\t"
-       "mov 8(%[b]),  %%rbx\n\t"
+       "push %[b]\n\t"                
+       "push %%rax\n\t"               
+       "mov 0(%[b]),   %%rax\n\t"
+       "mov 8(%[b]),   %%rbx\n\t"
+       "mov 16(%[b]),  %%rcx\n\t"
+       "mov 24(%[b]),  %%rdx\n\t"
+       "mov 32(%[b]),  %%rsi\n\t"
+       "mov 40(%[b]),  %%rdi\n\t"
+       "mov 48(%[b]),  %%r8\n\t"
+       "mov 56(%[b]),  %%r9\n\t"
        "call *%[c]\n\t"
-       "pop %%r11\n\t"                // Discard dummy
-       "pop %%r11\n\t"                // Restore buf pointer to R11
+       "pop %%r11\n\t"                
+       "pop %%r11\n\t"                
        "mov %%rax, 0(%%r11)\n\t"
        "mov %%rbx, 8(%%r11)\n\t"
+       "mov %%rcx, 16(%%r11)\n\t"
+       "mov %%rdx, 24(%%r11)\n\t"
+       "mov %%rsi, 32(%%r11)\n\t"
+       "mov %%rdi, 40(%%r11)\n\t"
+       "mov %%r8,  48(%%r11)\n\t"
+       "mov %%r9,  56(%%r11)\n\t"
        "pushfq\n\t"
        "pop %%rax\n\t"
-       "mov %%rax, 16(%%r11)\n\t"
+       "mov %%rax, 64(%%r11)\n\t"
        : /* no outputs */
        : [b] "r" (buf), [c] "r" (code_ptr)
        : "memory", "cc", "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"
@@ -165,8 +176,14 @@ static inline __attribute__((always_inline)) u32 h_svc(vm_ctx_t *vm) {
      
      VMP_REG_SET(vm, vm->reg_map[X86_RAX], buf[0]);
      VMP_REG_SET(vm, vm->reg_map[X86_RBX], buf[1]);
+     VMP_REG_SET(vm, vm->reg_map[X86_RCX], buf[2]);
+     VMP_REG_SET(vm, vm->reg_map[X86_RDX], buf[3]);
+     VMP_REG_SET(vm, vm->reg_map[X86_RSI], buf[4]);
+     VMP_REG_SET(vm, vm->reg_map[X86_RDI], buf[5]);
+     VMP_REG_SET(vm, vm->reg_map[X86_R8],  buf[6]);
+     VMP_REG_SET(vm, vm->reg_map[X86_R9],  buf[7]);
 
-     u64 rflags = buf[2];
+     u64 rflags = buf[8];
      vm->FL = 0;
      if (rflags & (1ULL<<6))  vm->FL |= FL_ZERO;
      if (rflags & (1ULL<<0))  vm->FL |= FL_CARRY;
