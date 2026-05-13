@@ -47,6 +47,10 @@ func (p *Packer) SetMangle(enabled bool) {
 	p.mangleSymbols = enabled
 }
 
+func (p *Packer) SetHybrid(enabled bool) {
+	p.hybrid = enabled
+}
+
 // PrintELFInfo prints ELF information
 func PrintELFInfo(path string) error {
 	f, err := elf.Open(path)
@@ -147,8 +151,7 @@ func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int, map
 	var insts []instInfo
 	pc := 0
 	for pc < codeLen {
-		op := bytecode[pc]
-		sz := vm.InstructionSize(op)
+		sz := vm.InstructionSizeFull(bytecode, pc)
 		if sz == 0 {
 			sz = 1
 		}
@@ -158,6 +161,7 @@ func reverseInstructions(bytecode []byte, codeLen int) ([]byte, map[int]int, map
 		insts = append(insts, instInfo{offset: pc, size: sz})
 		pc += sz
 	}
+
 
 	offsetMap := make(map[int]int)
 	byteMap := make(map[int]int)
@@ -251,7 +255,7 @@ func encryptOpcodes(bytecode []byte, codeLen int, ocKey uint32, reversed bool) {
 	pc := 0
 	for pc < codeLen {
 		op := bytecode[pc]
-		size := vm.InstructionSize(op)
+		size := vm.InstructionSizeFull(bytecode, pc)
 		if size == 0 {
 			pc++
 			continue

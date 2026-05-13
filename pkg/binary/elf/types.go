@@ -40,5 +40,6 @@ type Packer struct {
 	cff             bool            // Control Flow Flattening
 	mba             bool            // Mixed Boolean-Arithmetic
 	mangleSymbols     bool            // Symbol mangling
+	hybrid            bool            // Hybrid mode (x86_64 only)
 	encryptedStrings  map[uint64]bool // strings already encrypted in-place (prevents double-encrypt)
 }

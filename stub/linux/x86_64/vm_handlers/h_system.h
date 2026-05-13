@@ -138,27 +138,31 @@ static inline __attribute__((always_inline)) u32 h_svc(vm_ctx_t *vm) {
      u16 len = rd16(&vm->bc[vm->pc + 1]);
      u8 *code = &vm->bc[vm->pc + 3];
 
-     u64 buf[3];                      // [0]=RAX, [1]=RBX, [2]=RFLAGS out
+     u64 buf[3]; 
      buf[0] = VMP_REG_GET(vm, vm->reg_map[X86_RAX]);
      buf[1] = VMP_REG_GET(vm, vm->reg_map[X86_RBX]);
-     buf[2] = 0;
+     buf[2] = 0; // RFLAGS
 
-     const u8 *code_ptr = code;       // separate C var for clarity
+     const u8 *code_ptr = code;
 
      __asm__ volatile(
-       "mov (%[b]), %%rax\n\t"        // load RAX from buf[0]
-       "mov 8(%[b]), %%rbx\n\t"       // load RBX from buf[1]
-       "call *%[c]\n\t"               // call native code
+       "push %[b]\n\t"                // Save buf pointer to stack
+       "push %%rax\n\t"               // Dummy push for 16-byte alignment
+       "mov 0(%[b]),  %%rax\n\t"
+       "mov 8(%[b]),  %%rbx\n\t"
+       "call *%[c]\n\t"
+       "pop %%r11\n\t"                // Discard dummy
+       "pop %%r11\n\t"                // Restore buf pointer to R11
+       "mov %%rax, 0(%%r11)\n\t"
+       "mov %%rbx, 8(%%r11)\n\t"
        "pushfq\n\t"
-       "pop %%rdx\n\t"                // RFLAGS -> RDX
-       "mov %%rdx, 16(%[b])\n\t"      // store RFLAGS to buf[2]
-       "mov %%rax, (%[b])\n\t"        // store RAX back
-       "mov %%rbx, 8(%[b])\n\t"       // store RBX back
+       "pop %%rax\n\t"
+       "mov %%rax, 16(%%r11)\n\t"
        : /* no outputs */
-       : [b] "r" (buf), [c] "r" (code_ptr)   // input pointer operands
-       : "memory", "cc", "rax", "rbx", "rdx"  // clobbers
+       : [b] "r" (buf), [c] "r" (code_ptr)
+       : "memory", "cc", "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"
      );
-
+     
      VMP_REG_SET(vm, vm->reg_map[X86_RAX], buf[0]);
      VMP_REG_SET(vm, vm->reg_map[X86_RBX], buf[1]);
 
@@ -169,7 +173,7 @@ static inline __attribute__((always_inline)) u32 h_svc(vm_ctx_t *vm) {
      if (rflags & (1ULL<<7))  vm->FL |= FL_NEG;
      if (rflags & (1ULL<<11)) vm->FL |= FL_OVER;
 
-     return 3 + len;                  // opcode(1)+len(2)+code(len)
+     return 3 + len;
    }
 
  #endif /* H_SYSTEM_H */

@@ -140,7 +140,7 @@ func (p *Packer) injectVMPBatch64(funcs []FuncBytecode, activeBlob []byte) error
 	fmt.Printf("    PT_NOTE[%d] -> PT_LOAD RX: off=0x%X va=0x%X sz=0x%X\n",
 		noteIdx, payloadFileOff, payloadVA, len(payload))
 
-	notePhdrOff = reorderPTLoads64(p.data, ehdr, payloadVA, notePhdrOff)
+	// notePhdrOff = reorderPTLoads64(p.data, ehdr, payloadVA, notePhdrOff)
 
 	// 4. Token descriptor table (16 bytes per entry)
 	for len(payload)%8 != 0 {

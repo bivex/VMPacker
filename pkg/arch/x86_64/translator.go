@@ -105,9 +105,11 @@ func NewTranslator(funcAddr uint64, funcSize int, code []byte) *Translator {
 		t.regMap[i] = byte(i)
 	}
 	// Shuffle R0-R15
+	/*
 	rand.Shuffle(16, func(i, j int) {
 		t.regMap[i], t.regMap[j] = t.regMap[j], t.regMap[i]
 	})
+	*/
 
 	return t
 }
@@ -201,7 +203,7 @@ func (t *Translator) reg(r x86asm.Reg) byte {
 	if id >= 32 && id < 64 {
 		return byte(id - 32) // Map XMM0-15 to V0-V15
 	}
-	return t.regMap[id]
+	return byte(id)
 }
 
 func (t *Translator) pos() int {
@@ -229,11 +231,30 @@ func (t *Translator) Translate(insts []vm.Instruction) (*vm.TranslateResult, err
 			continue
 		}
 		if err := t.translateInst(xInst, inst.Offset); err != nil {
+			if t.hybrid && t.tryEmitNativeForced(inst.RawBytes, xInst) {
+				continue
+			}
 			t.unsupported = append(t.unsupported, fmt.Sprintf("offset 0x%X: %v", inst.Offset, err))
 			t.emit(vm.OpHalt)
 		}
 	}
 	return t.finishTranslate()
+}
+
+func (t *Translator) tryEmitNativeForced(raw []byte, inst x86asm.Inst) bool {
+	switch inst.Op {
+	case x86asm.JMP, x86asm.CALL, x86asm.RET, x86asm.PUSH, x86asm.POP, x86asm.SYSCALL, x86asm.SYSENTER, x86asm.INT:
+		return false
+	}
+	name := inst.Op.String()
+	if len(name) > 0 && name[0] == 'J' {
+		return false
+	}
+	t.emit(vm.OpSNativeExec)
+	t.emitU16(uint16(len(raw)))
+	t.emit(raw...)
+	t.emit(0xC3) // RET
+	return true
 }
 
 func (t *Translator) finishTranslate() (*vm.TranslateResult, error) {
@@ -321,7 +342,7 @@ func (t *Translator) translateInst(inst x86asm.Inst, offset int) error {
 	case x86asm.CMP:
 		return t.trCmp(inst)
 	case x86asm.RET:
-		t.emit(vm.OpRet, t.regMap[X86_RAX])
+		t.emit(vm.OpRet, byte(X86_RAX))
 		return nil
 	case x86asm.NOP:
 		t.emit(vm.OpNop)

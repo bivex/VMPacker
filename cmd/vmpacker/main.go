@@ -34,6 +34,7 @@ var interpBlobARM32 []byte
 var interpBlobX86_64 []byte
 
 func main() {
+	vm.GenerateDynamicISA()
 	funcList := flag.String("func", "", "comma-separated function names to protect")
 	addrList := flag.String("addr", "", "protect by address (format: 0xADDR:SIZE[:name], comma-separated)")
 	output := flag.String("o", "", "output file path (default: original.vmp)")
@@ -43,6 +44,7 @@ func main() {
 	tokenEntry := flag.Bool("token", true, "enable tokenized entry mode (3-inst trampoline) - default on")
 	cff := flag.Bool("cff", false, "enable Control Flow Flattening (CFF) obfuscation")
 	mba := flag.Bool("mba", false, "enable Mixed Boolean-Arithmetic (MBA) instruction substitution")
+	hybrid := flag.Bool("hybrid", false, "enable Hybrid Mode (fallback to native for unsupported instructions)")
 	mangle := flag.Bool("mangle", false, "enable Symbol Mangling for protected functions")
 	info := flag.Bool("info", false, "print ELF info only, do not protect")
 
@@ -143,14 +145,15 @@ Examples:
 	fmt.Println()
 
 	// generate dynamic opcodes
-	vm.GenerateDynamicISA()
-	vm.RebuildOpTable()
+	// vm.GenerateDynamicISA()
+	// vm.RebuildOpTable()
 
 	packer := elfpacker.NewPacker(inputPath, outPath, funcs, addrSpecs, *verbose, *strip, *debug, *tokenEntry, interpBlob)
 	packer.SetInterpBlobARM32(interpBlobARM32)
 	packer.SetInterpBlobX86_64(interpBlobX86_64)
 	packer.SetCFF(*cff)
 	packer.SetMBA(*mba)
+	packer.SetHybrid(*hybrid)
 	packer.SetMangle(*mangle)
 	if err := packer.Process(); err != nil {
 		fmt.Fprintf(os.Stderr, "\n[!] Failed: %v\n", err)

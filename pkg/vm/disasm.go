@@ -205,6 +205,21 @@ func InstructionSize(op byte) int {
 	return 0
 }
 
+// InstructionSizeFull returns total byte count, handling variable length if bytecode is provided
+func InstructionSizeFull(bytecode []byte, pc int) int {
+	if pc < 0 || pc >= len(bytecode) {
+		return 0
+	}
+	op := bytecode[pc]
+	if op == OpSNativeExec && pc+2 < len(bytecode) {
+		// [op][len16][code...]
+		len16 := int(binary.LittleEndian.Uint16(bytecode[pc+1:]))
+		// Total = 1 (op) + 2 (len) + len(raw) + 1 (RET) = 4 + len(raw)
+		return 3 + len16 + 1
+	}
+	return InstructionSize(op)
+}
+
 // OpcodeName returns opcode name
 func OpcodeName(op byte) string {
 	if info, ok := opTable[op]; ok {

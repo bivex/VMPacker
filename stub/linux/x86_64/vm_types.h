@@ -95,25 +95,25 @@ static void vm_ctx_init(vm_ctx_t *vm, u64 *args, u8 *bytecode, u32 len) {
   vm->bc = bytecode; vm->bc_len = len;
   vm->slide = 0; vm->str_ptr = 0;
   vm->insn_count = 0;
+/* x86_64 layout from vm_entry.S (pushed in this order)
+   0: RDI, 1: RSI, 2: RDX, 3: RCX, 4: R8, 5: R9, 6: RAX, 7: RBX, 8: RBP, 9: R12, 10: R13, 11: R14, 12: R15, 13: original_RSP
+*/
+vm->R[vm->reg_map[X86_RDI]] = args[0];
+vm->R[vm->reg_map[X86_RSI]] = args[1];
+vm->R[vm->reg_map[X86_RDX]] = args[2];
+vm->R[vm->reg_map[X86_RCX]] = args[3];
+vm->R[vm->reg_map[X86_R8]]  = args[4];
+vm->R[vm->reg_map[X86_R9]]  = args[5];
+vm->R[vm->reg_map[X86_RAX]] = args[6];
+vm->R[vm->reg_map[X86_RBX]] = args[7];
+vm->R[vm->reg_map[X86_RBP]] = args[8];
+vm->R[vm->reg_map[X86_R12]] = args[9];
+vm->R[vm->reg_map[X86_R13]] = args[10];
+vm->R[vm->reg_map[X86_R14]] = args[11];
+vm->R[vm->reg_map[X86_R15]] = args[12];
 
-  /* x86_64 layout from vm_entry.S (pushed in this order, so args points to RDI)
-     0: RDI, 1: RSI, 2: RDX, 3: RCX, 4: R8, 5: R9, 6: RAX, 7: RBX, 8: RBP, 9: R12, 10: R13, 11: R14, 12: R15, 13: RSP
-  */
-  vm->R[vm->reg_map[X86_RDI]] = args[0];
-  vm->R[vm->reg_map[X86_RSI]] = args[1];
-  vm->R[vm->reg_map[X86_RDX]] = args[2];
-  vm->R[vm->reg_map[X86_RCX]] = args[3];
-  vm->R[vm->reg_map[X86_R8]]  = args[4];
-  vm->R[vm->reg_map[X86_R9]]  = args[5];
-  vm->R[vm->reg_map[X86_RAX]] = args[6];
-  vm->R[vm->reg_map[X86_RBX]] = args[7];
-  vm->R[vm->reg_map[X86_RBP]] = args[8];
-  vm->R[vm->reg_map[X86_R12]] = args[9];
-  vm->R[vm->reg_map[X86_R13]] = args[10];
-  vm->R[vm->reg_map[X86_R14]] = args[11];
-  vm->R[vm->reg_map[X86_R15]] = args[12];
-  
-  vm->R[X86_RSP] = (u64)&vm->vm_stk[VM_MEM_STACK];
+// Use the VM's internal memory stack, not the original RSP
+vm->R[X86_RSP] = (u64)&vm->vm_stk[VM_MEM_STACK];
 }
 
 #define VM_DEBUG(...)

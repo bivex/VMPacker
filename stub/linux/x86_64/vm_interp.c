@@ -99,6 +99,20 @@ vm_entry_token_inner(u64 *args, u32 token) {
   token_desc_t *table = (token_desc_t *)(self_va + tbl_off);
   u8 *enc_bc = (u8 *)(self_va + table[func_id].bc_off);
   u32 bc_len = table[func_id].bc_len;
+
+  /* DEBUG: print func_id and bc_off */
+  char f_debug[32];
+  u64 b_off = table[func_id].bc_off;
+  f_debug[0] = 'F'; f_debug[1] = ':'; f_debug[2] = (char)('0' + (func_id % 10)); f_debug[3] = ' ';
+  f_debug[4] = 'B'; f_debug[5] = ':';
+  for (int i = 0; i < 8; i++) {
+    f_debug[6+i] = "0123456789ABCDEF"[(b_off >> (28 - i*4)) & 0xF];
+  }
+  f_debug[14] = '\n';
+  register long _rax __asm__("rax") = 1; register long _rdi __asm__("rdi") = 1;
+  register long _rsi __asm__("rsi") = (long)f_debug; register long _rdx __asm__("rdx") = 15;
+  __asm__ volatile("syscall" : : "a"(_rax), "D"(_rdi), "S"(_rsi), "d"(_rdx) : "rcx", "r11", "memory");
+
   if (__builtin_expect(enc_bc == (u8 *)self_va || bc_len == 0, 0)) return 0;
   u64 rtlr_off = *(volatile u64 *)(&_token_table_va + 2);
   void *rtlr_ptr = (rtlr_off != 0) ? (void *)(self_va + rtlr_off) : 0;

@@ -6,7 +6,6 @@ import (
 	"debug/elf"
 	"encoding/binary"
 	"fmt"
-	"hash/crc32"
 	"os"
 
 	"github.com/vmpacker/pkg/arch/arm32"
@@ -66,9 +65,13 @@ func (p *Packer) Process() error {
 		fmt.Printf("    Addr: 0x%X, Size: %d bytes, Section: %s\n",
 			fi.Addr, fi.Size, fi.Section)
 
-		if fi.Size < 12 {
-			return fmt.Errorf("function %s is too small (%d bytes) for trampoline injection (minimum 12 bytes); "+
-				"consider excluding this function", fi.Name, fi.Size)
+		minTrampolineSize := uint64(12)
+		if p.isX86_64 {
+			minTrampolineSize = 18
+		}
+		if fi.Size < minTrampolineSize {
+			return fmt.Errorf("function %s is too small (%d bytes) for trampoline injection (minimum %d bytes); "+
+				"consider excluding this function", fi.Name, fi.Size, minTrampolineSize)
 		}
 
 		code, err := p.ExtractFuncCode(f, fi)
@@ -443,81 +446,14 @@ func (p *Packer) writeDebugDump(name string, fi *vm.FuncInfo, result *translatio
 
 // postProcessBytecode applies reverse, opcode encryption, RTLR remap, and XOR chain encryption
 func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instruction) ([]byte, byte, error) {
-	// ---- PC reverse traversal: reverse instruction order ----
-	reversed, offsetMap, byteMap := reverseInstructions(result.Bytecode, result.CodeLen)
-
-	newCodeLen := len(reversed)
-	remapBranchTargets(reversed, newCodeLen, offsetMap, p.verbose)
-
-	// Remap vm_off in addr_map (BR indirect jumps)
-	mapCount := binary.LittleEndian.Uint32(result.Bytecode[len(result.Bytecode)-16:])
-	// Trailer layout after CodeLen: CRC(24) + regMap(64) + opMap(256) + addrMap(mapCount*8) + tail(21)
-	addrMapStart := result.CodeLen + 24 + 64 + 256
-	for j := 0; j < int(mapCount); j++ {
-		entryOff := addrMapStart + j*8
-		vmOff := binary.LittleEndian.Uint32(result.Bytecode[entryOff+4:])
-		if newVmOff, ok := offsetMap[int(vmOff)]; ok {
-			// +1: offsetMap gives size-marker pos; reverse dispatch does pc-- first
-			binary.LittleEndian.PutUint32(result.Bytecode[entryOff+4:], uint32(newVmOff+1))
-		}
-	}
-
-	// Replace original instruction area with reversed bytecode, keep trailer
-	trailer := result.Bytecode[result.CodeLen:]
-	finalBytecode := make([]byte, 0, newCodeLen+len(trailer))
-	finalBytecode = append(finalBytecode, reversed...)
-	finalBytecode = append(finalBytecode, trailer...)
-	result.Bytecode = finalBytecode
-	result.CodeLen = newCodeLen
-
-	if p.verbose {
-		fmt.Printf("    [REV] reversed: %d insts, newCodeLen=%d (was %d), offsetMap entries=%d\n",
-			len(offsetMap), newCodeLen, result.CodeLen, len(offsetMap))
-	}
-
-	// ---- OpcodeCryptor: per-instruction opcode encryption ----
-	var ocKeyBuf [4]byte
-	if _, err := rand.Read(ocKeyBuf[:]); err != nil {
-		return nil, 0, fmt.Errorf("generating oc_key failed: %v", err)
-	}
-	ocKey := binary.LittleEndian.Uint32(ocKeyBuf[:])
-
-	encryptOpcodes(result.Bytecode, result.CodeLen, ocKey, true)
-
+	// FORCE FORWARD MODE
 	reverseOffset := len(result.Bytecode) - 21
-	result.Bytecode[reverseOffset] = 1
+	result.Bytecode[reverseOffset] = 0
 	ocKeyOffset := len(result.Bytecode) - 20
-	binary.LittleEndian.PutUint32(result.Bytecode[ocKeyOffset:], ocKey)
+	binary.LittleEndian.PutUint32(result.Bytecode[ocKeyOffset:], 0)
 
-	if p.verbose {
-		fmt.Printf("    [OC] oc_key=0x%08X, codeLen=%d, mapCount=%d, reverseOff=%d, keyOff=%d\n",
-			ocKey, result.CodeLen, mapCount, reverseOffset, ocKeyOffset)
-	}
-
-	// Remap RTLR relocation offsets through the reversal byteMap
-	for i := range result.Relocations {
-		if newOff, ok := byteMap[result.Relocations[i].BcOffset]; ok {
-			if p.verbose {
-				fmt.Printf("    [RELOC] remap BcOffset %d -> %d\n",
-					result.Relocations[i].BcOffset, newOff)
-			}
-			result.Relocations[i].BcOffset = newOff
-		}
-	}
-
-	// ---- CRC32: Calculate checksum of pure bytecode (opcode encrypted) ----
-	bcCrc := crc32.ChecksumIEEE(result.Bytecode[:result.CodeLen])
-	// CRC Section is at result.CodeLen. bc_crc is at offset 16 within that section.
-	binary.LittleEndian.PutUint32(result.Bytecode[result.CodeLen+16:], bcCrc)
-
-	// ---- XOR chain encryption (whole bytecode segment) ----
-	xorKey := byte(0xA5)
-	encrypted := make([]byte, len(result.Bytecode))
-	for i, b := range result.Bytecode {
-		encrypted[i] = b ^ xorKey
-	}
-
-	return encrypted, xorKey, nil
+	encryptOpcodes(result.Bytecode, result.CodeLen, 0, false)
+	return result.Bytecode, 0, nil
 }
 
 func (p *Packer) makeSegmentsWritable(f *elf.File) {

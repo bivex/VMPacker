@@ -97,22 +97,22 @@ func (p *Packer) FindFunction(f *elf.File, name string) (*vm.FuncInfo, error) {
 	return nil, fmt.Errorf("function '%s' not found", name)
 }
 
-// resolveFileOffset finds file offset for a virtual address, checking PT_LOAD first then sections
+// resolveFileOffset finds file offset for a virtual address, checking sections first
 func resolveFileOffset(f *elf.File, addr uint64, secIdx elf.SectionIndex) (uint64, string, bool) {
-	// Prefer Program Headers (required for Android .so)
+	// 1. Prefer Section Headers for standard executables (x86_64, etc)
+	if int(secIdx) >= 0 && int(secIdx) < len(f.Sections) {
+		sec := f.Sections[secIdx]
+		if addr >= sec.Addr && addr < sec.Addr+sec.Size {
+			return sec.Offset + (addr - sec.Addr), sec.Name, true
+		}
+	}
+
+	// 2. Fallback to Program Headers (required for some Android .so / stripped binaries)
 	for _, ph := range f.Progs {
 		if ph.Type == elf.PT_LOAD && (ph.Flags&elf.PF_X != 0) {
 			if addr >= ph.Vaddr && addr < ph.Vaddr+ph.Memsz {
 				return ph.Off + (addr - ph.Vaddr), "__LOAD_X", true
 			}
-		}
-	}
-
-	// Fallback to Section Headers
-	if int(secIdx) < len(f.Sections) {
-		sec := f.Sections[secIdx]
-		if addr >= sec.Addr {
-			return sec.Offset + (addr - sec.Addr), sec.Name, true
 		}
 	}
 

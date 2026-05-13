@@ -309,4 +309,6 @@ func GenerateDynamicISA() {
 		GlobalOpMap[i] = randomByte
 		InverseOpMap[randomByte] = byte(i)
 	}
+
+	opTable = buildOpTable()
 }
