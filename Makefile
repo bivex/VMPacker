@@ -71,7 +71,7 @@ STUB_CFLAGS = -g -c -O1 -mcmodel=tiny -fno-stack-protector \
               -DVM_FUNC_SPLIT -DVM_TOKEN_ENTRY -DVM_INDIRECT_DISPATCH
 
 STUB64_CFLAGS = -g -c -O1 -fno-stack-protector \
-              -fno-builtin -fno-builtin-memcpy -nostdlib -fPIC \
+              -fno-builtin -fno-builtin-memcpy -nostdlib -fPIE -fvisibility=hidden -mcmodel=small -fno-jump-tables \
               -DVM_FUNC_SPLIT -DVM_TOKEN_ENTRY -DVM_INDIRECT_DISPATCH
 
 DEMO_CFLAGS = -static -O0 -march=armv8-a

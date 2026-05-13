@@ -113,7 +113,7 @@ vm->R[vm->reg_map[X86_R14]] = args[11];
 vm->R[vm->reg_map[X86_R15]] = args[12];
 
 // Use the VM's internal memory stack, not the original RSP
-vm->R[X86_RSP] = (u64)&vm->vm_stk[VM_MEM_STACK];
+vm->R[vm->reg_map[X86_RSP]] = (u64)&vm->vm_stk[VM_MEM_STACK];
 }
 
 #define VM_DEBUG(...)
