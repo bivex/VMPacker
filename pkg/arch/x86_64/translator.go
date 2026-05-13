@@ -227,9 +227,6 @@ func (t *Translator) Translate(insts []vm.Instruction) (*vm.TranslateResult, err
 			continue
 		}
 		// Attempt hybrid native emission before normal translation
-		if t.hybrid && t.tryEmitNative(inst.RawBytes, xInst) {
-			continue
-		}
 		if err := t.translateInst(inst, xInst); err != nil {
 			if t.hybrid && t.tryEmitNativeForced(inst.RawBytes, xInst) {
 				continue
@@ -349,6 +346,10 @@ func (t *Translator) translateInst(inst vm.Instruction, xInst x86asm.Inst) error
 		return nil
 	case x86asm.CALL:
 		return t.trCall(xInst, inst.Offset)
+	case x86asm.SHR, x86asm.SHL, x86asm.SAR:
+		return t.trShift(xInst)
+	case x86asm.ROL, x86asm.ROR:
+		return t.trRotate(xInst)
 	case x86asm.JMP:
 		return t.trJmp(xInst, inst.Offset)
 	default:
@@ -358,6 +359,57 @@ func (t *Translator) translateInst(inst vm.Instruction, xInst x86asm.Inst) error
 		}
 		return fmt.Errorf("unsupported opcode: %v", xInst.Op)
 	}
+}
+
+func (t *Translator) trShift(inst x86asm.Inst) error {
+	dst, ok := inst.Args[0].(x86asm.Reg)
+	if !ok {
+		return fmt.Errorf("unsupported shift dest")
+	}
+	d := t.reg(dst)
+
+	if imm, ok := inst.Args[1].(x86asm.Imm); ok {
+		switch inst.Op {
+		case x86asm.SHR:
+			t.emit(vm.OpShrImm, d, d)
+		case x86asm.SHL:
+			t.emit(vm.OpShlImm, d, d)
+		case x86asm.SAR:
+			t.emit(vm.OpAsrImm, d, d)
+		}
+		t.emitU32(uint32(imm))
+		return nil
+	}
+	if reg, ok := inst.Args[1].(x86asm.Reg); ok {
+		m := t.reg(reg)
+		switch inst.Op {
+		case x86asm.SHR:
+			t.emit(vm.OpShr, d, d, m)
+		case x86asm.SHL:
+			t.emit(vm.OpShl, d, d, m)
+		case x86asm.SAR:
+			t.emit(vm.OpAsr, d, d, m)
+		}
+		return nil
+	}
+	return fmt.Errorf("unsupported shift src")
+}
+
+func (t *Translator) trRotate(inst x86asm.Inst) error {
+	dst, ok := inst.Args[0].(x86asm.Reg)
+	if !ok {
+		return fmt.Errorf("unsupported rotate dest")
+	}
+	d := t.reg(dst)
+
+	if inst.Op == x86asm.ROR {
+		if reg, ok := inst.Args[1].(x86asm.Reg); ok {
+			t.emit(vm.OpRor, d, d, t.reg(reg))
+			return nil
+		}
+	}
+	// ROL has no direct VM opcode — emit via native exec fallback
+	return fmt.Errorf("unsupported rotate variant")
 }
 
 func (t *Translator) trPush(inst x86asm.Inst) error {
