@@ -80,6 +80,7 @@ type Translator struct {
 	mba         bool           // Mixed Boolean-Arithmetic obfuscation
 	regMap      [64]byte       // Virtual register shuffling map (arch -> phys)
 	stringRefs  map[uint64]StringRef
+	hybrid      bool // Hybrid Mode enabled
 }
 
 type branchFixup struct {
@@ -121,6 +122,11 @@ func (t *Translator) SetCFF(enabled bool) {
 // SetMBA enables Mixed Boolean-Arithmetic obfuscation
 func (t *Translator) SetMBA(enabled bool) {
 	t.mba = enabled
+}
+
+// SetHybrid enables Hybrid Mode
+func (t *Translator) SetHybrid(enabled bool) {
+	t.hybrid = enabled
 }
 
 // SetStringRefs sets the map of addresses to encrypted strings
@@ -181,6 +187,13 @@ func (t *Translator) DebugLog() []DebugEntry {
 
 // emit appends bytes
 func (t *Translator) emit(b ...byte) {
+	t.code = append(t.code, b...)
+}
+
+// emitU16 appends 16-bit little-endian
+func (t *Translator) emitU16(v uint16) {
+	b := make([]byte, 2)
+	binary.LittleEndian.PutUint16(b, v)
 	t.code = append(t.code, b...)
 }
 
@@ -370,6 +383,15 @@ func (t *Translator) Translate(instructions []vm.Instruction) (*TranslateResult,
 		}
 
 		if err != nil {
+			if t.hybrid {
+				// Hybrid Mode: fallback to native execution
+				t.emit(vm.OpSNativeExec)
+				t.emitU16(uint16(instructions[i].Size))
+				// instructions[i].Raw is already 32-bit LE bytes for ARM64
+				t.emitU32(instructions[i].Raw)
+				result.TransInsts++
+				continue
+			}
 			t.unsupported = append(t.unsupported, fmt.Sprintf(
 				"offset 0x%04X: %s (raw=0x%08X) - %v",
 				instructions[i].Offset, OpName(Op(instructions[i].Op)), instructions[i].Raw, err))

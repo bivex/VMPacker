@@ -146,105 +146,95 @@
  
   /* NATIVE_EXEC: Execute native ARM64 code embedded in bytecode */
   static inline __attribute__((always_inline)) u32 h_native_exec(vm_ctx_t *vm) {
- #ifdef __aarch64__
-   u16 len = rd16(&vm->bc[vm->pc + 1]);
-   u8 *code = &vm->bc[vm->pc + 3];
- 
-   /* Save LR and SP */
-   register u64 x0 __asm__("x0") = VMP_REG_GET(vm, vm->reg_map[0]);
-   register u64 x1 __asm__("x1") = VMP_REG_GET(vm, vm->reg_map[1]);
-   register u64 x2 __asm__("x2") = VMP_REG_GET(vm, vm->reg_map[2]);
-   register u64 x3 __asm__("x3") = VMP_REG_GET(vm, vm->reg_map[3]);
-   register u64 x4 __asm__("x4") = VMP_REG_GET(vm, vm->reg_map[4]);
-   register u64 x5 __asm__("x5") = VMP_REG_GET(vm, vm->reg_map[5]);
-   register u64 x6 __asm__("x6") = VMP_REG_GET(vm, vm->reg_map[6]);
-   register u64 x7 __asm__("x7") = VMP_REG_GET(vm, vm->reg_map[7]);
-   register u64 x8  __asm__("x8")  = VMP_REG_GET(vm, vm->reg_map[8]);
-   register u64 x9  __asm__("x9")  = 0;  /* temp */
-   register u64 x10 __asm__("x10") = VMP_REG_GET(vm, vm->reg_map[10]);
-   register u64 x11 __asm__("x11") = VMP_REG_GET(vm, vm->reg_map[11]);
-   register u64 x12 __asm__("x12") = VMP_REG_GET(vm, vm->reg_map[12]);
-   register u64 x13 __asm__("x13") = VMP_REG_GET(vm, vm->reg_map[13]);
-   register u64 x14 __asm__("x14") = VMP_REG_GET(vm, vm->reg_map[14]);
-   register u64 x15 __asm__("x15") = VMP_REG_GET(vm, vm->reg_map[15]);
-   register u64 x16 __asm__("x16") = VMP_REG_GET(vm, vm->reg_map[16]);
-   register u64 x17 __asm__("x17") = VMP_REG_GET(vm, vm->reg_map[17]);
-   register u64 x18 __asm__("x18") = VMP_REG_GET(vm, vm->reg_map[18]);
-   register u64 x19 __asm__("x19") = VMP_REG_GET(vm, vm->reg_map[19]);
-   register u64 x20 __asm__("x20") = VMP_REG_GET(vm, vm->reg_map[20]);
-   register u64 x21 __asm__("x21") = VMP_REG_GET(vm, vm->reg_map[21]);
-   register u64 x22 __asm__("x22") = VMP_REG_GET(vm, vm->reg_map[22]);
-   register u64 x23 __asm__("x23") = VMP_REG_GET(vm, vm->reg_map[23]);
-   register u64 x24 __asm__("x24") = VMP_REG_GET(vm, vm->reg_map[24]);
-   register u64 x25 __asm__("x25") = VMP_REG_GET(vm, vm->reg_map[25]);
-   register u64 x26 __asm__("x26") = VMP_REG_GET(vm, vm->reg_map[26]);
-   register u64 x27 __asm__("x27") = VMP_REG_GET(vm, vm->reg_map[27]);
-   register u64 x28 __asm__("x28") = VMP_REG_GET(vm, vm->reg_map[28]);
-   register u64 x29 __asm__("x29") = VMP_REG_GET(vm, vm->reg_map[29]); /* FP */
-   register u64 lr  __asm__("x30") = VMP_REG_GET(vm, vm->reg_map[30]); /* LR */
- 
-   /* Align SP to 16 bytes per ABI */
-   __asm__ volatile(
-     "mov x9, sp\n\t"
-     "bic x9, x9, #15\n\t"
-     "mov sp, x9\n\t"
-   );
- 
+  #ifdef __aarch64__
+    u16 len = rd16(&vm->bc[vm->pc + 1]);
+    u8 *code = &vm->bc[vm->pc + 3];
+
+    /* Allocate save area on stack (33 qwords: x0-x30 + nzcv) */
+    u64 save_area[33];
+    u64 *p = save_area;
+
+    /* Save all VM registers into save_area */
+    for (int i = 0; i < 31; i++) {
+        p[i] = VMP_REG_GET(vm, vm->reg_map[i]);
+    }
+    p[31] = VMP_REG_GET(vm, vm->reg_map[30]); /* LR (x30) */
+    p[32] = 0; /* NZCV placeholder */
+
+    /* Align SP to 16 bytes */
+    __asm__ volatile("mov x9, sp\n\tbic x9, x9, #15\n\tmov sp, x9\n\t" ::: "x9", "memory");
+
+    /* Pass pointer in x9 */
+    register u64 *reg_p __asm__("x9") = p;
+    register u64 *reg_code __asm__("x10") = (u64*)code;
+
+    /* Load registers from save_area, call native code, store back */
     __asm__ volatile(
-      "blr %[code]"
-      : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3), "+r"(x4), "+r"(x5),
-        "+r"(x6), "+r"(x7), "+r"(x8), "+r"(x9), "+r"(x10), "+r"(x11),
-        "+r"(x12), "+r"(x13), "+r"(x14), "+r"(x15), "+r"(x16), "+r"(x17),
-        "+r"(x18), "+r"(x19), "+r"(x20), "+r"(x21), "+r"(x22), "+r"(x23),
-        "+r"(x24), "+r"(x25), "+r"(x26), "+r"(x27), "+r"(x28), "+r"(x29),
-         "+r"(lr)
-      : [code] "r" (code)
-      : "memory", "cc"
+        /* Load x0-x30 */
+        "ldp x0, x1, [x9], #16\n\t"
+        "ldp x2, x3, [x9], #16\n\t"
+        "ldp x4, x5, [x9], #16\n\t"
+        "ldp x6, x7, [x9], #16\n\t"
+        "ldp x8, x9, [x9], #16\n\t"
+        "ldp x10, x11, [x9], #16\n\t"
+        "ldp x12, x13, [x9], #16\n\t"
+        "ldp x14, x15, [x9], #16\n\t"
+        "ldp x16, x17, [x9], #16\n\t"
+        "ldp x18, x19, [x9], #16\n\t"
+        "ldp x20, x21, [x9], #16\n\t"
+        "ldp x22, x23, [x9], #16\n\t"
+        "ldp x24, x25, [x9], #16\n\t"
+        "ldp x26, x27, [x9], #16\n\t"
+        "ldp x28, x29, [x9], #16\n\t"
+        "ldr x30, [x9], #8\n\t"
+        /* x9 points at p+264, x10 holds code pointer, need to move x10 to link register */
+        "mov x11, x10\n\t"  /* temp: code -> x11 */
+        "blr x11\n\t"
+        /* x9 = p+264, rewind to p */
+        "sub x9, x9, #264\n\t"
+        /* Store back results */
+        "stp x0, x1, [x9], #16\n\t"
+        "stp x2, x3, [x9], #16\n\t"
+        "stp x4, x5, [x9], #16\n\t"
+        "stp x6, x7, [x9], #16\n\t"
+        "stp x8, x9, [x9], #16\n\t"
+        "stp x10, x11, [x9], #16\n\t"
+        "stp x12, x13, [x9], #16\n\t"
+        "stp x14, x15, [x9], #16\n\t"
+        "stp x16, x17, [x9], #16\n\t"
+        "stp x18, x19, [x9], #16\n\t"
+        "stp x20, x21, [x9], #16\n\t"
+        "stp x22, x23, [x9], #16\n\t"
+        "stp x24, x25, [x9], #16\n\t"
+        "stp x26, x27, [x9], #16\n\t"
+        "stp x28, x29, [x9], #16\n\t"
+        "str x30, [x9], #8\n\t"
+        /* NZCV */
+        "mrs x12, nzcv\n\t"
+        "str x12, [x9], #8\n\t"
+        : 
+        : "r" (reg_p), "r" (reg_code)
+        : "memory", "cc",
+          "x0","x1","x2","x3","x4","x5","x6","x7","x8","x9","x10","x11",
+          "x12","x13","x14","x15","x16","x17","x18","x19","x20","x21","x22",
+          "x23","x24","x25","x26","x27","x28","x29","x30"
     );
 
-    /* Capture NZCV (condition flags) from native execution and update VM FL */
-    u64 nzcv;
-    __asm__ volatile("mrs %0, nzcv" : "=r"(nzcv));
+    /* Restore VM registers from save_area */
+    for (int i = 0; i < 31; i++) {
+        VMP_REG_SET(vm, vm->reg_map[i], p[i]);
+    }
+    VMP_REG_SET(vm, vm->reg_map[30], p[31]); /* LR */
+    /* Update flags from p[32] */
+    u64 nzcv = p[32];
     vm->FL = 0;
-    if (nzcv & (1ULL<<31)) vm->FL |= FL_ZERO;   // Z
-    if (nzcv & (1ULL<<29)) vm->FL |= FL_CARRY;  // C
-    if (nzcv & (1ULL<<30)) vm->FL |= FL_NEG;    // N
-    if (nzcv & (1ULL<<28)) vm->FL |= FL_OVER;   // V
+    if (nzcv & (1ULL<<31)) vm->FL |= FL_ZERO;
+    if (nzcv & (1ULL<<29)) vm->FL |= FL_CARRY;
+    if (nzcv & (1ULL<<30)) vm->FL |= FL_NEG;
+    if (nzcv & (1ULL<<28)) vm->FL |= FL_OVER;
 
-    VMP_REG_SET(vm, vm->reg_map[0],  x0);
-   VMP_REG_SET(vm, vm->reg_map[1],  x1);
-   VMP_REG_SET(vm, vm->reg_map[2],  x2);
-   VMP_REG_SET(vm, vm->reg_map[3],  x3);
-   VMP_REG_SET(vm, vm->reg_map[4],  x4);
-   VMP_REG_SET(vm, vm->reg_map[5],  x5);
-   VMP_REG_SET(vm, vm->reg_map[6],  x6);
-   VMP_REG_SET(vm, vm->reg_map[7],  x7);
-   VMP_REG_SET(vm, vm->reg_map[8],  x8);
-   VMP_REG_SET(vm, vm->reg_map[9],  x9);
-   VMP_REG_SET(vm, vm->reg_map[10], x10);
-   VMP_REG_SET(vm, vm->reg_map[11], x11);
-   VMP_REG_SET(vm, vm->reg_map[12], x12);
-   VMP_REG_SET(vm, vm->reg_map[13], x13);
-   VMP_REG_SET(vm, vm->reg_map[14], x14);
-   VMP_REG_SET(vm, vm->reg_map[15], x15);
-   VMP_REG_SET(vm, vm->reg_map[16], x16);
-   VMP_REG_SET(vm, vm->reg_map[17], x17);
-   VMP_REG_SET(vm, vm->reg_map[18], x18);
-   VMP_REG_SET(vm, vm->reg_map[19], x19);
-   VMP_REG_SET(vm, vm->reg_map[20], x20);
-   VMP_REG_SET(vm, vm->reg_map[21], x21);
-   VMP_REG_SET(vm, vm->reg_map[22], x22);
-   VMP_REG_SET(vm, vm->reg_map[23], x23);
-   VMP_REG_SET(vm, vm->reg_map[24], x24);
-   VMP_REG_SET(vm, vm->reg_map[25], x25);
-   VMP_REG_SET(vm, vm->reg_map[26], x26);
-   VMP_REG_SET(vm, vm->reg_map[27], x27);
-   VMP_REG_SET(vm, vm->reg_map[28], x28);
-   VMP_REG_SET(vm, vm->reg_map[29], x29);
-   VMP_REG_SET(vm, vm->reg_map[30], lr);
- 
-   return 4 + len;
- #else
+    return 4 + len;
+  #else
    u16 len = rd16(&vm->bc[vm->pc + 1]);
    return 4 + len;
  #endif

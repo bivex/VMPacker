@@ -169,7 +169,7 @@ packer: $(STUB_BIN) $(STUB64_BIN) | $(BUILD_DIR)
 	@echo "[+] packer: $(PACKER)"
 
 # ------ Demo ------
-demo: $(BUILD_DIR)/demo_simple $(BUILD_DIR)/demo_x86_64
+demo: $(BUILD_DIR)/demo_simple $(BUILD_DIR)/demo_x86_64 $(BUILD_DIR)/demo_hybrid_license $(BUILD_DIR)/demo_hybrid_license_x86_64
 
 $(BUILD_DIR)/demo_x86_64: $(DEMO_DIR)/demo_x86_64.c | $(BUILD_DIR)
 	$(CC64) -O1 $< -o $@
@@ -177,7 +177,15 @@ $(BUILD_DIR)/demo_x86_64: $(DEMO_DIR)/demo_x86_64.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/demo_simple: $(DEMO_DIR)/demo_simple.c | $(BUILD_DIR)
 	$(CC) -static -O1 -nostdlib -march=armv8-a $< -o $@
-	@echo "[+] demo: $@"
+	@echo "[+] ARM64 demo: $@"
+
+$(BUILD_DIR)/demo_hybrid_license_x86_64: $(DEMO_DIR)/demo_hybrid_license.c | $(BUILD_DIR)
+	$(CC64) -O1 $< -o $@
+	@echo "[+] x86_64 hybrid demo: $@"
+
+$(BUILD_DIR)/demo_hybrid_license: $(DEMO_DIR)/demo_hybrid_license.c | $(BUILD_DIR)
+	$(CC) -static -O1 -nostdlib -march=armv8-a $< -o $@
+	@echo "[+] ARM64 hybrid demo: $@"
 
 # ------ GUI (Wails) ------
 GUI_DIR = vmp-gui
@@ -201,9 +209,32 @@ else
 endif
 	@echo "[+] cleaned"
 
+# ------ Hybrid Mode Demo Test ------
+# Test x86_64 hybrid demo (native host execution)
+test-hybrid-x86_64: $(BUILD_DIR)/demo_hybrid_license_x86_64
+	@echo "=== Testing Hybrid Mode on x86_64 ==="
+	./vmpacker -func verify_license_key -hybrid -v -o $(BUILD_DIR)/demo_hybrid_x86_64.vmp $<
+	@echo ""
+	@echo "--- Running protected binary ---"
+	@$(BUILD_DIR)/demo_hybrid_license_x86_64
+	@echo ""
+
+# Test ARM64 hybrid demo (requires qemu-aarch64 or real ARM64)
+test-hybrid-arm64: $(BUILD_DIR)/demo_hybrid_license
+	@echo "=== Testing Hybrid Mode on ARM64 ==="
+	@echo "Note: Requires aarch64-linux-gnu-ld (cross-toolchain) and QEMU or real ARM64"
+	./vmpacker -func verify_license_key -hybrid -v -o $(BUILD_DIR)/demo_hybrid_arm64.vmp $<
+	@echo ""
+	@echo "--- Running on QEMU (if available) ---"
+	@qemu-aarch64 -L /usr/aarch64-linux-gnu/ $(BUILD_DIR)/demo_hybrid_license 2>/dev/null || \
+		echo "QEMU not available, binary built but not executed"
+	@echo ""
+
 help:
 	@echo "make all    - Build stub + packer"
 	@echo "make stub   - Build VM interpreter blob"
 	@echo "make packer - Build Go packer"
 	@echo "make demo   - Build demo programs"
+	@echo "make test-hybrid-x86_64 - Test Hybrid Mode on x86_64 (native)"
+	@echo "make test-hybrid-arm64  - Test Hybrid Mode on ARM64 (via QEMU)"
 	@echo "make clean  - Clean build artifacts"
