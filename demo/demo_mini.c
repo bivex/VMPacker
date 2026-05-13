@@ -6,10 +6,12 @@ __attribute__((noinline)) int check1(int a) {
 }
 
 __attribute__((noinline)) int check2(int a) {
+    __asm__ volatile ("nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop;");
     return a + 20;
 }
 
 __attribute__((noinline)) int check3(int a) {
+    __asm__ volatile ("nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop;");
     return a + 30;
 }
 

@@ -230,7 +230,7 @@ func (t *Translator) Translate(insts []vm.Instruction) (*vm.TranslateResult, err
 		if t.hybrid && t.tryEmitNative(inst.RawBytes, xInst) {
 			continue
 		}
-		if err := t.translateInst(xInst, inst.Offset); err != nil {
+		if err := t.translateInst(inst, xInst); err != nil {
 			if t.hybrid && t.tryEmitNativeForced(inst.RawBytes, xInst) {
 				continue
 			}
@@ -290,17 +290,11 @@ func (t *Translator) finishTranslate() (*vm.TranslateResult, error) {
 		t.emitU32(uint32(t.labels[off]))
 	}
 
-	t.emit(0) // reverse
+	t.emit(0)       // reverse placeholder (1B)
 	t.emitU32(t.ocKey)
 	t.emitU32(uint32(len(sortedOffsets)))
 	t.emitU64(t.funcAddr)
 	t.emitU32(uint32(t.funcSize))
-
-	if t.ocKey != 0 {
-		for i := 0; i < codeLen; i++ {
-			t.code[i] ^= byte(t.ocKey ^ uint32(i*0x9E3779B9))
-		}
-	}
 
 	return &vm.TranslateResult{
 		Bytecode: t.code, CodeLen: codeLen, Unsupported: t.unsupported,
@@ -309,38 +303,44 @@ func (t *Translator) finishTranslate() (*vm.TranslateResult, error) {
 	}, nil
 }
 
-func (t *Translator) translateInst(inst x86asm.Inst, offset int) error {
-	switch inst.Op {
+func (t *Translator) translateInst(inst vm.Instruction, xInst x86asm.Inst) error {
+	// Handle ENDBR64 (F3 0F 1E FA) which some decoders might not recognize
+	if len(inst.RawBytes) >= 4 && inst.RawBytes[0] == 0xF3 && inst.RawBytes[1] == 0x0F && inst.RawBytes[2] == 0x1E && inst.RawBytes[3] == 0xFA {
+		t.emit(vm.OpNop)
+		return nil
+	}
+
+	switch xInst.Op {
 	case x86asm.PUSH:
-		return t.trPush(inst)
+		return t.trPush(xInst)
 	case x86asm.POP:
-		return t.trPop(inst)
+		return t.trPop(xInst)
 	case x86asm.MOV:
-		return t.trMov(inst, offset)
+		return t.trMov(xInst, inst.Offset)
 	case x86asm.LEA:
-		return t.trLea(inst, offset)
+		return t.trLea(xInst, inst.Offset)
 	case x86asm.ADD, x86asm.SUB, x86asm.XOR, x86asm.AND, x86asm.OR, x86asm.TEST:
-		return t.trAlu(inst)
+		return t.trAlu(xInst)
 	case x86asm.IMUL, x86asm.IDIV, x86asm.MUL, x86asm.DIV:
-		return t.trMulDiv(inst)
+		return t.trMulDiv(xInst)
 	case x86asm.ADDSS, x86asm.ADDSD, x86asm.SUBSS, x86asm.SUBSD, x86asm.MULSS, x86asm.MULSD, x86asm.DIVSS, x86asm.DIVSD:
-		return t.trFpAlu(inst)
+		return t.trFpAlu(xInst)
 	case x86asm.MOVSS, x86asm.MOVSD, x86asm.MOVAPS, x86asm.MOVAPD, x86asm.MOVUPS, x86asm.MOVUPD, x86asm.MOVDQU, x86asm.MOVDQA:
-		return t.trFpMov(inst, offset)
+		return t.trFpMov(xInst, inst.Offset)
 	case x86asm.UCOMISS, x86asm.UCOMISD:
-		return t.trFpCmp(inst)
+		return t.trFpCmp(xInst)
 	case x86asm.CVTSI2SS, x86asm.CVTSI2SD, x86asm.CVTTSS2SI, x86asm.CVTTSD2SI:
-		return t.trFpCvt(inst)
+		return t.trFpCvt(xInst)
 	case x86asm.XORPS, x86asm.XORPD, x86asm.ANDPS, x86asm.ANDPD, x86asm.ORPS, x86asm.ORPD:
-		return t.trFpBitwise(inst)
+		return t.trFpBitwise(xInst)
 	case x86asm.MOVSX, x86asm.MOVSXD, x86asm.MOVZX:
-		return t.trMovExt(inst, offset)
+		return t.trMovExt(xInst, inst.Offset)
 	case x86asm.BT:
-		return t.trBT(inst)
+		return t.trBT(xInst)
 	case x86asm.SETL, x86asm.SETLE, x86asm.SETG, x86asm.SETGE, x86asm.SETE, x86asm.SETNE, x86asm.SETB, x86asm.SETBE, x86asm.SETA, x86asm.SETAE:
-		return t.trSetcc(inst)
+		return t.trSetcc(xInst)
 	case x86asm.CMP:
-		return t.trCmp(inst)
+		return t.trCmp(xInst)
 	case x86asm.RET:
 		t.emit(vm.OpRet, byte(X86_RAX))
 		return nil
@@ -348,15 +348,15 @@ func (t *Translator) translateInst(inst x86asm.Inst, offset int) error {
 		t.emit(vm.OpNop)
 		return nil
 	case x86asm.CALL:
-		return t.trCall(inst, offset)
+		return t.trCall(xInst, inst.Offset)
 	case x86asm.JMP:
-		return t.trJmp(inst, offset)
+		return t.trJmp(xInst, inst.Offset)
 	default:
-		name := inst.Op.String()
+		name := xInst.Op.String()
 		if len(name) > 0 && name[0] == 'J' {
-			return t.trJcc(inst, offset)
+			return t.trJcc(xInst, inst.Offset)
 		}
-		return fmt.Errorf("unsupported opcode: %v", inst.Op)
+		return fmt.Errorf("unsupported opcode: %v", xInst.Op)
 	}
 }
 
@@ -378,6 +378,24 @@ func (t *Translator) trPop(inst x86asm.Inst) error {
 
 func (t *Translator) trMov(inst x86asm.Inst, offset int) error {
 	dst, src := inst.Args[0], inst.Args[1]
+	
+	getLdOp := func(size int) byte {
+		switch size {
+		case 8: return vm.OpSLd8
+		case 16: return vm.OpSLd16
+		case 32: return vm.OpSLd32
+		default: return vm.OpSLd64
+		}
+	}
+	getStOp := func(size int) byte {
+		switch size {
+		case 8: return vm.OpSSt8
+		case 16: return vm.OpSSt16
+		case 32: return vm.OpSSt32
+		default: return vm.OpSSt64
+		}
+	}
+
 	if dReg, ok := dst.(x86asm.Reg); ok {
 		if sReg, ok := src.(x86asm.Reg); ok {
 			t.emit(vm.OpMovReg, t.reg(dReg), t.reg(sReg))
@@ -390,22 +408,22 @@ func (t *Translator) trMov(inst x86asm.Inst, offset int) error {
 		}
 		if mem, ok := src.(x86asm.Mem); ok {
 			t.emitMemAddr(mem, inst, offset)
-			t.emit(vm.OpSLd64)
+			t.emit(getLdOp(inst.DataSize))
 			t.emit(vm.OpSVstore, t.reg(dReg))
 			return nil
 		}
 	}
 	if dMem, ok := dst.(x86asm.Mem); ok {
 		if sReg, ok := src.(x86asm.Reg); ok {
-			t.emit(vm.OpSVload, t.reg(sReg))
 			t.emitMemAddr(dMem, inst, offset)
-			t.emit(vm.OpSSt64)
+			t.emit(vm.OpSVload, t.reg(sReg))
+			t.emit(getStOp(inst.DataSize))
 			return nil
 		}
 		if imm, ok := src.(x86asm.Imm); ok {
-			t.sPushImm64(uint64(imm))
 			t.emitMemAddr(dMem, inst, offset)
-			t.emit(vm.OpSSt64)
+			t.sPushImm64(uint64(imm))
+			t.emit(getStOp(inst.DataSize))
 			return nil
 		}
 	}
@@ -466,8 +484,8 @@ func (t *Translator) trAlu(inst x86asm.Inst) error {
 		pushX()
 		pushY()
 		t.emit(vm.OpSCmp)
-		pushX()
 		pushY()
+		pushX()
 		t.emit(vm.OpSSub)
 		t.emit(vm.OpSVstore, t.reg(dst))
 		return nil
@@ -998,7 +1016,7 @@ func (t *Translator) translateCFF(insts []vm.Instruction) (*vm.TranslateResult, 
 		if isBranch {
 			t.translateBranchCFF(xInst, inst.Offset)
 		} else {
-			if err := t.translateInst(xInst, inst.Offset); err != nil {
+			if err := t.translateInst(inst, xInst); err != nil {
 				t.unsupported = append(t.unsupported, fmt.Sprintf("offset 0x%X: %v", inst.Offset, err))
 				t.emit(vm.OpHalt)
 			}

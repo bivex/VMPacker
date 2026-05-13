@@ -22,6 +22,19 @@ func (d *Decoder) Decode(code []byte, baseVA uint64) ([]vm.Instruction, error) {
 	var offset int
 	
 	for offset < len(code) {
+		// Handle ENDBR64 (F3 0F 1E FA) which x86asm might not recognize
+		if offset+4 <= len(code) && code[offset] == 0xF3 && code[offset+1] == 0x0F && code[offset+2] == 0x1E && code[offset+3] == 0xFA {
+			insts = append(insts, vm.Instruction{
+				Offset:   offset,
+				RawBytes: code[offset : offset+4],
+				Size:     4,
+				Str:      "endbr64",
+				Op:       0, // Will be handled in translator by checking RawBytes
+			})
+			offset += 4
+			continue
+		}
+
 		inst, err := x86asm.Decode(code[offset:], 64)
 		if err != nil {
 			return nil, fmt.Errorf("decode error at offset %X (VA=0x%X): %v", offset, baseVA+uint64(offset), err)
