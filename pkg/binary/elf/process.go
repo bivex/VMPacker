@@ -274,6 +274,7 @@ func (p *Packer) translateFunction(f *elf.File, fi *vm.FuncInfo, code []byte, in
 		}
 		trans.SetCFF(p.cff)
 		trans.SetMBA(p.mba)
+		trans.SetHybrid(p.hybrid)
 		
 		r, terr := trans.Translate(insts)
 		if terr != nil {
@@ -297,6 +298,9 @@ func (p *Packer) translateFunction(f *elf.File, fi *vm.FuncInfo, code []byte, in
 		trans.SetCFF(p.cff) // Apply Control Flow Flattening if enabled
 		trans.SetMBA(p.mba) // Apply MBA obfuscation if enabled
 		trans.SetStringRefs(refs) // Pass encrypted strings
+		
+		// SetHybrid if it existed, but let's check first.
+		// For now, only x86_64 has it.
 		
 		r, terr := trans.Translate(insts)
 		if terr != nil {
