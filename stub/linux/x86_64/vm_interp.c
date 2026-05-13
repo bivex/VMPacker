@@ -79,8 +79,9 @@ static inline void sys_munmap(void *addr, unsigned long size) {
 VM_SECTION_ENTRY u64
 vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_ptr, u32 func_id);
 
-VM_SECTION_DATA volatile u64 _token_table_va = 0;
-VM_SECTION_DATA volatile u64 _link_time_self_va = 0;
+VM_SECTION_DATA volatile u64 _token_table_va[3] = {0, 0, 0};
+#define _link_time_self_va  _token_table_va[1]
+#define _rtlr_off_val       _token_table_va[2]
 
 __attribute__((noinline)) VM_SECTION_ENTRY u64
 vm_entry_token_inner(u64 *args, u32 token) {
@@ -92,32 +93,21 @@ vm_entry_token_inner(u64 *args, u32 token) {
   /* RIP-relative access to _vmp_stub_base in x86_64 PIC */
   __asm__ volatile("lea _vmp_stub_base(%%rip), %0" : "=r"(self_va));
   
-  u64 tbl_off = *(volatile u64 *)&_token_table_va;
+  u64 tbl_off = _token_table_va[0];
   if (__builtin_expect(tbl_off == 0, 0)) return 0;
-  u64 link_time_self = *(volatile u64 *)&_link_time_self_va;
+  u64 link_time_self = _link_time_self_va;
   u64 slide = (link_time_self != 0) ? (self_va - link_time_self) : 0;
   token_desc_t *table = (token_desc_t *)(self_va + tbl_off);
   u8 *enc_bc = (u8 *)(self_va + table[func_id].bc_off);
   u32 bc_len = table[func_id].bc_len;
 
-  /* DEBUG: print func_id and bc_off */
-  char f_debug[32];
-  u64 b_off = table[func_id].bc_off;
-  f_debug[0] = 'F'; f_debug[1] = ':'; f_debug[2] = (char)('0' + (func_id % 10)); f_debug[3] = ' ';
-  f_debug[4] = 'B'; f_debug[5] = ':';
-  for (int i = 0; i < 8; i++) {
-    f_debug[6+i] = "0123456789ABCDEF"[(b_off >> (28 - i*4)) & 0xF];
-  }
-  f_debug[14] = '\n';
-  register long _rax __asm__("rax") = 1; register long _rdi __asm__("rdi") = 1;
-  register long _rsi __asm__("rsi") = (long)f_debug; register long _rdx __asm__("rdx") = 15;
-  __asm__ volatile("syscall" : : "a"(_rax), "D"(_rdi), "S"(_rsi), "d"(_rdx) : "rcx", "r11", "memory");
-
   if (__builtin_expect(enc_bc == (u8 *)self_va || bc_len == 0, 0)) return 0;
-  u64 rtlr_off = *(volatile u64 *)(&_token_table_va + 2);
+  u64 rtlr_off = _rtlr_off_val;
   void *rtlr_ptr = (rtlr_off != 0) ? (void *)(self_va + rtlr_off) : 0;
   return vm_entry(args, enc_bc, bc_len, xor_key, slide, rtlr_ptr, func_id);
 }
+
+#define OC_DECRYPT(pc, key) ((u8)((key) ^ ((pc) * 0x9E3779B9u)))
 
 VM_SECTION_ENTRY u64
 vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_ptr, u32 func_id) {
@@ -126,15 +116,16 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
   u32 alloc_size = (bc_len + 4095u) & ~4095u;
   u8 *bc_buf = (u8 *)sys_mmap(alloc_size);
   if ((long)bc_buf < 0) return 0;
+
   u64 xk8 = (u64)xor_key; xk8 |= xk8 << 8; xk8 |= xk8 << 16; xk8 |= xk8 << 32;
   u32 n8 = bc_len >> 3;
   for (u32 i = 0; i < n8; i++) ((u64 *)bc_buf)[i] = ((const u64 *)enc_bc)[i] ^ xk8;
   for (u32 i = n8 << 3; i < bc_len; i++) bc_buf[i] = enc_bc[i] ^ xor_key;
+
   if (rtlr_ptr != 0) {
     u8 *rtlr_start = (u8 *)rtlr_ptr;
-    if (*(u32 *)rtlr_start == 0x524C5452) {
+    if (*(u32 *)rtlr_start == 0x524C5452) { // "RTLR"
       u32 count = *(u32 *)(rtlr_start + 4);
-      if (count > 1000000) count = 1000000;
       u8 *entry = rtlr_start + 8;
       for (u32 i = 0; i < count; i++) {
         if (*(u64 *)entry == (u64)func_id) {
@@ -145,81 +136,49 @@ vm_entry(u64 *args, u8 *enc_bc, u32 bc_len, u8 xor_key, u64 slide, void *rtlr_pt
       }
     }
   }
+
   u32 ctx_alloc = (sizeof(vm_ctx_t) + 4095u) & ~4095u;
   vm_ctx_t *vm = (vm_ctx_t *)sys_mmap(ctx_alloc);
   if ((long)vm < 0) { sys_munmap(bc_buf, alloc_size); return 0; }
   
-  u8 *op_map = 0;
   if (bc_len >= 88 + 256) {
     u32 trail_map_count = rd32(&bc_buf[bc_len - 16]);
-    u32 map_data_size = trail_map_count * 8 + 344 + 24;
-    
+    u32 map_data_size = trail_map_count * 8 + 344 + 21;
+
     if (map_data_size <= bc_len) {
       u8 *tr_ptr = &bc_buf[bc_len - map_data_size + 24]; // Skip CRC
       u8 *reg_map_ptr = tr_ptr;
-      for (int i = 0; i < VM_REG_COUNT; i++) vm->reg_map[i] = reg_map_ptr[i] & (VM_REG_COUNT-1);
-      op_map = tr_ptr + 64;
-      vm->addr_map = tr_ptr + 64 + 256;
+      u8 *op_map = tr_ptr + 64;
       
+      for (int i = 0; i < VM_REG_COUNT; i++) vm->reg_map[i] = reg_map_ptr[i] & (VM_REG_COUNT-1);
       vm_ctx_init(vm, args, bc_buf, bc_len - map_data_size);
-      vm->func_addr = rd64(&bc_buf[bc_len - 12]);
-      vm->func_size = rd32(&bc_buf[bc_len - 4]);
-      vm->map_count = trail_map_count;
-      vm->reverse = bc_buf[bc_len - 21];
       vm->oc_key = rd32(&bc_buf[bc_len - 20]);
-      vm->slide = slide;
-      vm->ret_reg = vm->reg_map[X86_RAX];
-    } else {
-      for(int i=0; i<VM_REG_COUNT; i++) vm->reg_map[i] = i;
-      vm_ctx_init(vm, args, bc_buf, bc_len);
-      vm->ret_reg = X86_RAX;
-    }
-  } else {
-    for(int i=0; i<VM_REG_COUNT; i++) vm->reg_map[i] = i;
-    vm_ctx_init(vm, args, bc_buf, bc_len);
-    vm->ret_reg = X86_RAX;
-  }
+      
+      u8 phys_isz[256];
+      for (int i = 0; i < 256; i++) phys_isz[i] = 0;
+      void *jump_table[256];
+      vm_handler_fn handlers[OP_ID_COUNT];
+      vm_init_jump_table(handlers);
+      for (int i = 0; i < OP_ID_COUNT; i++) {
+        jump_table[op_map[i]] = (void *)handlers[i];
+        phys_isz[op_map[i]] = vm_logical_insn_size(i);
+      }
 
-#define OC_DECRYPT(pc, key) ((u8)((key) ^ ((pc) * 0x9E3779B9u)))
-#ifdef VM_INDIRECT_DISPATCH
-  vm_handler_fn jump_table[256]; u8 phys_isz[256];
-  for (int i = 0; i < 256; i++) { jump_table[i] = hw_unknown; phys_isz[i] = 0; }
-  
-  u8 inv_map[256];
-  for (int i = 0; i < 256; i++) inv_map[i] = 255;
-
-  if (op_map) {
-    vm_handler_fn handlers[OP_ID_COUNT]; vm_init_jump_table(handlers);
-    for (int i = 0; i < OP_ID_COUNT; i++) {
-      jump_table[op_map[i]] = handlers[i];
-      phys_isz[op_map[i]] = vm_logical_insn_size(i);
-      inv_map[op_map[i]] = (u8)i;
-    }
-  } else {
-    vm_init_jump_table(jump_table);
-    for (int i = 0; i < 256; i++) {
-        phys_isz[i] = vm_logical_insn_size((u8)i);
-        inv_map[i] = (u8)i;
+      for (;;) {
+        u8 _raw = vm->bc[vm->pc];
+        u8 _dec = vm->oc_key ? (_raw ^ OC_DECRYPT(vm->pc, vm->oc_key)) : _raw;
+        u8 _isz = phys_isz[_dec];
+        if (__builtin_expect(_isz == 0, 0)) break;
+        u32 (*handler)(vm_ctx_t *) = (u32 (*)(vm_ctx_t *))jump_table[_dec];
+        u32 status = handler(vm);
+        if (__builtin_expect(status == VM_STEP_RET || status == VM_STEP_HALT, 0)) break;
+        if (status > 0) vm->pc += status;
+      }
+      ret = vm->R[vm->reg_map[X86_RAX]];
     }
   }
 
-  if (vm->reverse) vm->pc = vm->bc_len;
-  for (;;) {
-    if (++vm->insn_count > 1000000) { ret = 110; goto cleanup; }
-    if (vm->reverse) {
-      if (vm->pc <= 0) break;
-      vm->pc--; if (vm->pc >= vm->bc_len) break;
-      u8 _sz = vm->bc[vm->pc]; if (_sz > vm->pc) break;
-      vm->pc -= _sz;
-    } else { if (vm->pc >= vm->bc_len) break; }
-    u8 _raw = vm->bc[vm->pc];
-    u8 _dec = vm->oc_key ? (_raw ^ OC_DECRYPT(vm->pc, vm->oc_key)) : _raw;
-    if (phys_isz[_dec] == 0) break;
-    u32 _s = jump_table[_dec](vm);
-    if (_s == VM_STEP_HALT || _s == VM_STEP_RET) { ret = vm->R[vm->ret_reg]; goto cleanup; }
-    if (_s > 0 && !vm->reverse) vm->pc += _s;
-  }
-#endif
-cleanup:
+  sys_munmap(vm, ctx_alloc);
+  sys_munmap(bc_buf, alloc_size);
   return ret;
 }

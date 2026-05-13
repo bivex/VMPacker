@@ -449,10 +449,15 @@ func (p *Packer) postProcessBytecode(result *translationResult, insts []vm.Instr
 	// FORCE FORWARD MODE
 	reverseOffset := len(result.Bytecode) - 21
 	result.Bytecode[reverseOffset] = 0
-	ocKeyOffset := len(result.Bytecode) - 20
-	binary.LittleEndian.PutUint32(result.Bytecode[ocKeyOffset:], 0)
 
-	encryptOpcodes(result.Bytecode, result.CodeLen, 0, false)
+	// Read ocKey from trailer
+	ocKeyOffset := len(result.Bytecode) - 20
+	ocKey := binary.LittleEndian.Uint32(result.Bytecode[ocKeyOffset:])
+
+	if ocKey != 0 {
+		encryptOpcodes(result.Bytecode, result.CodeLen, ocKey, false)
+	}
+
 	return result.Bytecode, 0, nil
 }
 
